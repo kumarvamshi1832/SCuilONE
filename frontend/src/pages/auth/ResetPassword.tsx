@@ -63,7 +63,7 @@ export default function ResetPassword() {
       sessionStorage.removeItem("reset_token");
       sessionStorage.removeItem("reset_email_for_reset");
 
-      setMessage("Password reset successfully. Redirecting to sign in…");
+      setMessage("Password reset successfully. Redirecting to login…");
       setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
       const apiError = err as { message?: string };
@@ -138,7 +138,7 @@ export default function ResetPassword() {
           onClick={() => navigate("/login")}
           className="forgot-link-btn"
         >
-          ← Back to Sign In
+          ← Back to Login
         </button>
       </div>
     </div>

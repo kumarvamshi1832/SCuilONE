@@ -35,9 +35,6 @@ export default function ForgotPassword() {
 
       sessionStorage.setItem("reset_email", email.trim().toLowerCase());
 
-      setSuccess(
-        "If an account exists with this email, you will receive a password reset code."
-      );
 
       setTimeout(() => navigate("/verify-reset-otp"), 1500);
     } catch (err) {
@@ -81,7 +78,7 @@ export default function ForgotPassword() {
           <input
             id="forgot-email"
             type="email"
-            placeholder="you@company.com"
+            placeholder="Enter Your Email"
             value={email}
             onChange={(e) => {
               setEmail(e.target.value);
@@ -100,7 +97,7 @@ export default function ForgotPassword() {
           onClick={() => navigate("/login")}
           className="forgot-link-btn"
         >
-          ← Back to Sign In
+          ← Back to Login
         </button>
       </div>
     </div>

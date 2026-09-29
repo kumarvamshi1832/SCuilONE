@@ -93,8 +93,8 @@ export default function Login() {
 
           <div className="login-form-inner">
             <div className="login-head">
-              <h2>Welcome <span className="text-blue">Back</span></h2>
-              <p>Sign in to your SCuilONE account</p>
+              <h2>Login to <span className="text-blue">SCuilONE</span> CRM</h2>
+              <p>Welcome back! Please enter your details to continue.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="login-form">
@@ -106,7 +106,7 @@ export default function Login() {
                     <input
                       id="email"
                       type="email"
-                      placeholder="name@company.com"
+                      placeholder="Enter your email address"
                       value={email}
                       onChange={(e) => { setEmail(e.target.value); setError(""); }}
                       disabled={loading}
@@ -140,6 +140,9 @@ export default function Login() {
                 </div>
 
                 <div className="forgot-pwd-row">
+                  <label className="remember-me">
+                    <input type="checkbox" /> Remember me
+                  </label>
                   <button type="button" onClick={() => navigate("/forgot-password")} className="login-forgot-password">
                     Forgot Password?
                   </button>
@@ -148,10 +151,14 @@ export default function Login() {
                 {error && <div className="alert-box error">{error}</div>}
 
                 <button type="submit" className="login-btn" disabled={loading}>
-                  {loading ? "Signing In..." : "Sign In \u2192"}
+                  {loading ? "Logging In..." : "Login \u2192"}
                 </button>
               </div>
             </form>
+
+            <div className="login-divider">
+              <span>OR</span>
+            </div>
 
             <div className="signup-link">
               <span>Don't have an account?</span>
