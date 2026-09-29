@@ -8,6 +8,8 @@ import type {
   LoginRequest,
   VerifyMFARequest,
   ForgotPasswordRequest,
+  VerifyResetOTPRequest,
+  VerifyResetOTPResponse,
   ResetPasswordRequest,
   TokenResponse,
   MessageResponse,
@@ -32,6 +34,7 @@ const AUTH_ENDPOINTS = {
   LOGIN: "/api/v1/auth/login",
   VERIFY_MFA: "/api/v1/auth/verify-mfa",
   FORGOT_PASSWORD: "/api/v1/auth/forgot-password",
+  VERIFY_RESET_OTP: "/api/v1/auth/verify-reset-otp",
   RESET_PASSWORD: "/api/v1/auth/reset-password",
   ME: "/api/v1/auth/me",
 } as const;
@@ -173,6 +176,20 @@ export async function forgotPassword(
   try {
     const response = await apiClient.post<MessageResponse>(
       AUTH_ENDPOINTS.FORGOT_PASSWORD,
+      data
+    );
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+export async function verifyResetOTP(
+  data: VerifyResetOTPRequest
+): Promise<VerifyResetOTPResponse> {
+  try {
+    const response = await apiClient.post<VerifyResetOTPResponse>(
+      AUTH_ENDPOINTS.VERIFY_RESET_OTP,
       data
     );
     return response.data;

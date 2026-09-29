@@ -5,21 +5,19 @@ export interface CheckEmailRequest {
 }
 
 export interface RegisterRequest {
-  company_id: string;
-  name: string;
+  company_name: string;
+  company_email: string;
+  phone: string;
+  industry: string;
+  full_name: string;
   email: string;
-  phone?: string;
   password: string;
-  designation?: string;
-  department?: string;
-  employee_id?: string;
-  location?: string;
+  confirm_password: string;
 }
 
 export interface VerifyOTPRequest {
   email: string;
-  otp_code: string;
-  type?: string;
+  otp: string;
 }
 
 export interface ResendOTPRequest {
@@ -42,10 +40,21 @@ export interface ForgotPasswordRequest {
   email: string;
 }
 
+export interface VerifyResetOTPRequest {
+  email: string;
+  otp: string;
+}
+
+export interface VerifyResetOTPResponse {
+  message: string;
+  reset_token: string;
+}
+
 export interface ResetPasswordRequest {
   email: string;
-  otp_code: string;
+  reset_token: string;
   new_password: string;
+  confirm_password: string;
 }
 
 /* ─── Response Types ─── */

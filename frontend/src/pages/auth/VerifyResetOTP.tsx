@@ -1,50 +1,62 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { forgotPassword } from "../../services/authService";
+import { verifyResetOTP } from "../../services/authService";
 import { useTheme } from "../../context/ThemeContext";
 import "./ForgotPassword.css";
 
-export default function ForgotPassword() {
+export default function VerifyResetOTP() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const resetEmail = sessionStorage.getItem("reset_email");
+
+    if (!resetEmail) {
+      navigate("/forgot-password");
+      return;
+    }
+
+    setEmail(resetEmail);
+  }, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
+    setMessage("");
 
-    if (!email.trim()) {
-      setError("Email is required.");
+    if (!otp.trim()) {
+      setError("Please enter the verification code.");
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("Please enter a valid email address.");
+    if (!/^\d{6}$/.test(otp)) {
+      setError("Code must be exactly 6 digits.");
       return;
     }
 
     setLoading(true);
 
     try {
-      await forgotPassword({ email: email.trim().toLowerCase() });
+      const response = await verifyResetOTP({ email, otp });
 
-      sessionStorage.setItem("reset_email", email.trim().toLowerCase());
+      // Store the reset token for the reset-password step
+      sessionStorage.setItem("reset_token", response.reset_token);
+      sessionStorage.setItem("reset_email_for_reset", email);
 
-      setSuccess(
-        "If an account exists with this email, you will receive a password reset code."
-      );
+      // Clean up the intermediate state
+      sessionStorage.removeItem("reset_email");
 
-      setTimeout(() => navigate("/verify-reset-otp"), 1500);
+      setMessage("Code verified successfully!");
+      setTimeout(() => navigate("/reset-password"), 800);
     } catch (err) {
       const apiError = err as { message?: string };
-      setError(
-        apiError.message || "Something went wrong. Please try again."
-      );
+      setError(apiError.message || "Invalid or expired verification code.");
     } finally {
       setLoading(false);
     }
@@ -66,41 +78,46 @@ export default function ForgotPassword() {
           <h1 className="forgot-logo-text">SCuilONE</h1>
         </div>
 
-        <h2 className="forgot-heading">Forgot your password?</h2>
+        <h2 className="forgot-heading">Verify reset code</h2>
         <p className="forgot-subtext">
-          Enter your email and we'll send you a reset code.
+          Enter the 6-digit code sent to your email.
         </p>
 
+        <div className="forgot-email-badge">{email}</div>
+
         {error && <div className="forgot-error-box">{error}</div>}
-        {success && <div className="forgot-success-box">{success}</div>}
+        {message && <div className="forgot-success-box">{message}</div>}
 
         <form onSubmit={handleSubmit}>
-          <label className="forgot-label" htmlFor="forgot-email">
-            Email Address
+          <label className="forgot-label" htmlFor="reset-otp-input">
+            Verification Code
           </label>
           <input
-            id="forgot-email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
+            id="reset-otp-input"
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            autoComplete="one-time-code"
+            value={otp}
             onChange={(e) => {
-              setEmail(e.target.value);
+              setOtp(e.target.value.replace(/\D/g, ""));
               setError("");
             }}
-            className="forgot-input"
+            className="forgot-input forgot-otp-input"
           />
 
           <button type="submit" disabled={loading} className="forgot-btn">
-            {loading ? "Sending…" : "Send Reset Code"}
+            {loading ? "Verifying…" : "Verify Code"}
           </button>
         </form>
 
         <button
           type="button"
-          onClick={() => navigate("/login")}
+          onClick={() => navigate("/forgot-password")}
           className="forgot-link-btn"
         >
-          ← Back to Sign In
+          ← Go back
         </button>
       </div>
     </div>

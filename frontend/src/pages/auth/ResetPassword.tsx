@@ -1,50 +1,73 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { forgotPassword } from "../../services/authService";
+import { resetPassword } from "../../services/authService";
 import { useTheme } from "../../context/ThemeContext";
 import "./ForgotPassword.css";
 
-export default function ForgotPassword() {
+export default function ResetPassword() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
   const [email, setEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const storedEmail = sessionStorage.getItem("reset_email_for_reset");
+    const storedToken = sessionStorage.getItem("reset_token");
+
+    if (!storedEmail || !storedToken) {
+      navigate("/forgot-password");
+      return;
+    }
+
+    setEmail(storedEmail);
+    setResetToken(storedToken);
+  }, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
+    setMessage("");
 
-    if (!email.trim()) {
-      setError("Email is required.");
+    if (!newPassword) {
+      setError("New password is required.");
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("Please enter a valid email address.");
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
 
     setLoading(true);
 
     try {
-      await forgotPassword({ email: email.trim().toLowerCase() });
+      await resetPassword({
+        email,
+        reset_token: resetToken,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      });
 
-      sessionStorage.setItem("reset_email", email.trim().toLowerCase());
+      // Clean up
+      sessionStorage.removeItem("reset_token");
+      sessionStorage.removeItem("reset_email_for_reset");
 
-      setSuccess(
-        "If an account exists with this email, you will receive a password reset code."
-      );
-
-      setTimeout(() => navigate("/verify-reset-otp"), 1500);
+      setMessage("Password reset successfully. Redirecting to sign in…");
+      setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
       const apiError = err as { message?: string };
-      setError(
-        apiError.message || "Something went wrong. Please try again."
-      );
+      setError(apiError.message || "Failed to reset password. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -66,32 +89,47 @@ export default function ForgotPassword() {
           <h1 className="forgot-logo-text">SCuilONE</h1>
         </div>
 
-        <h2 className="forgot-heading">Forgot your password?</h2>
+        <h2 className="forgot-heading">Reset your password</h2>
         <p className="forgot-subtext">
-          Enter your email and we'll send you a reset code.
+          Enter your new password below.
         </p>
 
         {error && <div className="forgot-error-box">{error}</div>}
-        {success && <div className="forgot-success-box">{success}</div>}
+        {message && <div className="forgot-success-box">{message}</div>}
 
         <form onSubmit={handleSubmit}>
-          <label className="forgot-label" htmlFor="forgot-email">
-            Email Address
+          <label className="forgot-label" htmlFor="new-password">
+            New Password
           </label>
           <input
-            id="forgot-email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
+            id="new-password"
+            type="password"
+            placeholder="Enter new password"
+            value={newPassword}
             onChange={(e) => {
-              setEmail(e.target.value);
+              setNewPassword(e.target.value);
+              setError("");
+            }}
+            className="forgot-input"
+          />
+
+          <label className="forgot-label" htmlFor="confirm-password">
+            Confirm Password
+          </label>
+          <input
+            id="confirm-password"
+            type="password"
+            placeholder="Confirm new password"
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
               setError("");
             }}
             className="forgot-input"
           />
 
           <button type="submit" disabled={loading} className="forgot-btn">
-            {loading ? "Sending…" : "Send Reset Code"}
+            {loading ? "Resetting…" : "Reset Password"}
           </button>
         </form>
 

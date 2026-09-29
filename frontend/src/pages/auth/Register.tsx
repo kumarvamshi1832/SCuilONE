@@ -80,11 +80,14 @@ export default function Register() {
 
         try {
             const payload: RegisterRequest = {
-                company_id: "PENDING_SETUP",
-                name: formData.full_name.trim(),
-                email: email,
+                company_name: formData.company_name.trim(),
+                company_email: companyEmail,
                 phone: formData.phone.trim(),
+                industry: formData.industry,
+                full_name: formData.full_name.trim(),
+                email: email,
                 password: formData.password,
+                confirm_password: formData.confirm_password,
             };
 
             const response = await registerUser(payload);

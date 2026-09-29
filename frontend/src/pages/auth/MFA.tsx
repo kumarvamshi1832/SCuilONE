@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   verifyOTP,
-  resendOTP,
   verifyMFA,
 } from "../../services/authService";
 
@@ -19,7 +18,7 @@ export default function MFA() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
+
 
   useEffect(() => {
     const otpFlow = sessionStorage.getItem("otp_flow") as OtpFlow | null;
@@ -93,8 +92,7 @@ export default function MFA() {
       } else {
         await verifyOTP({
           email,
-          otp_code: otp,
-          type: "email",
+          otp,
         });
 
         sessionStorage.removeItem("verification_email");
@@ -111,29 +109,9 @@ export default function MFA() {
     }
   };
 
-  const handleResend = async () => {
+  const handleResend = () => {
     setError("");
-    setMessage("");
-
-    if (!email) {
-      setError("Email address is missing.");
-      return;
-    }
-
-    setResending(true);
-
-    try {
-      await resendOTP({
-        email,
-        type: flow === "mfa" ? "mfa" : "email",
-      });
-      setMessage("A new verification code has been sent to your email.");
-    } catch (err) {
-      const apiError = err as { message?: string };
-      setError(apiError.message || "Unable to resend the verification code.");
-    } finally {
-      setResending(false);
-    }
+    setMessage("Resend is not available. Please go back and register again to receive a new code.");
   };
 
   const title = flow === "mfa" ? "Two-Factor Authentication" : "Verify your email";
@@ -188,11 +166,10 @@ export default function MFA() {
           </span>
           <button
             type="button"
-            disabled={resending}
             onClick={handleResend}
             style={linkBtnStyle}
           >
-            {resending ? "Sending…" : "Resend code"}
+            Resend code
           </button>
         </div>
 

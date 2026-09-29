@@ -4,6 +4,9 @@ import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import MFA from "../pages/auth/MFA";
 import ForgotPassword from "../pages/auth/ForgotPassword";
+import VerifyResetOTP from "../pages/auth/VerifyResetOTP";
+import ResetPassword from "../pages/auth/ResetPassword";
+
 export default function AppRoutes() {
     return (
         <BrowserRouter>
@@ -14,7 +17,10 @@ export default function AppRoutes() {
 
                 <Route path="/mfa" element={<MFA />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/verify-reset-otp" element={<VerifyResetOTP />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
 
+                <Route path="/empty" element={<div />} />
 
                 {/* Default Route */}
                 <Route path="/" element={<Navigate to="/login" replace />} />
@@ -24,4 +30,4 @@ export default function AppRoutes() {
             </Routes>
         </BrowserRouter>
     );
-}
+}
