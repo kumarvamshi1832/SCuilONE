@@ -12,6 +12,8 @@ from app.models.user_role import UserRole
 from app.models.otp import OTPVerification
 from app.models.pending_registration import PendingRegistration
 from app.models.password_reset import PasswordResetOTP
+from app.models.permission import Permission
+from app.models.role_permission import RolePermission
 
 config = context.config
 
