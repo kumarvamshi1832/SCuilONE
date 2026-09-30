@@ -58,7 +58,7 @@ export default function Login() {
         if (response.user) {
           sessionStorage.setItem("user", JSON.stringify(response.user));
         }
-        navigate("/empty");
+        navigate("/dashboard");
       }
     } catch (err) {
       const apiError = err as { message?: string };
