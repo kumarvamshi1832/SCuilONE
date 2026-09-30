@@ -13,6 +13,7 @@ export default function EditUserModal({ user, onClose, onSuccess }: EditUserModa
   const [status, setStatus] = useState<string>(user.status);
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getRoles().then(setAvailableRoles);
@@ -20,12 +21,15 @@ export default function EditUserModal({ user, onClose, onSuccess }: EditUserModa
 
   const handleUpdate = async () => {
     setLoading(true);
+    setError(null);
     try {
       await updateUserRole(user.id, role, status);
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error("Failed to update user", error);
+    } catch (err: any) {
+      console.error("Failed to update user", err);
+      const message = err?.response?.data?.detail || err?.message || "Failed to update user";
+      setError(typeof message === "string" ? message : "Failed to update user");
     } finally {
       setLoading(false);
     }
@@ -42,6 +46,11 @@ export default function EditUserModal({ user, onClose, onSuccess }: EditUserModa
         </div>
         
         <div className="modal-body">
+          {error && (
+            <div className="alert-box error" style={{ padding: '8px 12px', marginBottom: '16px', borderRadius: '6px', background: '#fcebea', color: '#cc0000', fontSize: '14px' }}>
+              {error}
+            </div>
+          )}
           <div className="form-group">
             <label>Full Name</label>
             <input type="text" value={user.full_name} disabled />

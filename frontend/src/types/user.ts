@@ -5,7 +5,9 @@ export type Role =
   | "Sales User"
   | "Operations User"
   | "Support User"
-  | "Read Only";
+  | "Read Only"
+  | "Read-only / Auditor"
+  | string;
 
 
 

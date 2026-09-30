@@ -294,6 +294,18 @@ def login(
         "role": role.name if role else None
     })
 
+    permissions = []
+    if role:
+        from app.models.permission import Permission
+        from app.models.role_permission import RolePermission
+        perms = db.query(Permission.name).join(
+            RolePermission,
+            RolePermission.permission_id == Permission.id
+        ).filter(
+            RolePermission.role_id == role.id
+        ).all()
+        permissions = [p[0] for p in perms]
+
     return {
         "message": "Login successful",
         "access_token": access_token,
@@ -308,7 +320,8 @@ def login(
             "name": tenant.name,
             "industry": tenant.industry
         },
-        "role": role.name if role else None
+        "role": role.name if role else None,
+        "permissions": permissions
     }
 
 @router.post("/forgot-password")

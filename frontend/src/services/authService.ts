@@ -24,6 +24,21 @@ const apiClient = axios.create({
   },
 });
 
+// Auto-logout on 401 Unauthorized
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Token is invalid or expired
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("tenant");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
 /* ─── Endpoints ─── */
 
 const AUTH_ENDPOINTS = {

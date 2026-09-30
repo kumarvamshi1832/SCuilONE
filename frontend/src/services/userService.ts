@@ -12,7 +12,7 @@ const getHeaders = () => {
 
 export const getUsers = async (): Promise<User[]> => {
   try {
-    const response = await apiClient.get<User[]>("/api/v1/users", getHeaders());
+    const response = await apiClient.get<User[]>("/api/v1/users/", getHeaders());
     return response.data;
   } catch (error: any) {
     if (error?.status === 405 || error?.response?.status === 405) {
@@ -44,21 +44,31 @@ export const deleteUser = async (userId: string): Promise<void> => {
   await apiClient.delete(`/api/v1/users/${userId}`, getHeaders());
 };
 
-export const createUser = async (data: Partial<User>): Promise<User> => {
+export interface CreateUserData {
+  full_name: string;
+  email: string;
+  password?: string;
+  role: Role;
+}
+
+export const createUser = async (data: CreateUserData): Promise<User> => {
   const response = await apiClient.post<User>("/api/v1/users", data, getHeaders());
   return response.data;
 };
 
 export const getRoles = async (): Promise<Role[]> => {
-  // We can fetch from API or return a fixed list if backend doesn't have an endpoint yet
-  // If there's an endpoint: return (await apiClient.get<Role[]>("/api/v1/roles", getHeaders())).data;
-  return [
-    "Tenant Owner",
-    "Tenant Admin",
-    "Manager",
-    "Sales User",
-    "Operations User",
-    "Support User",
-    "Read Only",
-  ];
+  try {
+    const response = await apiClient.get<Role[]>("/api/v1/users/roles", getHeaders());
+    return response.data;
+  } catch (error) {
+    return [
+      "Tenant Owner",
+      "Tenant Admin",
+      "Manager",
+      "Sales User",
+      "Operations User",
+      "Support User",
+      "Read-only / Auditor",
+    ];
+  }
 };

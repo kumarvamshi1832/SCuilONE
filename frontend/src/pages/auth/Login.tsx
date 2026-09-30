@@ -55,10 +55,35 @@ export default function Login() {
         if (response.refresh_token) {
           sessionStorage.setItem("refresh_token", response.refresh_token);
         }
-        if (response.user) {
-          sessionStorage.setItem("user", JSON.stringify(response.user));
+        if (response.tenant) {
+          sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
         }
-        navigate("/dashboard");
+
+        const userObj = {
+          ...(response.user || {}),
+          role: response.role,
+          permissions: response.permissions || []
+        };
+        sessionStorage.setItem("user", JSON.stringify(userObj));
+
+        const userRole = (response.role || "").toUpperCase();
+        if (userRole === "MANAGER" || userRole.includes("MANAGER")) {
+          navigate("/manager/dashboard");
+        } else if (userRole === "SALES_USER" || userRole === "SALES USER" || userRole.includes("SALES")) {
+          navigate("/sales/dashboard");
+        } else if (userRole === "OPERATIONS_USER" || userRole === "OPERATIONS USER" || userRole.includes("OPERATIONS")) {
+          navigate("/operations/dashboard");
+        } else if (userRole === "SUPPORT_USER" || userRole === "SUPPORT USER" || userRole.includes("SUPPORT")) {
+          navigate("/support/dashboard");
+        } else if (userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR")) {
+          navigate("/auditor/dashboard");
+        } else {
+          const industrySlug = response.tenant?.industry 
+            ? response.tenant.industry.toLowerCase().replace(/\s+/g, '-') 
+            : 'real-estate';
+          
+          navigate(`/${industrySlug}/dashboard`);
+        }
       }
     } catch (err) {
       const apiError = err as { message?: string };

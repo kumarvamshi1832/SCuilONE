@@ -9,9 +9,10 @@ const Placeholder = ({ title, description }: { title: string, description: strin
 
 export const Leads = () => <Placeholder title="Leads" description="Real Estate leads management will be available here." />;
 export const Contacts = () => <Placeholder title="Contacts" description="Real Estate contacts management will be available here." />;
+export const Accounts = () => <Placeholder title="Accounts" description="Real Estate accounts management will be available here." />;
 export const Deals = () => <Placeholder title="Deals" description="Real Estate deals management will be available here." />;
-export const Activities = () => <Placeholder title="Activities" description="Activities and follow-ups will be available here." />;
+export const Tasks = () => <Placeholder title="Tasks" description="Tasks and follow-ups will be available here." />;
+export const Activities = () => <Placeholder title="Activities" description="Activities will be available here." />;
 export const Reports = () => <Placeholder title="Reports" description="Real Estate reports will be available here." />;
-export const Roles = () => <Placeholder title="Roles" description="Role management will be available here." />;
-export const Permissions = () => <Placeholder title="Permissions" description="Permission management will be available here." />;
+
 export const Settings = () => <Placeholder title="Settings" description="Tenant settings will be available here." />;
