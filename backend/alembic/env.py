@@ -14,7 +14,7 @@ from app.models.pending_registration import PendingRegistration
 from app.models.password_reset import PasswordResetOTP
 from app.models.permission import Permission
 from app.models.role_permission import RolePermission
-
+from app.models.lead import Lead
 config = context.config
 
 if config.config_file_name is not None:
