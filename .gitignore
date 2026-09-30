@@ -19,3 +19,13 @@ __pycache__/
 
 # Node dependencies
 node_modules/
+
+
+# Backend virtual environment
+backend/vev/
+
+# Frontend build output
+frontend/dist/
+
+# TypeScript build cache
+frontend/tsconfig.tsbuildinfo
