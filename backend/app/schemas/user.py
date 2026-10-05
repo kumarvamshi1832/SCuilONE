@@ -7,6 +7,7 @@ class UserCreate(BaseModel):
     password: str
     role: str
 
+
 class UserUpdate(BaseModel):
     role: str
-    status: str
+    status: str
