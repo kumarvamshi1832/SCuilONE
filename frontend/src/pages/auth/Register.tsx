@@ -249,7 +249,7 @@ export default function Register() {
 
                             <div className="signin-link">
                                 <span>Already have an account?</span>
-                                <button type="button" onClick={() => navigate("/login")}>Sign In</button>
+                                <button type="button" onClick={() => navigate("/login")}>Login</button>
                             </div>
                         </div>
 

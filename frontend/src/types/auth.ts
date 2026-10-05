@@ -83,6 +83,13 @@ export interface TokenResponse {
   token_type: string;
   expires_in?: number;
   user?: User;
+  tenant?: {
+    id: string;
+    name: string;
+    industry?: string;
+  };
+  role?: string;
+  permissions?: string[];
   requires_mfa: boolean;
   temp_token?: string;
   message: string;

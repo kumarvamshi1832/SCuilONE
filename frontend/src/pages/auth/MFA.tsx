@@ -117,7 +117,7 @@ export default function MFA() {
   const title = flow === "mfa" ? "Two-Factor Authentication" : "Verify your email";
   const description =
     flow === "mfa"
-      ? "Enter the 6-digit code to complete sign-in."
+      ? "Enter the 6-digit code to complete login."
       : "Enter the 6-digit code sent to your email.";
 
   return (
