@@ -39,6 +39,12 @@ class User(Base):
         nullable=False
     )
 
+    status: Mapped[str] = mapped_column(
+    String(20),
+    nullable=False,
+    default="Active"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow
