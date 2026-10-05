@@ -21,14 +21,14 @@ export default function ManagerDashboard() {
       try {
         const parsed = JSON.parse(storedUser);
         setUser({
-          name: parsed.first_name || parsed.full_name || parsed.name || "Manager",
+          name: parsed.first_name || parsed.full_name || parsed.name || "User",
           role: parsed.role || "Manager",
         });
       } catch (e) {
-        setUser({ name: "Manager", role: "Manager" });
+        setUser({ name: "User", role: "Manager" });
       }
     } else {
-      setUser({ name: "Manager", role: "Manager" });
+      setUser({ name: "User", role: "Manager" });
     }
   }, []);
 

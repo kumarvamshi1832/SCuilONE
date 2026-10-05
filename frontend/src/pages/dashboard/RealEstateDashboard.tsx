@@ -27,14 +27,14 @@ export default function RealEstateDashboard() {
       try {
         const parsed = JSON.parse(storedUser);
         setUser({
-          name: parsed.first_name || "Bavya",
+          name: parsed.first_name || parsed.full_name || parsed.name || "User",
           role: parsed.role || "Tenant Admin"
         });
       } catch (e) {
-        setUser({ name: "Bavya", role: "Tenant Admin" });
+        setUser({ name: "User", role: "Tenant Admin" });
       }
     } else {
-      setUser({ name: "Bavya", role: "Tenant Admin" });
+      setUser({ name: "User", role: "Tenant Admin" });
     }
   }, []);
 

@@ -17,8 +17,9 @@ import SupportDashboard from "../pages/dashboard/SupportDashboard";
 import AuditorDashboard from "../pages/dashboard/AuditorDashboard";
 import Users from "../pages/users/Users";
 import Leads from "../pages/leads/Leads";
+import Contacts from "../pages/contacts/Contacts";
 import {
-    Contacts, Accounts, Deals, Tasks, Activities, Reports, Settings
+    Accounts, Deals, Tasks, Activities, Reports, Settings
 } from "../pages/dashboard/Placeholders";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";

@@ -36,14 +36,14 @@ export default function SupportDashboard() {
       try {
         const parsed = JSON.parse(storedUser);
         setUser({
-          name: parsed.first_name || parsed.full_name || parsed.name || "Support User",
+          name: parsed.first_name || parsed.full_name || parsed.name || "User",
           role: parsed.role || "Support User",
         });
       } catch (e) {
-        setUser({ name: "Support User", role: "Support User" });
+        setUser({ name: "User", role: "Support User" });
       }
     } else {
-      setUser({ name: "Support User", role: "Support User" });
+      setUser({ name: "User", role: "Support User" });
     }
   }, []);
 

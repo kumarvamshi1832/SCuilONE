@@ -29,15 +29,15 @@ export default function OperationsDashboard() {
         else if (Array.isArray(parsed.role_permissions)) perms = parsed.role_permissions;
         
         setUser({
-          name: parsed.first_name || parsed.full_name || parsed.name || "Operations User",
+          name: parsed.first_name || parsed.full_name || parsed.name || "User",
           role: parsed.role || "Operations User",
           permissions: perms
         });
       } catch (e) {
-        setUser({ name: "Operations User", role: "Operations User", permissions: [] });
+        setUser({ name: "User", role: "Operations User", permissions: [] });
       }
     } else {
-      setUser({ name: "Operations User", role: "Operations User", permissions: [] });
+      setUser({ name: "User", role: "Operations User", permissions: [] });
     }
   }, []);
 

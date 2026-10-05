@@ -36,15 +36,15 @@ export default function SalesDashboard() {
         else if (Array.isArray(parsed.role_permissions)) perms = parsed.role_permissions;
         
         setUser({
-          name: parsed.first_name || parsed.full_name || parsed.name || "Sales User",
+          name: parsed.first_name || parsed.full_name || parsed.name || "User",
           role: parsed.role || "Sales User",
           permissions: perms
         });
       } catch (e) {
-        setUser({ name: "Sales User", role: "Sales User", permissions: [] });
+        setUser({ name: "User", role: "Sales User", permissions: [] });
       }
     } else {
-      setUser({ name: "Sales User", role: "Sales User", permissions: [] });
+      setUser({ name: "User", role: "Sales User", permissions: [] });
     }
 
     getLeads()
