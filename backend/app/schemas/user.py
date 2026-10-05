@@ -6,3 +6,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str
+
+
+class UserUpdate(BaseModel):
+    role: str
+    status: str
