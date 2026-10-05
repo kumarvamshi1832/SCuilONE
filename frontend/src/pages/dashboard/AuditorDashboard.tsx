@@ -4,6 +4,8 @@ import { getDashboardSummary, getRecentActivities } from "../../services/dashboa
 import { getUsers } from "../../services/userService";
 import { DashboardSummary, Activity } from "../../types/dashboard";
 import { User } from "../../types/user";
+import LeadFormModal from "../../components/leads/LeadFormModal";
+import type { Lead } from "../../types/lead";
 import "./RealEstateDashboard.css";
 
 const hasPermission = (perm: string) => {
@@ -30,6 +32,7 @@ export default function AuditorDashboard() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
 
   useEffect(() => {
     getDashboardSummary().then(setSummary);
@@ -69,8 +72,7 @@ export default function AuditorDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Total Properties</h4>
-              <div className="kpi-value">{summary?.totalProperties || 0}</div>
-              <div className="kpi-trend">Accessible Properties</div>
+              <div className="kpi-value">{summary?.totalProperties === -1 ? "-" : summary?.totalProperties}</div>
             </div>
           </div>
         )}
@@ -82,8 +84,7 @@ export default function AuditorDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Total Leads</h4>
-              <div className="kpi-value">{summary?.totalLeads || 0}</div>
-              <div className="kpi-trend">Accessible Leads</div>
+              <div className="kpi-value">{summary?.totalLeads === -1 ? "-" : summary?.totalLeads}</div>
             </div>
           </div>
         )}
@@ -95,8 +96,7 @@ export default function AuditorDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Open Deals</h4>
-              <div className="kpi-value">{summary?.openDeals || 0}</div>
-              <div className="kpi-trend">Open Deals</div>
+              <div className="kpi-value">{summary?.openDeals === -1 ? "-" : summary?.openDeals}</div>
             </div>
           </div>
         )}
@@ -108,8 +108,7 @@ export default function AuditorDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Site Visits</h4>
-              <div className="kpi-value">{summary?.siteVisits || 0}</div>
-              <div className="kpi-trend">Site Visits</div>
+              <div className="kpi-value">{summary?.siteVisits === -1 ? "-" : summary?.siteVisits}</div>
             </div>
           </div>
         )}
@@ -121,8 +120,7 @@ export default function AuditorDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Bookings</h4>
-              <div className="kpi-value">{summary?.bookings || 0}</div>
-              <div className="kpi-trend">Accessible Bookings</div>
+              <div className="kpi-value">{summary?.bookings === -1 ? "-" : summary?.bookings}</div>
             </div>
           </div>
         )}
@@ -169,7 +167,7 @@ export default function AuditorDashboard() {
                 </button>
               )}
               {hasPermission("lead.create") && (
-                <button className="btn-quick-action" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button className="btn-quick-action" onClick={() => setIsLeadFormOpen(true)} style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"></path></svg>
                   Create Lead
                 </button>
@@ -194,6 +192,15 @@ export default function AuditorDashboard() {
           </div>
         </div>
       </div>
+
+      {isLeadFormOpen && (
+        <LeadFormModal
+          onClose={() => setIsLeadFormOpen(false)}
+          onSuccess={(savedLead) => {
+            setIsLeadFormOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

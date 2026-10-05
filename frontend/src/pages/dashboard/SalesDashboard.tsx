@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { getLeads } from "../../services/leadService";
+import type { Lead } from "../../types/lead";
+import LeadFormModal from "../../components/leads/LeadFormModal";
+import { formatDateTime } from "../../utils/dateFormatter";
 import "./RealEstateDashboard.css";
 
 export default function SalesDashboard() {
   const [user, setUser] = useState<{ name: string; role: string; permissions?: any[] } | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const navigate = useNavigate();
   const { industry } = useParams();
 
@@ -39,6 +46,11 @@ export default function SalesDashboard() {
     } else {
       setUser({ name: "Sales User", role: "Sales User", permissions: [] });
     }
+
+    getLeads()
+      .then((data) => setLeads(data || []))
+      .catch(() => setLeads([]))
+      .finally(() => setLoadingLeads(false));
   }, []);
 
   const hasPermission = (perm: string) => {
@@ -62,13 +74,13 @@ export default function SalesDashboard() {
         <div className="kpi-card blue">
           <div className="kpi-info">
             <h4 className="kpi-title">My Leads</h4>
-            <div className="kpi-value">-</div>
+            <div className="kpi-value">{loadingLeads ? "..." : leads.length}</div>
           </div>
         </div>
         <div className="kpi-card green">
           <div className="kpi-info">
             <h4 className="kpi-title">New Leads</h4>
-            <div className="kpi-value">-</div>
+            <div className="kpi-value">{loadingLeads ? "..." : leads.filter(l => l.status === 'New').length}</div>
           </div>
         </div>
         <div className="kpi-card orange">
@@ -166,26 +178,55 @@ export default function SalesDashboard() {
               <h3>My Recent Leads</h3>
             </div>
             {hasPermission("lead.view") ? (
-              <div className="table-responsive">
-                <table className="roles-table">
+              <div className="table-responsive" style={{ overflowX: 'auto' }}>
+                <table className="roles-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' }}>
                   <thead>
                     <tr>
-                      <th>Lead Name</th>
-                      <th>Account</th>
-                      <th>Contact</th>
-                      <th>Stage</th>
-                      <th>Priority</th>
-                      <th>Next Task</th>
-                      <th>Updated</th>
-                      <th>Actions</th>
+                      <th style={{ padding: '10px 12px', minWidth: '130px', textAlign: 'left' }}>Lead Name</th>
+                      <th style={{ padding: '10px 12px', minWidth: '90px', textAlign: 'left' }}>Account</th>
+                      <th style={{ padding: '10px 12px', minWidth: '220px', textAlign: 'left' }}>Contact</th>
+                      <th style={{ padding: '10px 12px', minWidth: '90px', textAlign: 'left' }}>Stage</th>
+                      <th style={{ padding: '10px 12px', minWidth: '90px', textAlign: 'left' }}>Priority</th>
+                      <th style={{ padding: '10px 12px', minWidth: '120px', textAlign: 'left' }}>Next Task</th>
+                      <th style={{ padding: '10px 12px', minWidth: '190px', textAlign: 'left' }}>Updated</th>
+                      <th style={{ padding: '10px 12px', minWidth: '80px', textAlign: 'left' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td colSpan={8} className="text-center text-muted" style={{ padding: '2rem' }}>
-                        No leads assigned yet.
-                      </td>
-                    </tr>
+                    {loadingLeads ? (
+                      <tr>
+                        <td colSpan={8} className="text-center text-muted" style={{ padding: '2rem' }}>
+                          Loading...
+                        </td>
+                      </tr>
+                    ) : leads.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center text-muted" style={{ padding: '2rem' }}>
+                          No leads found.
+                        </td>
+                      </tr>
+                    ) : (
+                      leads.slice(0, 5).map((lead) => (
+                        <tr key={lead.id}>
+                          <td style={{ padding: '10px 12px' }}>{lead.full_name || "Unknown"}</td>
+                          <td style={{ padding: '10px 12px' }}>-</td>
+                          <td style={{ padding: '10px 12px', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={lead.email}>
+                            {lead.email}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span className={`status-badge ${lead.status?.toLowerCase() === 'new' ? 'active' : 'inactive'}`}>{lead.status}</span>
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>-</td>
+                          <td style={{ padding: '10px 12px' }}>-</td>
+                          <td style={{ padding: '10px 12px' }}>
+                            {lead.updated_at ? formatDateTime(lead.updated_at) : (lead.created_at ? formatDateTime(lead.created_at) : "N/A")}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <Link to={`${basePath}/leads/${lead.id}`} className="view-all-link">View</Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -247,7 +288,7 @@ export default function SalesDashboard() {
             </div>
             <div className="quick-actions-list" style={{ padding: '1rem' }}>
               {hasPermission("lead.create") && (
-                <button className="btn-quick-action" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => navigate(`${basePath}/leads`)}>
+                <button className="btn-quick-action" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => setIsLeadFormOpen(true)}>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"></path></svg>
                   Create Lead
                 </button>
@@ -284,6 +325,16 @@ export default function SalesDashboard() {
           </div>
         </div>
       </div>
+
+      {isLeadFormOpen && (
+        <LeadFormModal
+          onClose={() => setIsLeadFormOpen(false)}
+          onSuccess={(savedLead) => {
+            setIsLeadFormOpen(false);
+            setLeads(prev => [savedLead, ...prev]);
+          }}
+        />
+      )}
     </div>
   );
 }

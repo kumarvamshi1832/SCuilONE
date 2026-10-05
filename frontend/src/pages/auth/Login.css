@@ -78,6 +78,7 @@ html, body, #root {
   margin: 0;
   padding: 0;
   transition: background-color 0.3s ease, color 0.3s ease;
+  position: relative;
 }
 
 /* 2-Column Unified Container */
@@ -253,9 +254,9 @@ html, body, #root {
 }
 
 /* Theme Toggle */
-.theme-toggle {
-  position: absolute;
-  top: 24px;
+.login-page-wrapper .theme-toggle {
+  position: absolute !important;
+  top: 20px;
   right: 24px;
   background: transparent;
   border: 1px solid var(--log-border);
@@ -268,15 +269,15 @@ html, body, #root {
   color: var(--log-text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
-  z-index: 10;
+  z-index: 100;
 }
 
-.theme-toggle:hover {
+.login-page-wrapper .theme-toggle:hover {
   border-color: var(--log-border-focus);
   color: var(--log-text-main);
 }
 
-.theme-toggle svg {
+.login-page-wrapper .theme-toggle svg {
   width: 18px;
   height: 18px;
 }

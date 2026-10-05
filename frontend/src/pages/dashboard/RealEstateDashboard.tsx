@@ -5,12 +5,15 @@ import { getDashboardSummary, getRecentActivities } from "../../services/dashboa
 import { getUsers } from "../../services/userService";
 import { DashboardSummary, Activity } from "../../types/dashboard";
 import { User } from "../../types/user";
+import LeadFormModal from "../../components/leads/LeadFormModal";
+import type { Lead } from "../../types/lead";
 import "./RealEstateDashboard.css";
 
 export default function RealEstateDashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   
   const [user, setUser] = useState<{name: string, role: string} | null>(null);
 
@@ -53,15 +56,21 @@ export default function RealEstateDashboard() {
               <h3>Real Estate Activity</h3>
             </div>
             <div className="activity-list">
-              {activities.map((act) => (
-                <div key={act.id} className="activity-item">
-                  <div className="activity-dot"></div>
-                  <div className="activity-content">
-                    <p className="activity-desc">{act.description}</p>
-                    <span className="activity-time">{act.timestamp}</span>
-                  </div>
+              {activities.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No recent activity found.
                 </div>
-              ))}
+              ) : (
+                activities.map((act) => (
+                  <div key={act.id} className="activity-item">
+                    <div className="activity-dot"></div>
+                    <div className="activity-content">
+                      <p className="activity-desc">{act.description}</p>
+                      <span className="activity-time">{act.timestamp}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -76,7 +85,7 @@ export default function RealEstateDashboard() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"></path></svg>
                 Add New Property
               </button>
-              <button className="btn-quick-action">
+              <button className="btn-quick-action" onClick={() => setIsLeadFormOpen(true)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"></path></svg>
                 Create Lead
               </button>
@@ -91,6 +100,16 @@ export default function RealEstateDashboard() {
           </div>
         </div>
       </div>
+      
+      {isLeadFormOpen && (
+        <LeadFormModal
+          onClose={() => setIsLeadFormOpen(false)}
+          onSuccess={(savedLead) => {
+            setIsLeadFormOpen(false);
+            // Optionally could show a toast here
+          }}
+        />
+      )}
     </div>
   );
 }

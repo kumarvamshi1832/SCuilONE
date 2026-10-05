@@ -12,13 +12,13 @@ const hasPermission = (perm: string) => {
     if (Array.isArray(u.permissions)) perms = u.permissions;
     else if (u.role && Array.isArray(u.role.permissions)) perms = u.role.permissions;
     else if (Array.isArray(u.role_permissions)) perms = u.role_permissions;
-    
+
     return perms.some(p => {
-        if (typeof p === 'string') return p.toLowerCase() === perm.toLowerCase();
-        if (p && typeof p === 'object' && p.name) return p.name.toLowerCase() === perm.toLowerCase();
-        return false;
+      if (typeof p === 'string') return p.toLowerCase() === perm.toLowerCase();
+      if (p && typeof p === 'object' && p.name) return p.name.toLowerCase() === perm.toLowerCase();
+      return false;
     });
-  } catch (e) {}
+  } catch (e) { }
   return false;
 };
 
@@ -62,8 +62,7 @@ export default function SupportDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Leads</h4>
-              <div className="kpi-value">{summary?.totalLeads || 0}</div>
-              <div className="kpi-trend">Accessible Leads</div>
+              <div className="kpi-value">{summary?.totalLeads === -1 ? "Unavailable" : (summary?.totalLeads || 0)}</div>
             </div>
           </div>
         )}
@@ -76,7 +75,6 @@ export default function SupportDashboard() {
             <div className="kpi-info">
               <h4 className="kpi-title">Contacts</h4>
               <div className="kpi-value">-</div>
-              <div className="kpi-trend">Accessible Contacts</div>
             </div>
           </div>
         )}
@@ -89,7 +87,6 @@ export default function SupportDashboard() {
             <div className="kpi-info">
               <h4 className="kpi-title">Accounts</h4>
               <div className="kpi-value">-</div>
-              <div className="kpi-trend">Accessible Accounts</div>
             </div>
           </div>
         )}
@@ -101,8 +98,7 @@ export default function SupportDashboard() {
             </div>
             <div className="kpi-info">
               <h4 className="kpi-title">Deals</h4>
-              <div className="kpi-value">{summary?.openDeals || 0}</div>
-              <div className="kpi-trend">Open Deals</div>
+              <div className="kpi-value">{summary?.openDeals === -1 ? "-" : (summary?.openDeals || 0)}</div>
             </div>
           </div>
         )}
@@ -115,7 +111,6 @@ export default function SupportDashboard() {
             <div className="kpi-info">
               <h4 className="kpi-title">Tasks</h4>
               <div className="kpi-value">-</div>
-              <div className="kpi-trend">Pending Tasks</div>
             </div>
           </div>
         )}
@@ -128,15 +123,21 @@ export default function SupportDashboard() {
               <h3>Recent Support Activities</h3>
             </div>
             <div className="activity-list">
-              {activities.map((act) => (
-                <div key={act.id} className="activity-item">
-                  <div className="activity-dot"></div>
-                  <div className="activity-content">
-                    <p className="activity-desc">{act.description}</p>
-                    <span className="activity-time">{act.timestamp}</span>
-                  </div>
+              {activities.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No recent support activities
                 </div>
-              ))}
+              ) : (
+                activities.map((act) => (
+                  <div key={act.id} className="activity-item">
+                    <div className="activity-dot"></div>
+                    <div className="activity-content">
+                      <p className="activity-desc">{act.description}</p>
+                      <span className="activity-time">{act.timestamp}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -174,8 +175,8 @@ export default function SupportDashboard() {
               {(!hasPermission("contact.create") && !hasPermission("contact.update") &&
                 !hasPermission("account.create") && !hasPermission("account.update") &&
                 !hasPermission("task.create") && !hasPermission("task.update")) && (
-                 <p className="text-muted" style={{ textAlign: 'center', margin: 0 }}>No quick actions available.</p>
-              )}
+                  <p className="text-muted" style={{ textAlign: 'center', margin: 0 }}>No quick actions available.</p>
+                )}
             </div>
           </div>
         </div>
