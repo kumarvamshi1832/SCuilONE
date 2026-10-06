@@ -46,14 +46,14 @@ export default function AuditorDashboard() {
       try {
         const parsed = JSON.parse(storedUser);
         setUser({
-          name: parsed.first_name || parsed.full_name || parsed.name || "Auditor",
+          name: parsed.first_name || parsed.full_name || parsed.name || "User",
           role: parsed.role || "Auditor",
         });
       } catch (e) {
-        setUser({ name: "Auditor", role: "Auditor" });
+        setUser({ name: "User", role: "Auditor" });
       }
     } else {
-      setUser({ name: "Auditor", role: "Auditor" });
+      setUser({ name: "User", role: "Auditor" });
     }
   }, []);
 
