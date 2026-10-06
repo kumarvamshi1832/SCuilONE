@@ -262,23 +262,24 @@ def verify_otp(
         )
 
     print("VERIFY OTP: Finding Tenant Owner role")
-    
+
     try:
         tenant_owner_role = db.query(Role).filter(
             Role.name == "Tenant Owner"
-            ).first()
+        ).first()
 
         print("VERIFY OTP: Role query completed")
         print("VERIFY OTP: Role found:", tenant_owner_role)
+
     except Exception:
         db.rollback()
         print("VERIFY OTP ROLE QUERY ERROR:")
         traceback.print_exc()
 
-    raise HTTPException(
-        status_code=500,
-        detail="Failed to fetch Tenant Owner role"
-    )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch Tenant Owner role"
+        )
 
     if not tenant_owner_role:
         db.rollback()
@@ -290,25 +291,45 @@ def verify_otp(
 
     print("VERIFY OTP: Tenant Owner role found")
 
-    user_role = UserRole(
-        user_id=new_user.id,
-        role_id=tenant_owner_role.id
-    )
+    print("VERIFY OTP: Creating user role")
 
-    db.add(user_role)
+    try:
+        user_role = UserRole(
+            user_id=new_user.id,
+            role_id=tenant_owner_role.id
+        )
+
+        db.add(user_role)
+
+        print("VERIFY OTP: User role created successfully")
+
+    except Exception:
+        db.rollback()
+        print("VERIFY OTP USER ROLE ERROR:")
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create user role"
+        )
 
     print("VERIFY OTP: Deleting temporary records")
 
     db.delete(pending_registration)
     db.delete(otp_record)
 
+    print("VERIFY OTP: Temporary records marked for deletion")
+
     print("VERIFY OTP: Committing transaction")
 
     try:
         db.commit()
+
         print("VERIFY OTP: Registration completed successfully")
+
     except Exception:
         db.rollback()
+
         print("VERIFY OTP COMMIT ERROR:")
         traceback.print_exc()
 
@@ -323,6 +344,7 @@ def verify_otp(
         "user": new_user.email,
         "role": tenant_owner_role.name
     }
+
 
 @router.post("/login")
 def login(
