@@ -12,7 +12,8 @@ async def send_otp_email(
 
     message = EmailMessage()
 
-    message["From"] = settings.SMTP_USERNAME
+    # message["From"] = settings.SMTP_USERNAME
+    message["From"] = settings.SMTP_FROM_EMAIL
     message["To"] = recipient_email
     message["Subject"] = "SCuilONE Email Verification"
 
