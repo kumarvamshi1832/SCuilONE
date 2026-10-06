@@ -119,7 +119,8 @@ def get_users(
             "email": user.email,
             "tenant_id": str(user.tenant_id),
             "role": role_name,
-            "status": user.status
+            "status": user.status,
+            "created_at": user.created_at
         })
 
     return result
