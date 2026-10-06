@@ -1,6 +1,7 @@
 import random
 import random
 from datetime import datetime, timedelta
+import traceback
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -244,7 +245,18 @@ def verify_otp(
     db.delete(pending_registration)
     db.delete(otp_record)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print("VERIFY OTP ERROR:")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+    )
+
+
 
     return {
         "message": "Registration completed successfully",
