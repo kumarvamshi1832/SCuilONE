@@ -262,10 +262,23 @@ def verify_otp(
         )
 
     print("VERIFY OTP: Finding Tenant Owner role")
+    
+    try:
+        tenant_owner_role = db.query(Role).filter(
+            Role.name == "Tenant Owner"
+            ).first()
 
-    tenant_owner_role = db.query(Role).filter(
-        Role.name == "Tenant Owner"
-    ).first()
+        print("VERIFY OTP: Role query completed")
+        print("VERIFY OTP: Role found:", tenant_owner_role)
+    except Exception:
+        db.rollback()
+        print("VERIFY OTP ROLE QUERY ERROR:")
+        traceback.print_exc()
+
+    raise HTTPException(
+        status_code=500,
+        detail="Failed to fetch Tenant Owner role"
+    )
 
     if not tenant_owner_role:
         db.rollback()
