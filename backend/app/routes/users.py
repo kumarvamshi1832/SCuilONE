@@ -96,15 +96,33 @@ def get_users(
         User.tenant_id == tenant_id
     ).all()
 
-    return [
-        {
+    result = []
+
+    for user in users:
+        user_role = db.query(UserRole).filter(
+            UserRole.user_id == user.id
+        ).first()
+
+        role_name = None
+
+        if user_role:
+            role = db.query(Role).filter(
+                Role.id == user_role.role_id
+            ).first()
+
+            if role:
+                role_name = role.name
+
+        result.append({
             "id": str(user.id),
             "full_name": user.full_name,
             "email": user.email,
-            "tenant_id": str(user.tenant_id)
-        }
-        for user in users
-    ]
+            "tenant_id": str(user.tenant_id),
+            "role": role_name,
+            "status": user.status
+        })
+
+    return result
 
 @router.get("/roles")
 def get_roles(
