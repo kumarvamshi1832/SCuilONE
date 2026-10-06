@@ -16,6 +16,11 @@ origins = [
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+
+    "https://s-cuil-one.vercel.app",
+    "https://s-cuil-one-git-backend-vamshi-kumarvamshi1832-7668s-projects.vercel.app",
+    "https://s-cuil-gg9u5e3ah-kumarvamshi1832-7668s-projects.vercel.app",
+
 ]
 
 app.add_middleware(
