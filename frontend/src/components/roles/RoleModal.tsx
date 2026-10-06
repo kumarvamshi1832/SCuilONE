@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createRole, updateRole, getRoleById, getRolePermissions } from "../../services/roleService";
 import { getUsers } from "../../services/userService";
 import { User } from "../../types/user";
-import { getPermissions, PermissionDetail } from "../../services/permissionService";
+// import { PermissionDetail } from "../../services/permissionService";
 import "./RoleModal.css";
 
 interface RoleModalProps {
@@ -14,24 +14,24 @@ interface RoleModalProps {
 }
 
 // Fallback permissions in case API is missing, to allow the UI to function
-const FALLBACK_PERMISSIONS: PermissionDetail[] = [
-  { id: "1", name: "leads.view", module: "Leads", action: "View", description: "View leads" },
-  { id: "2", name: "leads.create", module: "Leads", action: "Create", description: "Create leads" },
-  { id: "3", name: "leads.update", module: "Leads", action: "Update", description: "Update leads" },
-  { id: "4", name: "leads.delete", module: "Leads", action: "Delete", description: "Delete leads" },
-  { id: "5", name: "contacts.view", module: "Contacts", action: "View", description: "View contacts" },
-  { id: "6", name: "contacts.create", module: "Contacts", action: "Create", description: "Create contacts" },
-  { id: "7", name: "deals.view", module: "Deals", action: "View", description: "View deals" },
-  { id: "8", name: "deals.create", module: "Deals", action: "Create", description: "Create deals" },
-  { id: "9", name: "reports.view", module: "Reports", action: "View", description: "View reports" },
-];
+// const FALLBACK_PERMISSIONS: PermissionDetail[] = [
+//   { id: "1", name: "leads.view", module: "Leads", action: "View", description: "View leads" },
+//   { id: "2", name: "leads.create", module: "Leads", action: "Create", description: "Create leads" },
+//   { id: "3", name: "leads.update", module: "Leads", action: "Update", description: "Update leads" },
+//   { id: "4", name: "leads.delete", module: "Leads", action: "Delete", description: "Delete leads" },
+//   { id: "5", name: "contacts.view", module: "Contacts", action: "View", description: "View contacts" },
+//   { id: "6", name: "contacts.create", module: "Contacts", action: "Create", description: "Create contacts" },
+//   { id: "7", name: "deals.view", module: "Deals", action: "View", description: "View deals" },
+//   { id: "8", name: "deals.create", module: "Deals", action: "Create", description: "Create deals" },
+//   { id: "9", name: "reports.view", module: "Reports", action: "View", description: "View reports" },
+// ];
 
 export default function RoleModal({ roleName, mode, onClose, onSuccess, onError }: RoleModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
   
-  const [availablePermissions, setAvailablePermissions] = useState<PermissionDetail[]>([]);
+  // const [availablePermissions, setAvailablePermissions] = useState<PermissionDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   
@@ -43,15 +43,15 @@ export default function RoleModal({ roleName, mode, onClose, onSuccess, onError 
     const fetchData = async () => {
       setLoading(true);
       try {
-        setLoadingMsg("Loading permissions...");
-        let perms: PermissionDetail[];
-        try {
-           perms = await getPermissions();
-        } catch {
-           // Fallback if backend API is missing
-           perms = FALLBACK_PERMISSIONS;
-        }
-        setAvailablePermissions(perms);
+        // setLoadingMsg("Loading permissions...");
+        // let perms: PermissionDetail[];
+        // try {
+        //    perms = await getPermissions();
+        // } catch {
+        //    // Fallback if backend API is missing
+        //    perms = FALLBACK_PERMISSIONS;
+        // }
+        // setAvailablePermissions(perms);
         
         if (mode !== 'create' && roleName) {
            setName(roleName);
@@ -115,19 +115,19 @@ export default function RoleModal({ roleName, mode, onClose, onSuccess, onError 
     }
   };
 
-  const togglePermission = (permId: string) => {
-    if (mode === 'view') return;
-    const newSet = new Set(selectedPermissions);
-    if (newSet.has(permId)) newSet.delete(permId);
-    else newSet.add(permId);
-    setSelectedPermissions(newSet);
-  };
+  // const togglePermission = (permId: string) => {
+  //   if (mode === 'view') return;
+  //   const newSet = new Set(selectedPermissions);
+  //   if (newSet.has(permId)) newSet.delete(permId);
+  //   else newSet.add(permId);
+  //   setSelectedPermissions(newSet);
+  // };
 
-  const groupedPermissions = availablePermissions.reduce((acc, p) => {
-    if (!acc[p.module]) acc[p.module] = [];
-    acc[p.module]!.push(p);
-    return acc;
-  }, {} as Record<string, PermissionDetail[]>);
+  // const groupedPermissions = availablePermissions.reduce((acc, p) => {
+  //   if (!acc[p.module]) acc[p.module] = [];
+  //   acc[p.module]!.push(p);
+  //   return acc;
+  // }, {} as Record<string, PermissionDetail[]>);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
