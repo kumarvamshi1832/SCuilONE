@@ -1,5 +1,6 @@
 import { User } from "../../types/user";
 import { Link, useParams } from "react-router-dom";
+import { formatDateTime } from "../../utils/dateFormatter";
 
 interface RecentUsersProps {
   users: User[];
@@ -53,7 +54,9 @@ export default function RecentUsers({ users }: RecentUsersProps) {
                     {user.status || 'Inactive'}
                   </span>
                 </td>
-                <td className="text-muted">{user.created_at || 'N/A'}</td>
+                <td className="text-muted">
+                  {user.created_at ? formatDateTime(user.created_at) : 'N/A'}
+                </td>
               </tr>
             ))}
             {users.length === 0 && (

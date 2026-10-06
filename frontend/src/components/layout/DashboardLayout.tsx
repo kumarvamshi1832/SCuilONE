@@ -28,6 +28,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   
   const [tenant, setTenant] = useState<TenantDetails | null>(null);
   const [user, setUser] = useState<{name: string, role: string} | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     // Load tenant details
@@ -245,8 +246,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className={`dashboard-wrapper ${theme}`}>
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="sidebar-overlay" 
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="dashboard-sidebar">
+      <aside className={`dashboard-sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <h2><span className="text-blue">SCuilONE</span> CRM</h2>
         </div>
@@ -256,6 +265,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               key={item.path} 
               to={item.path} 
               className={`nav-item ${location.pathname.startsWith(item.path) ? "active" : ""}`}
+              onClick={() => setIsSidebarOpen(false)}
             >
               <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d={item.icon} />
@@ -281,6 +291,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Top Header */}
         <header className="dashboard-header">
           <div className="header-left">
+            <button 
+              className="mobile-menu-btn" 
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open Menu"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
             <div className="tenant-selector">
               <span>{tenant ? tenant.name : "Loading..."}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
