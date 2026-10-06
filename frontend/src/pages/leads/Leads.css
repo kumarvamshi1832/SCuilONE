@@ -601,8 +601,13 @@
     min-width: 800px;
   }
   .leads-modal-content {
+    width: 100%;
     max-width: 95vw;
-    margin: 8px;
+    margin: 16px;
+  }
+  .header-actions button {
+    width: 100%;
+    justify-content: center;
   }
 }
 

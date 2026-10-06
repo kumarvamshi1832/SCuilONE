@@ -28,6 +28,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   
   const [tenant, setTenant] = useState<TenantDetails | null>(null);
   const [user, setUser] = useState<{name: string, role: string} | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     // Load tenant details
@@ -88,6 +89,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         { label: "Dashboard", path: "/manager/dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
         { label: "Leads", path: `${basePath}/leads`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
         { label: "Contacts", path: `${basePath}/contacts`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+        { label: "Accounts", path: `${basePath}/accounts`, icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
         { label: "Deals", path: `${basePath}/deals`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" },
         { label: "Activities", path: `${basePath}/activities`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
         { label: "Reports", path: `${basePath}/reports`, icon: "M18 20V10 M12 20V4 M6 20v-4" },
@@ -229,6 +231,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       { label: "Dashboard", path: `${basePath}/dashboard`, icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
       { label: "Leads", path: `${basePath}/leads`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
       { label: "Contacts", path: `${basePath}/contacts`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+      { label: "Accounts", path: `${basePath}/accounts`, icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
       { label: "Deals", path: `${basePath}/deals`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" },
       { label: "Activities", path: `${basePath}/activities`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
       { label: "Reports", path: `${basePath}/reports`, icon: "M18 20V10 M12 20V4 M6 20v-4" },
@@ -243,8 +246,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className={`dashboard-wrapper ${theme}`}>
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="sidebar-overlay" 
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="dashboard-sidebar">
+      <aside className={`dashboard-sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <h2><span className="text-blue">SCuilONE</span> CRM</h2>
         </div>
@@ -254,6 +265,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               key={item.path} 
               to={item.path} 
               className={`nav-item ${location.pathname.startsWith(item.path) ? "active" : ""}`}
+              onClick={() => setIsSidebarOpen(false)}
             >
               <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d={item.icon} />
@@ -279,6 +291,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Top Header */}
         <header className="dashboard-header">
           <div className="header-left">
+            <button 
+              className="mobile-menu-btn" 
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open Menu"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
             <div className="tenant-selector">
               <span>{tenant ? tenant.name : "Loading..."}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
