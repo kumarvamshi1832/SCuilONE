@@ -103,7 +103,6 @@ export default function Users() {
           <table className="full-width-table">
             <thead>
               <tr>
-                <th className="checkbox-col"><input type="checkbox" /></th>
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
@@ -114,7 +113,6 @@ export default function Users() {
             <tbody>
               {filteredUsers.map(user => (
                 <tr key={user.id}>
-                  <td className="checkbox-col"><input type="checkbox" /></td>
                   <td>
                     <div className="user-cell">
                       <div className="avatar-small">{(user.full_name || "?").charAt(0).toUpperCase()}</div>
@@ -138,7 +136,7 @@ export default function Users() {
               ))}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center py-4 text-muted">
+                  <td colSpan={5} className="text-center py-4 text-muted">
                     No users found.<br/>
                     <small>Add your first user to get started.</small>
                   </td>

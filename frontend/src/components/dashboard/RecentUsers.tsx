@@ -1,16 +1,30 @@
 import { User } from "../../types/user";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 interface RecentUsersProps {
   users: User[];
 }
 
 export default function RecentUsers({ users }: RecentUsersProps) {
+  const { industry } = useParams();
+  
+  const getBasePath = () => {
+    if (industry) return `/${industry}`;
+    const tenantStr = sessionStorage.getItem("tenant");
+    if (tenantStr) {
+      try {
+        const t = JSON.parse(tenantStr);
+        if (t?.industry) return `/${t.industry.toLowerCase().replace(/\s+/g, '-')}`;
+      } catch(e) {}
+    }
+    return "/real-estate";
+  };
+
   return (
     <div className="dashboard-section-card">
       <div className="section-header">
         <h3>Recent Users</h3>
-        <Link to="/users" className="view-all-link">View All</Link>
+        <Link to={`${getBasePath()}/users`} className="view-all-link">View All</Link>
       </div>
       <div className="table-responsive">
         <table className="recent-users-table">
