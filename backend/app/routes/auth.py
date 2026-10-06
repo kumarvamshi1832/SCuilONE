@@ -149,9 +149,13 @@ def verify_otp(
     data: VerifyOTPRequest,
     db: Session = Depends(get_db)
 ):
+    print("VERIFY OTP: Started")
+
     otp_record = db.query(OTPVerification).filter(
         OTPVerification.email == data.email
     ).first()
+
+    print("VERIFY OTP: OTP record fetched")
 
     if not otp_record:
         raise HTTPException(
@@ -179,6 +183,8 @@ def verify_otp(
 
     otp_record.attempts += 1
 
+    print("VERIFY OTP: Checking OTP")
+
     if not verify_password(
         data.otp,
         otp_record.otp_hash
@@ -190,11 +196,15 @@ def verify_otp(
             detail="Invalid OTP"
         )
 
+    print("VERIFY OTP: OTP is valid")
+
     pending_registration = db.query(
         PendingRegistration
     ).filter(
         PendingRegistration.email == data.email
     ).first()
+
+    print("VERIFY OTP: Pending registration fetched")
 
     if not pending_registration:
         db.delete(otp_record)
@@ -205,13 +215,29 @@ def verify_otp(
             detail="Registration data not found. Please register again."
         )
 
+    print("VERIFY OTP: Creating tenant")
+
     new_tenant = Tenant(
         name=pending_registration.company_name,
         industry=pending_registration.industry
     )
 
     db.add(new_tenant)
-    db.flush()
+
+    try:
+        db.flush()
+        print("VERIFY OTP: Tenant created successfully")
+    except Exception:
+        db.rollback()
+        print("VERIFY OTP TENANT ERROR:")
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create tenant"
+        )
+
+    print("VERIFY OTP: Creating user")
 
     new_user = User(
         tenant_id=new_tenant.id,
@@ -221,7 +247,21 @@ def verify_otp(
     )
 
     db.add(new_user)
-    db.flush()
+
+    try:
+        db.flush()
+        print("VERIFY OTP: User created successfully")
+    except Exception:
+        db.rollback()
+        print("VERIFY OTP USER ERROR:")
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create user"
+        )
+
+    print("VERIFY OTP: Finding Tenant Owner role")
 
     tenant_owner_role = db.query(Role).filter(
         Role.name == "Tenant Owner"
@@ -235,6 +275,8 @@ def verify_otp(
             detail="Tenant Owner role not found."
         )
 
+    print("VERIFY OTP: Tenant Owner role found")
+
     user_role = UserRole(
         user_id=new_user.id,
         role_id=tenant_owner_role.id
@@ -242,21 +284,25 @@ def verify_otp(
 
     db.add(user_role)
 
+    print("VERIFY OTP: Deleting temporary records")
+
     db.delete(pending_registration)
     db.delete(otp_record)
 
+    print("VERIFY OTP: Committing transaction")
+
     try:
         db.commit()
-    except Exception as e:
+        print("VERIFY OTP: Registration completed successfully")
+    except Exception:
         db.rollback()
-        print("VERIFY OTP ERROR:")
+        print("VERIFY OTP COMMIT ERROR:")
         traceback.print_exc()
+
         raise HTTPException(
             status_code=500,
-            detail=str(e)
-    )
-
-
+            detail="Failed to complete registration"
+        )
 
     return {
         "message": "Registration completed successfully",
