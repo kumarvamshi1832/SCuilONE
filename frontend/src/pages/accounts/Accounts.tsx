@@ -430,7 +430,12 @@ export default function Accounts() {
                 return (
                   <tr key={account.id}>
                     <td>
-                      <div className="fw-medium text-dark">{account.name}</div>
+                      <div className="lead-name-cell">
+                        <div className="lead-avatar">
+                          {(account.name || "-").charAt(0).toUpperCase()}
+                        </div>
+                        <span className="lead-name-text">{account.name || "—"}</span>
+                      </div>
                     </td>
                     <td>
                       {account.email ? (
@@ -470,12 +475,15 @@ export default function Accounts() {
                       )}
                     </td>
                     <td>
-                      {account.assigned_to ? (
-                        <div className="d-flex align-items-center gap-2">
-                          <div className="avatar-small" title={assignedUser.role}>
-                            {assignedUser.name.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="text-sm">{assignedUser.name}</span>
+                      {account.assigned_to && assignedUser.name !== "—" ? (
+                        <div style={{ lineHeight: 1.3 }}>
+                          <span style={{ fontWeight: 500 }}>{assignedUser.name}</span>
+                          {assignedUser.role && (
+                            <>
+                              <br />
+                              <span className="text-dim" style={{ fontSize: '0.78rem' }}>{assignedUser.role}</span>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <span className="text-muted">—</span>

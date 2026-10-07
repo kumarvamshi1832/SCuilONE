@@ -5,7 +5,6 @@ import { getUsers } from "../../services/userService";
 import { DashboardSummary, Activity } from "../../types/dashboard";
 import { User } from "../../types/user";
 import LeadFormModal from "../../components/leads/LeadFormModal";
-import type { Lead } from "../../types/lead";
 import "./RealEstateDashboard.css";
 
 const hasPermission = (perm: string) => {
@@ -196,7 +195,7 @@ export default function AuditorDashboard() {
       {isLeadFormOpen && (
         <LeadFormModal
           onClose={() => setIsLeadFormOpen(false)}
-          onSuccess={(savedLead) => {
+          onSuccess={() => {
             setIsLeadFormOpen(false);
           }}
         />

@@ -31,7 +31,7 @@ export default function RoleModal({ roleName, mode, onClose, onSuccess, onError 
   const [description, setDescription] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
   
-  const [availablePermissions, setAvailablePermissions] = useState<PermissionDetail[]>([]);
+  const [, setAvailablePermissions] = useState<PermissionDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   
@@ -115,19 +115,7 @@ export default function RoleModal({ roleName, mode, onClose, onSuccess, onError 
     }
   };
 
-  const togglePermission = (permId: string) => {
-    if (mode === 'view') return;
-    const newSet = new Set(selectedPermissions);
-    if (newSet.has(permId)) newSet.delete(permId);
-    else newSet.add(permId);
-    setSelectedPermissions(newSet);
-  };
 
-  const groupedPermissions = availablePermissions.reduce((acc, p) => {
-    if (!acc[p.module]) acc[p.module] = [];
-    acc[p.module]!.push(p);
-    return acc;
-  }, {} as Record<string, PermissionDetail[]>);
 
   return (
     <div className="modal-overlay" onClick={onClose}>

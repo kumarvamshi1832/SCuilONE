@@ -193,6 +193,7 @@ const pageStyle: React.CSSProperties = {
   justifyContent: "center",
   alignItems: "center",
   padding: "24px",
+  boxSizing: "border-box",
   background: "linear-gradient(135deg, #f0f4ff 0%, #e8ecf8 50%, #f4f7fb 100%)",
   fontFamily:
     "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -207,6 +208,7 @@ const cardStyle: React.CSSProperties = {
   boxShadow:
     "0 4px 6px -1px rgba(0,0,0,0.05), 0 20px 50px -12px rgba(0,0,0,0.12)",
   textAlign: "center",
+  boxSizing: "border-box",
 };
 
 const logoContainerStyle: React.CSSProperties = {
