@@ -3,7 +3,6 @@ import RealEstateOverview from "../../components/dashboard/RealEstateOverview";
 import { getDashboardSummary, getRecentActivities } from "../../services/dashboardService";
 import { DashboardSummary, Activity } from "../../types/dashboard";
 import LeadFormModal from "../../components/leads/LeadFormModal";
-import type { Lead } from "../../types/lead";
 import "./RealEstateDashboard.css";
 
 export default function ManagerDashboard() {
@@ -102,7 +101,7 @@ export default function ManagerDashboard() {
       {isLeadFormOpen && (
         <LeadFormModal
           onClose={() => setIsLeadFormOpen(false)}
-          onSuccess={(savedLead) => {
+          onSuccess={() => {
             setIsLeadFormOpen(false);
           }}
         />

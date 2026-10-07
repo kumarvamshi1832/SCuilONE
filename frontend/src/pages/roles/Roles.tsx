@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { getRoles as getRolesList, getUsers } from "../../services/userService";
-import { deleteRole } from "../../services/roleService";
-import { User } from "../../types/user";
+
 import RoleModal from "../../components/roles/RoleModal";
 import "../users/Users.css"; // Reuse existing styles
 import "./Roles.css";

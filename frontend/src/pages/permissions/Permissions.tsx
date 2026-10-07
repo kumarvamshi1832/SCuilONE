@@ -16,7 +16,7 @@ const FALLBACK_PERMISSIONS: PermissionDetail[] = [
 ];
 
 export default function Permissions() {
-  const [permissions, setPermissions] = useState<PermissionDetail[]>([]);
+  const [, setPermissions] = useState<PermissionDetail[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +44,6 @@ export default function Permissions() {
     fetchPermissionsData();
   }, []);
 
-  const filteredPermissions = permissions.filter(p => 
-    p.module.toLowerCase().includes(search.toLowerCase()) || 
-    p.action.toLowerCase().includes(search.toLowerCase()) ||
-    p.description.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="users-page">

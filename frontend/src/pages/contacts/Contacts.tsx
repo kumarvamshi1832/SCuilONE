@@ -378,7 +378,12 @@ export default function Contacts() {
                 return (
                   <tr key={contact.id}>
                     <td>
-                      <div className="fw-medium text-dark">{contact.full_name}</div>
+                      <div className="lead-name-cell">
+                        <div className="lead-avatar">
+                          {(contact.full_name || "-").charAt(0).toUpperCase()}
+                        </div>
+                        <span className="lead-name-text">{contact.full_name || "—"}</span>
+                      </div>
                     </td>
                     <td>
                       {contact.email && <div className="text-sm">{contact.email}</div>}
@@ -398,12 +403,15 @@ export default function Contacts() {
                       )}
                     </td>
                     <td>
-                      {contact.assigned_to ? (
-                        <div className="d-flex align-items-center gap-2">
-                          <div className="avatar-small" title={assignedUser.role}>
-                            {assignedUser.name.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="text-sm">{assignedUser.name}</span>
+                      {contact.assigned_to && assignedUser.name !== "—" ? (
+                        <div style={{ lineHeight: 1.3 }}>
+                          <span style={{ fontWeight: 500 }}>{assignedUser.name}</span>
+                          {assignedUser.role && (
+                            <>
+                              <br />
+                              <span className="text-dim" style={{ fontSize: '0.78rem' }}>{assignedUser.role}</span>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <span className="text-muted">—</span>
