@@ -6,7 +6,6 @@ import { getUsers } from "../../services/userService";
 import { DashboardSummary, Activity } from "../../types/dashboard";
 import { User } from "../../types/user";
 import LeadFormModal from "../../components/leads/LeadFormModal";
-// import type { Lead } from "../../types/lead";
 import "./RealEstateDashboard.css";
 
 export default function RealEstateDashboard() {
@@ -105,8 +104,9 @@ export default function RealEstateDashboard() {
         <LeadFormModal
           onClose={() => setIsLeadFormOpen(false)}
           onSuccess={() => {
-  setIsLeadFormOpen(false);
-}}
+            setIsLeadFormOpen(false);
+            // Optionally could show a toast here
+          }}
         />
       )}
     </div>

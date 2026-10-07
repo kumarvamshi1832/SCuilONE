@@ -62,7 +62,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const isOps = role === "OPERATIONS_USER" || role === "OPERATIONS USER" || role.includes("OPERATIONS");
   const isSupport = role === "SUPPORT_USER" || role === "SUPPORT USER" || role.includes("SUPPORT");
   const isAuditor = role === "READ_ONLY" || role === "AUDITOR" || role === "READ ONLY" || role === "READ-ONLY" || role === "READ-ONLY / AUDITOR" || role === "READ ONLY / AUDITOR" || role === "READ_ONLY / AUDITOR" || role.includes("AUDITOR");
-  // const isTenantAdmin = !isManager && !isSales && !isOps && !isSupport && !isAuditor;
+  const isTenantAdmin = !isManager && !isSales && !isOps && !isSupport && !isAuditor;
 
   const hasPermission = (perm: string) => {
     const userStr = sessionStorage.getItem("user");
