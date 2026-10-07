@@ -16,6 +16,9 @@ from app.models.otp import OTPVerification
 from app.models.pending_registration import PendingRegistration
 from app.models.password_reset import PasswordResetOTP
 
+from app.models.permission import Permission
+from app.models.role_permission import RolePermission
+
 from app.schemas.auth import (
     RegisterRequest,
     VerifyOTPRequest,
@@ -381,6 +384,19 @@ def login(
         Tenant.id == user.tenant_id
     ).first()
 
+    permissions = []
+
+    if role:
+        permissions = [
+            permission.name
+            for permission in db.query(Permission).join(
+                RolePermission,
+                RolePermission.permission_id == Permission.id
+            ).filter(
+                RolePermission.role_id == role.id
+            ).all()
+        ]
+
     access_token = create_access_token({
         "user_id": str(user.id),
         "tenant_id": str(user.tenant_id),
@@ -401,7 +417,8 @@ def login(
             "name": tenant.name,
             "industry": tenant.industry
         },
-        "role": role.name if role else None
+        "role": role.name if role else None,
+        "permissions": permissions
     }
 
 @router.post("/forgot-password")
