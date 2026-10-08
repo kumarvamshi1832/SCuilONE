@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useParams } from "react-router-dom";
 import type { Lead } from "../../types/lead";
 import { User } from "../../types/user";
 import { getLeads } from "../../services/leadService";
@@ -29,6 +30,18 @@ function getStatusClass(status: string): string {
 export default function Leads() {
   /* ─── Permissions ─── */
   const permissions = useMemo(() => getLeadPermissions(), []);
+  
+  const { industry } = useParams();
+  const tenantStr = sessionStorage.getItem("tenant");
+  let tenantIndustry = "real-estate";
+  if (tenantStr) {
+    try {
+      const t = JSON.parse(tenantStr);
+      if (t?.industry) tenantIndustry = t.industry.toLowerCase().replace(/\s+/g, '-');
+    } catch(e) {}
+  }
+  const currentIndustry = industry || tenantIndustry;
+  const isEdu = currentIndustry === "education-consulting";
 
   /* ─── State ─── */
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -259,7 +272,9 @@ export default function Leads() {
       <div className="page-header">
         <div>
           <h1>Leads</h1>
-          <p className="text-muted">Manage and track your property leads.</p>
+          <p className="text-muted">
+            {isEdu ? "Manage and track your education consulting leads." : "Manage and track your property leads."}
+          </p>
         </div>
         <div className="header-actions">
           {permissions.canCreate && (
@@ -384,17 +399,10 @@ export default function Leads() {
             <p>
               {hasActiveFilters
                 ? "Try adjusting your search or filters."
-                : "Get started by creating your first lead."}
+                : isEdu 
+                  ? "Get started by creating your first student lead."
+                  : "Get started by creating your first lead."}
             </p>
-            {!hasActiveFilters && permissions.canCreate && (
-              <button className="btn-primary" onClick={handleCreate}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                Create Lead
-              </button>
-            )}
             {hasActiveFilters && (
               <button className="btn-clear-filters" onClick={clearFilters} style={{ marginTop: 8 }}>
                 Clear Filters
