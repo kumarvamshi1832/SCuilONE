@@ -49,6 +49,12 @@ class Lead(Base):
         default="New"
     )
 
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id"),
+        nullable=True
+    )
+
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id"),

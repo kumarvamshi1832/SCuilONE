@@ -23,6 +23,12 @@ class Contact(Base):
         nullable=False
     )
 
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id"),
+        nullable=True
+    )
+
     full_name: Mapped[str] = mapped_column(
         String(150),
         nullable=False

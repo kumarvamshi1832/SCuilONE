@@ -1,5 +1,5 @@
 from uuid import UUID
-
+from app.models.lead import Lead
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,7 @@ def validate_assigned_user(
 @router.post(
     "/",
     response_model=AccountResponse,
+    status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(require_permission("account.create"))]
 )
 def create_account(
@@ -62,6 +63,26 @@ def create_account(
         tenant_id,
         db
     )
+
+    lead = None
+
+    if data.lead_id is not None:
+        lead = db.query(Lead).filter(
+            Lead.id == data.lead_id,
+            Lead.tenant_id == tenant_id
+        ).first()
+
+        if not lead:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lead not found"
+            )
+
+        if lead.account_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This Lead is already linked to an Account"
+            )
 
     account = Account(
         tenant_id=tenant_id,
@@ -82,6 +103,11 @@ def create_account(
     )
 
     db.add(account)
+    db.flush()
+
+    if lead is not None:
+        lead.account_id = account.id
+
     db.commit()
     db.refresh(account)
 

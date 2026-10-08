@@ -8,6 +8,7 @@ from app.core.dependencies import get_current_user
 from app.core.permissions import require_permission
 from app.models.contact import Contact
 from app.models.user import User
+from app.models.account import Account
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactResponse
 
 
@@ -45,6 +46,26 @@ def validate_assigned_user(
         )
 
 
+def validate_account(
+    account_id: UUID | None,
+    tenant_id,
+    db: Session
+):
+    if account_id is None:
+        return
+
+    account = db.query(Account).filter(
+        Account.id == account_id,
+        Account.tenant_id == tenant_id
+    ).first()
+
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account does not belong to this tenant"
+        )
+
+
 @router.post(
     "/",
     response_model=ContactResponse,
@@ -64,8 +85,15 @@ def create_contact(
         db
     )
 
+    validate_account(
+        data.account_id,
+        tenant_id,
+        db
+    )
+
     contact = Contact(
         tenant_id=tenant_id,
+        account_id=data.account_id,
         full_name=data.full_name,
         email=data.email,
         phone=data.phone,
@@ -148,6 +176,13 @@ def update_contact(
             db
         )
 
+    if data.account_id is not None:
+        validate_account(
+            data.account_id,
+            tenant_id,
+            db
+        )
+
     contact = db.query(Contact).filter(
         Contact.id == contact_id,
         Contact.tenant_id == tenant_id
@@ -179,6 +214,9 @@ def update_contact(
 
     if data.source is not None:
         contact.source = data.source
+
+    if data.account_id is not None:
+        contact.account_id = data.account_id
 
     if data.assigned_to is not None:
         contact.assigned_to = data.assigned_to

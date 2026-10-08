@@ -32,6 +32,7 @@ class LeadResponse(BaseModel):
     phone: str | None
     source: str | None
     status: str
+    account_id: UUID | None
     assigned_to: UUID | None
     notes: str | None
     created_at: datetime
