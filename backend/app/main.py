@@ -7,6 +7,7 @@ from app.routes.users import router as user_router
 from app.routes.leads import router as lead_router
 from app.routes.contacts import router as contact_router
 from app.routes.accounts import router as account_router
+from app.routes import deals
 
 
 app = FastAPI()
@@ -37,6 +38,7 @@ app.include_router(user_router)
 app.include_router(lead_router)
 app.include_router(contact_router)
 app.include_router(account_router)
+app.include_router(deals.router)
 
 @app.get("/")
 def home():
