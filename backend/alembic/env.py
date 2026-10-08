@@ -17,6 +17,7 @@ from app.models.role_permission import RolePermission
 from app.models.lead import Lead
 from app.models.contact import Contact
 from app.models.account import Account
+from app.models.deal import Deal
 
 config = context.config
 
