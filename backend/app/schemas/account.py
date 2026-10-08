@@ -1,7 +1,16 @@
 from uuid import UUID
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, ConfigDict
+
+
+AccountStatus = Literal[
+    "Active",
+    "Inactive",
+    "Prospect",
+    "Churned"
+]
 
 
 class AccountCreate(BaseModel):
@@ -15,7 +24,7 @@ class AccountCreate(BaseModel):
     state: str | None = None
     country: str | None = None
     postal_code: str | None = None
-    status: str = "Active"
+    status: AccountStatus = "Active"
     source: str | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
@@ -32,7 +41,7 @@ class AccountUpdate(BaseModel):
     state: str | None = None
     country: str | None = None
     postal_code: str | None = None
-    status: str | None = None
+    status: AccountStatus | None = None
     source: str | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
@@ -51,7 +60,7 @@ class AccountResponse(BaseModel):
     state: str | None
     country: str | None
     postal_code: str | None
-    status: str
+    status: AccountStatus
     source: str | None
     assigned_to: UUID | None
     notes: str | None
