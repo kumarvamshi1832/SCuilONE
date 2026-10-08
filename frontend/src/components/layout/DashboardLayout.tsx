@@ -62,7 +62,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const isOps = role === "OPERATIONS_USER" || role === "OPERATIONS USER" || role.includes("OPERATIONS");
   const isSupport = role === "SUPPORT_USER" || role === "SUPPORT USER" || role.includes("SUPPORT");
   const isAuditor = role === "READ_ONLY" || role === "AUDITOR" || role === "READ ONLY" || role === "READ-ONLY" || role === "READ-ONLY / AUDITOR" || role === "READ ONLY / AUDITOR" || role === "READ_ONLY / AUDITOR" || role.includes("AUDITOR");
-  const isTenantAdmin = !isManager && !isSales && !isOps && !isSupport && !isAuditor;
 
   const hasPermission = (perm: string) => {
     const userStr = sessionStorage.getItem("user");
@@ -84,6 +83,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const getNavItems = () => {
+    if (currentIndustry === "education-consulting") {
+      return [
+        { label: "Dashboard", path: `${basePath}/dashboard`, icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
+        { label: "Leads", path: `${basePath}/leads`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+        { label: "Students", path: `${basePath}/students`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+        { label: "Applications", path: `${basePath}/applications`, icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" },
+        { label: "Universities", path: `${basePath}/universities`, icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
+        { label: "Programs", path: `${basePath}/programs`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" },
+        { label: "Counselors", path: `${basePath}/counselors`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+        { label: "Consultations", path: `${basePath}/consultations`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
+        { label: "Follow-ups", path: `${basePath}/follow-ups`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
+        { label: "Tasks", path: `${basePath}/tasks`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
+        { label: "Reports", path: `${basePath}/reports`, icon: "M18 20V10 M12 20V4 M6 20v-4" },
+        { label: "Settings", path: `${basePath}/settings`, icon: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" }
+      ];
+    }
+
     if (isManager) {
       return [
         { label: "Dashboard", path: "/manager/dashboard", icon: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" },
@@ -257,7 +273,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Sidebar */}
       <aside className={`dashboard-sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
-          <h2><span className="text-blue">SCuilONE</span> CRM</h2>
+          <div className="brand-logo-text" style={{ display: 'flex', alignItems: 'center' }}>
+            {currentIndustry === "education-consulting" && (
+              <svg className="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px', width: '24px', height: '24px', flexShrink: 0}}><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+            )}
+            <h2 style={{ margin: 0 }}><span className="text-blue">SCuilONE</span></h2>
+          </div>
+          <div className="brand-subtitle" style={{ fontSize: '0.75rem', color: '#a0aec0', marginTop: '4px', textAlign: 'left', width: '100%', paddingLeft: currentIndustry === "education-consulting" ? '32px' : '0' }}>
+            {currentIndustry === "education-consulting" ? "Education Consulting" : "CRM"}
+          </div>
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
@@ -303,12 +327,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </svg>
             </button>
             <div className="tenant-selector">
-              <span>{tenant ? tenant.name : "Loading..."}</span>
+              <span>{tenant ? tenant.name : (currentIndustry === "education-consulting" ? "Education Consulting" : "Loading...")}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div>
             <div className="search-box">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" placeholder="Search..." />
+              <input 
+                type="text" 
+                placeholder={currentIndustry === "education-consulting" ? "Search leads, students, universities, programs..." : "Search..."} 
+                style={currentIndustry === "education-consulting" ? { width: '300px' } : {}}
+              />
             </div>
           </div>
 

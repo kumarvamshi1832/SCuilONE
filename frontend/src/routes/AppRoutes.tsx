@@ -10,6 +10,7 @@ import ResetPassword from "../pages/auth/ResetPassword";
 import ProtectedRoute from "../components/layout/ProtectedRoute";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import RealEstateDashboard from "../pages/dashboard/RealEstateDashboard";
+import EducationConsultingDashboard from "../pages/dashboard/EducationConsultingDashboard"; // Added to trigger refresh
 import ManagerDashboard from "../pages/dashboard/ManagerDashboard";
 import SalesDashboard from "../pages/dashboard/SalesDashboard";
 import OperationsDashboard from "../pages/dashboard/OperationsDashboard";
@@ -30,11 +31,13 @@ import { useParams } from "react-router-dom";
 // Resolver for Data-Driven Industry Dashboard
 function DashboardResolver() {
     const { industry } = useParams();
-    
+
     // We can add other industries here as we build them.
-    switch(industry) {
+    switch (industry) {
         case 'real-estate':
             return <RealEstateDashboard />;
+        case 'education-consulting':
+            return <EducationConsultingDashboard />;
         default:
             return <RealEstateDashboard />; // fallback to Real Estate
     }
@@ -44,7 +47,7 @@ function RootRedirect() {
     const token = sessionStorage.getItem("access_token");
     const tenantStr = sessionStorage.getItem("tenant");
     const userStr = sessionStorage.getItem("user");
-    
+
     if (token && tenantStr) {
         try {
             const user = userStr ? JSON.parse(userStr) : null;
@@ -62,9 +65,9 @@ function RootRedirect() {
                 const slug = tenant.industry.toLowerCase().replace(/\s+/g, '-');
                 return <Navigate to={`/${slug}/dashboard`} replace />;
             }
-        } catch(e) {}
+        } catch (e) { }
     }
-    
+
     return <Navigate to="/login" replace />;
 }
 
@@ -112,4 +115,4 @@ export default function AppRoutes() {
             </Routes>
         </BrowserRouter>
     );
-}
+}
