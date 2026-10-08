@@ -62,6 +62,8 @@ def validate_lead(
             detail="Lead not found or does not belong to this tenant"
         )
 
+    return lead
+
 
 def validate_contact(
     contact_id: UUID,
@@ -78,6 +80,8 @@ def validate_contact(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Contact not found or does not belong to this tenant"
         )
+
+    return contact
 
 
 def validate_account(
@@ -96,6 +100,30 @@ def validate_account(
             detail="Account not found or does not belong to this tenant"
         )
 
+    return account
+
+
+def validate_lead_account(
+    lead: Lead,
+    account_id: UUID
+):
+    if lead.account_id != account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Lead does not belong to the selected account"
+        )
+
+
+def validate_contact_account(
+    contact: Contact,
+    account_id: UUID
+):
+    if contact.account_id != account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contact does not belong to the selected account"
+        )
+
 
 @router.post(
     "/",
@@ -108,28 +136,48 @@ def create_deal(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     tenant_id = current_user["tenant_id"]
 
-    if data.lead_id:
-        validate_lead(
-            data.lead_id,
-            tenant_id,
-            db
+    if (data.lead_id or data.contact_id) and not data.account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is required when Lead or Contact is selected"
         )
 
-    if data.contact_id:
-        validate_contact(
-            data.contact_id,
-            tenant_id,
-            db
-        )
+    lead = None
+    contact = None
 
     if data.account_id:
         validate_account(
             data.account_id,
             tenant_id,
             db
+        )
+
+    if data.lead_id:
+        lead = validate_lead(
+            data.lead_id,
+            tenant_id,
+            db
+        )
+
+    if data.contact_id:
+        contact = validate_contact(
+            data.contact_id,
+            tenant_id,
+            db
+        )
+
+    if data.account_id and lead:
+        validate_lead_account(
+            lead,
+            data.account_id
+        )
+
+    if data.account_id and contact:
+        validate_contact_account(
+            contact,
+            data.account_id
         )
 
     if data.assigned_to:
@@ -168,7 +216,6 @@ def get_deals(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     tenant_id = current_user["tenant_id"]
 
     deals = db.query(Deal).filter(
@@ -188,7 +235,6 @@ def get_deal(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     tenant_id = current_user["tenant_id"]
 
     deal = db.query(Deal).filter(
@@ -216,7 +262,6 @@ def update_deal(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     tenant_id = current_user["tenant_id"]
 
     deal = db.query(Deal).filter(
@@ -234,25 +279,61 @@ def update_deal(
         exclude_unset=True
     )
 
-    if "lead_id" in update_data and update_data["lead_id"] is not None:
-        validate_lead(
-            update_data["lead_id"],
-            tenant_id,
-            db
+    new_account_id = update_data.get(
+        "account_id",
+        deal.account_id
+    )
+
+    new_lead_id = update_data.get(
+        "lead_id",
+        deal.lead_id
+    )
+
+    new_contact_id = update_data.get(
+        "contact_id",
+        deal.contact_id
+    )
+
+    if (new_lead_id or new_contact_id) and not new_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is required when Lead or Contact is selected"
         )
 
-    if "contact_id" in update_data and update_data["contact_id"] is not None:
-        validate_contact(
-            update_data["contact_id"],
-            tenant_id,
-            db
-        )
+    lead = None
+    contact = None
 
-    if "account_id" in update_data and update_data["account_id"] is not None:
+    if new_account_id:
         validate_account(
-            update_data["account_id"],
+            new_account_id,
             tenant_id,
             db
+        )
+
+    if new_lead_id:
+        lead = validate_lead(
+            new_lead_id,
+            tenant_id,
+            db
+        )
+
+    if new_contact_id:
+        contact = validate_contact(
+            new_contact_id,
+            tenant_id,
+            db
+        )
+
+    if new_account_id and lead:
+        validate_lead_account(
+            lead,
+            new_account_id
+        )
+
+    if new_account_id and contact:
+        validate_contact_account(
+            contact,
+            new_account_id
         )
 
     if "assigned_to" in update_data and update_data["assigned_to"] is not None:
@@ -281,7 +362,6 @@ def delete_deal(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     tenant_id = current_user["tenant_id"]
 
     deal = db.query(Deal).filter(

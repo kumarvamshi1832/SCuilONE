@@ -12,6 +12,7 @@ class ContactCreate(BaseModel):
     job_title: str | None = None
     address: str | None = None
     source: str | None = None
+    account_id: UUID | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
 
@@ -24,6 +25,7 @@ class ContactUpdate(BaseModel):
     job_title: str | None = None
     address: str | None = None
     source: str | None = None
+    account_id: UUID | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
 
@@ -38,6 +40,7 @@ class ContactResponse(BaseModel):
     job_title: str | None
     address: str | None
     source: str | None
+    account_id: UUID | None
     assigned_to: UUID | None
     notes: str | None
     created_at: datetime
