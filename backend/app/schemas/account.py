@@ -12,7 +12,6 @@ AccountStatus = Literal[
     "Churned"
 ]
 
-
 class AccountCreate(BaseModel):
     name: str
     email: EmailStr | None = None
@@ -28,6 +27,7 @@ class AccountCreate(BaseModel):
     source: str | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
+    lead_id: UUID | None = None
 
 
 class AccountUpdate(BaseModel):
