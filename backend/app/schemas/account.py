@@ -12,6 +12,7 @@ AccountStatus = Literal[
     "Churned"
 ]
 
+
 class AccountCreate(BaseModel):
     name: str
     email: EmailStr | None = None
@@ -68,3 +69,44 @@ class AccountResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AccountLeadSummary(BaseModel):
+    id: UUID
+    full_name: str
+    email: EmailStr | None
+    phone: str | None
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AccountContactSummary(BaseModel):
+    id: UUID
+    full_name: str
+    email: EmailStr | None
+    phone: str | None
+    company: str | None
+    job_title: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AccountDealSummary(BaseModel):
+    id: UUID
+    name: str
+    amount: float | None
+    stage: str
+    lead_id: UUID | None
+    contact_id: UUID | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AccountDetailsResponse(AccountResponse):
+    leads: list[AccountLeadSummary]
+    contacts: list[AccountContactSummary]
+    deals: list[AccountDealSummary]
+    total_deals: int
+    won_deals: int
+    total_revenue: float
