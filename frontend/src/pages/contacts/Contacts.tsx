@@ -3,6 +3,7 @@ import type { Contact } from "../../types/contact";
 import { User } from "../../types/user";
 import { getContacts } from "../../services/contactService";
 import { getUsers } from "../../services/userService";
+import { getAccounts } from "../../services/accountService";
 import { getContactPermissions } from "../../utils/contactPermissions";
 import ContactFormModal from "../../components/contacts/ContactFormModal";
 import ContactViewModal from "../../components/contacts/ContactViewModal";
@@ -18,6 +19,7 @@ export default function Contacts() {
   /* ─── State ─── */
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,12 +49,14 @@ export default function Contacts() {
     setLoading(true);
     setError(null);
     try {
-      const [contactsData, usersData] = await Promise.all([
+      const [contactsData, usersData, accountsData] = await Promise.all([
         getContacts(),
         getUsers(),
+        getAccounts(),
       ]);
       setContacts(contactsData);
       setUsers(usersData);
+      setAccounts(accountsData);
     } catch (err: any) {
       console.error("Fetch contacts error:", err);
       if (err?.response?.status === 401 || err?.status === 401) {
@@ -135,6 +139,12 @@ export default function Contacts() {
     return user
       ? { name: user.full_name, role: user.role }
       : { name: "—", role: "" };
+  };
+
+  const getAccountDisplay = (accountId?: string | null): string => {
+    if (!accountId) return "—";
+    const account = accounts.find((a) => a.id === accountId);
+    return account ? account.name : "—";
   };
 
   const clearFilters = () => {
@@ -366,6 +376,7 @@ export default function Contacts() {
                 <th>Name</th>
                 <th>Contact Info</th>
                 <th>Company / Title</th>
+                <th>Account</th>
                 <th>Source</th>
                 <th>Assigned To</th>
                 <th>Updated</th>
@@ -394,6 +405,9 @@ export default function Contacts() {
                       {contact.company && <div className="text-sm fw-medium">{contact.company}</div>}
                       {contact.job_title && <div className="text-sm text-muted">{contact.job_title}</div>}
                       {!contact.company && !contact.job_title && <div className="text-muted">—</div>}
+                    </td>
+                    <td>
+                      <div className="text-sm">{getAccountDisplay(contact.account_id)}</div>
                     </td>
                     <td>
                       {contact.source ? (
@@ -515,6 +529,7 @@ export default function Contacts() {
         <ContactViewModal
           contact={viewContact}
           users={users}
+          accounts={accounts}
           onClose={() => setViewContact(null)}
         />
       )}

@@ -3,6 +3,8 @@ import type { Contact, ContactCreate, ContactUpdate } from "../../types/contact"
 import { User } from "../../types/user";
 import { createContact, updateContact } from "../../services/contactService";
 import { getUsers } from "../../services/userService";
+import { getAccounts } from "../../services/accountService";
+import { Account } from "../../types/account";
 
 interface ContactFormModalProps {
   contact?: Contact | null;
@@ -31,21 +33,34 @@ export default function ContactFormModal({ contact, onClose, onSuccess }: Contac
   const [jobTitle, setJobTitle] = useState(contact?.job_title || "");
   const [address, setAddress] = useState(contact?.address || "");
   const [source, setSource] = useState(contact?.source || "");
+  const [accountId, setAccountId] = useState(contact?.account_id || "");
   const [assignedTo, setAssignedTo] = useState(contact?.assigned_to || "");
   const [notes, setNotes] = useState(contact?.notes || "");
 
   const [users, setUsers] = useState<User[]>([]);
-  const [usersLoading, setUsersLoading] = useState(true);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setUsersLoading(true);
-    getUsers()
-      .then((data) => setUsers(data))
-      .catch(() => setUsers([]))
-      .finally(() => setUsersLoading(false));
+    setDataLoading(true);
+    Promise.all([
+      getUsers(),
+      getAccounts()
+    ])
+      .then(([usersData, accountsData]) => {
+        setUsers(usersData);
+        setAccounts(accountsData);
+      })
+      .catch((err) => {
+        console.error("Failed to load initial data:", err);
+        setError("Failed to load required data from the server. Please try again.");
+      })
+      .finally(() => {
+        setDataLoading(false);
+      });
   }, []);
 
   const validate = (): boolean => {
@@ -77,7 +92,8 @@ export default function ContactFormModal({ contact, onClose, onSuccess }: Contac
           job_title: jobTitle.trim() || undefined,
           address: address.trim() || undefined,
           source: source || undefined,
-          assigned_to: assignedTo || undefined,
+          account_id: accountId || null,
+          assigned_to: assignedTo || null,
           notes: notes.trim() || undefined,
         };
         savedContact = await updateContact(contact.id, data);
@@ -90,7 +106,8 @@ export default function ContactFormModal({ contact, onClose, onSuccess }: Contac
           job_title: jobTitle.trim() || undefined,
           address: address.trim() || undefined,
           source: source || undefined,
-          assigned_to: assignedTo || undefined,
+          account_id: accountId || null,
+          assigned_to: assignedTo || null,
           notes: notes.trim() || undefined,
         };
         savedContact = await createContact(data);
@@ -294,6 +311,28 @@ export default function ContactFormModal({ contact, onClose, onSuccess }: Contac
               </div>
             </div>
 
+            <div className="contact-form-group">
+              <label>Account</label>
+              <select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                disabled={loading || dataLoading}
+              >
+                {!dataLoading && accounts.length === 0 ? (
+                  <option value="">-- No Accounts Available --</option>
+                ) : (
+                  <>
+                    <option value="">-- Select Account --</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </div>
+
             <div className="form-row-two-column">
               <div className="contact-form-group">
                 <label>Company</label>
@@ -359,7 +398,7 @@ export default function ContactFormModal({ contact, onClose, onSuccess }: Contac
                 <select
                   value={assignedTo}
                   onChange={(e) => setAssignedTo(e.target.value)}
-                  disabled={loading || usersLoading}
+                  disabled={loading || dataLoading}
                 >
                   <option value="">-- Select User --</option>
                   {users.map((u) => (

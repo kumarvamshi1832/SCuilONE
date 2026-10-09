@@ -14,6 +14,7 @@ export interface Account {
   status: string;
   source: string | null;
   assigned_to: string | null;
+  lead_id?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -33,6 +34,7 @@ export interface AccountCreate {
   status?: string;
   source?: string | null;
   assigned_to?: string | null;
+  lead_id?: string | null;
   notes?: string | null;
 }
 
@@ -50,5 +52,6 @@ export interface AccountUpdate {
   status?: string | null;
   source?: string | null;
   assigned_to?: string | null;
+  lead_id?: string | null;
   notes?: string | null;
 }

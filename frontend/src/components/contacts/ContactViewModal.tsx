@@ -5,14 +5,21 @@ import { formatDateTime } from "../../utils/dateFormatter";
 interface ContactViewModalProps {
   contact: Contact;
   users: User[];
+  accounts: any[];
   onClose: () => void;
 }
 
-export default function ContactViewModal({ contact, users, onClose }: ContactViewModalProps) {
+export default function ContactViewModal({ contact, users, accounts, onClose }: ContactViewModalProps) {
   const getAssignedUser = (userId: string | null) => {
     if (!userId) return "—";
     const user = users.find((u) => u.id === userId);
     return user ? `${user.full_name} (${user.role})` : userId;
+  };
+
+  const getAccountDisplay = (accountId?: string | null) => {
+    if (!accountId) return "—";
+    const account = accounts.find((a) => a.id === accountId);
+    return account ? account.name : accountId;
   };
 
   return (
@@ -38,6 +45,10 @@ export default function ContactViewModal({ contact, users, onClose }: ContactVie
             <div className="detail-group">
               <label className="text-muted">Email</label>
               <p className="detail-value">{contact.email || "—"}</p>
+            </div>
+            <div className="detail-group">
+              <label className="text-muted">Account</label>
+              <p className="detail-value">{getAccountDisplay(contact.account_id)}</p>
             </div>
             <div className="detail-group">
               <label className="text-muted">Phone</label>

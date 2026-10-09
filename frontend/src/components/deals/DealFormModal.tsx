@@ -33,7 +33,7 @@ export default function DealFormModal({ deal, onClose, onSuccess }: DealFormModa
   const [contactId, setContactId] = useState(deal?.contact_id || "");
   const [accountId, setAccountId] = useState(deal?.account_id || "");
   const [assignedTo, setAssignedTo] = useState(deal?.assigned_to || "");
-  const [amount, setAmount] = useState<string>(deal?.amount ? deal.amount.toString() : "");
+  const [amount, setAmount] = useState<string>(deal?.amount !== undefined && deal.amount !== null ? deal.amount.toString() : "");
   const [stage, setStage] = useState(deal?.stage || "New");
   const [expectedCloseDate, setExpectedCloseDate] = useState(deal?.expected_close_date || "");
   const [description, setDescription] = useState(deal?.description || "");
@@ -50,16 +50,20 @@ export default function DealFormModal({ deal, onClose, onSuccess }: DealFormModa
 
   useEffect(() => {
     setDataLoading(true);
+    setError(null);
     Promise.all([
-      getUsers().catch(() => []),
-      getLeads().catch(() => []),
-      getContacts().catch(() => []),
-      getAccounts().catch(() => [])
+      getUsers(),
+      getLeads(),
+      getContacts(),
+      getAccounts()
     ]).then(([usersData, leadsData, contactsData, accountsData]) => {
       setUsers(usersData);
       setLeads(leadsData);
       setContacts(contactsData);
       setAccounts(accountsData);
+    }).catch((err) => {
+      console.error("Failed to load initial data:", err);
+      setError("Failed to load required data from the server. Please try again.");
     }).finally(() => {
       setDataLoading(false);
     });
@@ -73,9 +77,31 @@ export default function DealFormModal({ deal, onClose, onSuccess }: DealFormModa
     if (amount && isNaN(Number(amount))) {
       errors.amount = "Amount must be a valid number.";
     }
+    
+    if ((leadId || contactId) && !accountId) {
+      errors.accountId = "Please select an Account when Lead or Contact is selected.";
+    }
+    
+    if (leadId && accountId) {
+      const selectedLead = leads.find((l) => l.id === leadId);
+      if (selectedLead && selectedLead.account_id !== accountId) {
+        errors.leadId = "Selected Lead does not belong to the selected Account.";
+      }
+    }
+    
+    if (contactId && accountId) {
+      const selectedContact = contacts.find((c) => c.id === contactId);
+      if (selectedContact && selectedContact.account_id !== accountId) {
+        errors.contactId = "Selected Contact does not belong to the selected Account.";
+      }
+    }
+
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
+
+  const availableLeads = accountId ? leads.filter((l) => l.account_id === accountId) : [];
+  const availableContacts = accountId ? contacts.filter((c) => c.account_id === accountId) : [];
 
   const handleSubmit = async () => {
     if (!validate()) return;
@@ -295,8 +321,26 @@ export default function DealFormModal({ deal, onClose, onSuccess }: DealFormModa
                 <label>Account</label>
                 <select
                   value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
+                  onChange={(e) => {
+                    const newAccountId = e.target.value;
+                    setAccountId(newAccountId);
+                    if (!newAccountId) {
+                      setLeadId("");
+                      setContactId("");
+                    } else {
+                      const currentLead = leads.find((l) => l.id === leadId);
+                      if (currentLead && currentLead.account_id !== newAccountId) {
+                        setLeadId("");
+                      }
+                      const currentContact = contacts.find((c) => c.id === contactId);
+                      if (currentContact && currentContact.account_id !== newAccountId) {
+                        setContactId("");
+                      }
+                    }
+                    setFieldErrors((prev) => ({ ...prev, accountId: "" }));
+                  }}
                   disabled={loading || dataLoading}
+                  className={fieldErrors.accountId ? "input-error" : ""}
                 >
                   <option value="">-- Select Account --</option>
                   {accounts.map((a) => (
@@ -305,22 +349,43 @@ export default function DealFormModal({ deal, onClose, onSuccess }: DealFormModa
                     </option>
                   ))}
                 </select>
+                {!accountId && (
+                  <span style={{ fontSize: "0.75rem", color: "#718096", marginTop: "2px" }}>
+                    Select an Account first to choose related Leads and Contacts.
+                  </span>
+                )}
+                {fieldErrors.accountId && (
+                  <span className="field-error" style={{ color: "#e53e3e", fontSize: "0.8rem" }}>{fieldErrors.accountId}</span>
+                )}
               </div>
 
               <div className="deal-form-group">
                 <label>Contact</label>
                 <select
                   value={contactId}
-                  onChange={(e) => setContactId(e.target.value)}
-                  disabled={loading || dataLoading}
+                  onChange={(e) => {
+                    setContactId(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, contactId: "" }));
+                  }}
+                  disabled={loading || dataLoading || !accountId}
+                  className={fieldErrors.contactId ? "input-error" : ""}
                 >
-                  <option value="">-- Select Contact --</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.full_name}
-                    </option>
-                  ))}
+                  {!accountId ? (
+                    <option value="">-- Select Account First --</option>
+                  ) : (
+                    <>
+                      <option value="">-- Select Contact --</option>
+                      {availableContacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.full_name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
+                {fieldErrors.contactId && (
+                  <span className="field-error" style={{ color: "#e53e3e", fontSize: "0.8rem" }}>{fieldErrors.contactId}</span>
+                )}
               </div>
             </div>
 
@@ -330,16 +395,31 @@ export default function DealFormModal({ deal, onClose, onSuccess }: DealFormModa
                 <label>Lead</label>
                 <select
                   value={leadId}
-                  onChange={(e) => setLeadId(e.target.value)}
-                  disabled={loading || dataLoading}
+                  onChange={(e) => {
+                    setLeadId(e.target.value);
+                    setFieldErrors((prev) => ({ ...prev, leadId: "" }));
+                  }}
+                  disabled={loading || dataLoading || !accountId}
+                  className={fieldErrors.leadId ? "input-error" : ""}
                 >
-                  <option value="">-- Select Lead --</option>
-                  {leads.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.full_name}
-                    </option>
-                  ))}
+                  {!accountId ? (
+                    <option value="">-- Select Account First --</option>
+                  ) : availableLeads.length === 0 ? (
+                    <option value="">-- No Leads for This Account --</option>
+                  ) : (
+                    <>
+                      <option value="">-- Select Lead --</option>
+                      {availableLeads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.full_name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
+                {fieldErrors.leadId && (
+                  <span className="field-error" style={{ color: "#e53e3e", fontSize: "0.8rem" }}>{fieldErrors.leadId}</span>
+                )}
               </div>
 
               <div className="deal-form-group">
