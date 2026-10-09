@@ -265,7 +265,7 @@ def get_account(
 
     won_deals = [
         deal for deal in deals
-        if deal.stage.strip().lower() == "closed won"
+        if deal.stage.strip().lower() == "won"
     ]
 
     total_revenue = sum(
