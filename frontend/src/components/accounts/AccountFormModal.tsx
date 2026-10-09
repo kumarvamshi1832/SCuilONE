@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import type { Account, AccountCreate, AccountUpdate } from "../../types/account";
 import { User } from "../../types/user";
 import { Lead } from "../../types/lead";
-import { createAccount, updateAccount } from "../../services/accountService";
+import { createAccount, updateAccount, linkLeadToAccount } from "../../services/accountService";
 import { getUsers } from "../../services/userService";
 import { getLeads } from "../../services/leadService";
 
@@ -107,10 +107,19 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
           status: status || undefined,
           source: source || undefined,
           assigned_to: assignedTo || undefined,
-          lead_id: leadId || undefined,
           notes: notes.trim() || undefined,
         };
         savedAccount = await updateAccount(account.id, data);
+        
+        // Link lead if selected and it's different from current lead_id (if any)
+        if (leadId && leadId !== account.lead_id) {
+          try {
+            await linkLeadToAccount(account.id, leadId);
+            // We should ideally refetch the account details here, but onSuccess will likely trigger a refresh.
+          } catch (linkErr: any) {
+             throw new Error(linkErr?.response?.data?.detail || "Account saved, but failed to link Lead. Lead might be linked to another account.");
+          }
+        }
       } else {
         const data: AccountCreate = {
           name: name.trim(),
@@ -427,9 +436,11 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
                   ) : (
                     <option value="">-- Select Lead --</option>
                   )}
-                  {leads.map((l) => (
+                  {leads
+                    .filter((l) => !l.account_id || (isEdit && l.account_id === account?.id))
+                    .map((l) => (
                     <option key={l.id} value={l.id}>
-                      {l.full_name}{l.source ? ` — ${l.source}` : ""}
+                      {l.full_name}{l.email ? ` (${l.email})` : ""}
                     </option>
                   ))}
                 </select>

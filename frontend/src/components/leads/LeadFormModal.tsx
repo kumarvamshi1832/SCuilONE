@@ -48,11 +48,11 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
   useEffect(() => {
     setUsersLoading(true);
     Promise.all([
-      getUsers().catch(() => ({ data: [] })),
-      getAccounts().catch(() => ({ data: [] }))
+      getUsers().catch(() => []),
+      getAccounts().catch(() => [])
     ]).then(([usersRes, accountsRes]) => {
-      setUsers(usersRes.data || []);
-      setAccounts(accountsRes.data || []);
+      setUsers(usersRes || []);
+      setAccounts(accountsRes || []);
     }).finally(() => {
       setUsersLoading(false);
     });
