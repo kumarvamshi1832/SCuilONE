@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import type { Account, AccountCreate, AccountUpdate } from "../../types/account";
 import { User } from "../../types/user";
-import { createAccount, updateAccount } from "../../services/accountService";
+import { Lead } from "../../types/lead";
+import { createAccount, updateAccount, linkLeadToAccount } from "../../services/accountService";
 import { getUsers } from "../../services/userService";
+import { getLeads } from "../../services/leadService";
 
 interface AccountFormModalProps {
   account?: Account | null;
@@ -39,6 +41,7 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
   const [status, setStatus] = useState(account?.status || "Active");
   const [source, setSource] = useState(account?.source || "");
   const [assignedTo, setAssignedTo] = useState(account?.assigned_to || "");
+  const [leadId, setLeadId] = useState(account?.lead_id || "");
   const [address, setAddress] = useState(account?.address || "");
   const [city, setCity] = useState(account?.city || "");
   const [state, setState] = useState(account?.state || "");
@@ -47,17 +50,26 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
   const [notes, setNotes] = useState(account?.notes || "");
 
   const [users, setUsers] = useState<User[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [leadsLoading, setLeadsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setUsersLoading(true);
+    setLeadsLoading(true);
+    
     getUsers()
       .then((data) => setUsers(data))
       .catch(() => setUsers([]))
       .finally(() => setUsersLoading(false));
+      
+    getLeads()
+      .then((data) => setLeads(data))
+      .catch(() => setLeads([]))
+      .finally(() => setLeadsLoading(false));
   }, []);
 
   const validate = (): boolean => {
@@ -98,6 +110,16 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
           notes: notes.trim() || undefined,
         };
         savedAccount = await updateAccount(account.id, data);
+        
+        // Link lead if selected and it's different from current lead_id (if any)
+        if (leadId && leadId !== account.lead_id) {
+          try {
+            await linkLeadToAccount(account.id, leadId);
+            // We should ideally refetch the account details here, but onSuccess will likely trigger a refresh.
+          } catch (linkErr: any) {
+             throw new Error(linkErr?.response?.data?.detail || "Account saved, but failed to link Lead. Lead might be linked to another account.");
+          }
+        }
       } else {
         const data: AccountCreate = {
           name: name.trim(),
@@ -113,6 +135,7 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
           status: status || "Active",
           source: source || undefined,
           assigned_to: assignedTo || undefined,
+          lead_id: leadId || undefined,
           notes: notes.trim() || undefined,
         };
         savedAccount = await createAccount(data);
@@ -383,7 +406,7 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
               </div>
             </div>
 
-            {/* Assigned To / City */}
+            {/* Assigned To / Lead */}
             <div className="account-form-row-two-column">
               <div className="account-form-group">
                 <label>Assigned To</label>
@@ -402,6 +425,31 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
               </div>
 
               <div className="account-form-group">
+                <label>Lead</label>
+                <select
+                  value={leadId}
+                  onChange={(e) => setLeadId(e.target.value)}
+                  disabled={loading || leadsLoading}
+                >
+                  {leads.length === 0 && !leadsLoading ? (
+                    <option value="">-- No Leads Available --</option>
+                  ) : (
+                    <option value="">-- Select Lead --</option>
+                  )}
+                  {leads
+                    .filter((l) => !l.account_id || (isEdit && l.account_id === account?.id))
+                    .map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.full_name}{l.email ? ` (${l.email})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* City / State */}
+            <div className="account-form-row-two-column">
+              <div className="account-form-group">
                 <label>City</label>
                 <input
                   type="text"
@@ -414,10 +462,7 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
                   disabled={loading}
                 />
               </div>
-            </div>
 
-            {/* State / Country */}
-            <div className="account-form-row-two-column">
               <div className="account-form-group">
                 <label>State</label>
                 <input
@@ -431,7 +476,10 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
                   disabled={loading}
                 />
               </div>
+            </div>
 
+            {/* Country / Postal Code */}
+            <div className="account-form-row-two-column">
               <div className="account-form-group">
                 <label>Country</label>
                 <input
@@ -445,10 +493,7 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
                   disabled={loading}
                 />
               </div>
-            </div>
 
-            {/* Postal Code - in a row for layout consistency */}
-            <div className="account-form-row-two-column">
               <div className="account-form-group">
                 <label>Postal Code</label>
                 <input
@@ -462,7 +507,6 @@ export default function AccountFormModal({ account, onClose, onSuccess }: Accoun
                   disabled={loading}
                 />
               </div>
-              <div>{/* spacer */}</div>
             </div>
 
             {/* Address - Full width */}

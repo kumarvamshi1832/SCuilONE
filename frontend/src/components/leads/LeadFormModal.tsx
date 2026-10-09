@@ -3,8 +3,10 @@ import type { Lead, CreateLeadRequest, UpdateLeadRequest, LeadStatus, LeadSource
 import { User } from "../../types/user";
 import { createLead, updateLead } from "../../services/leadService";
 import { getUsers } from "../../services/userService";
+import { getAccounts } from "../../services/accountService";
 import { friendlyAssignmentError } from "../../utils/leadPermissions";
 import UserSearchDropdown from "./UserSearchDropdown";
+import { Account } from "../../types/account";
 
 interface LeadFormModalProps {
   lead?: Lead | null;
@@ -33,9 +35,11 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
   const [source, setSource] = useState(lead?.source || "");
   const [status, setStatus] = useState(lead?.status || "New");
   const [assignedTo, setAssignedTo] = useState(lead?.assigned_to || "");
+  const [accountId, setAccountId] = useState(lead?.account_id || "");
   const [notes, setNotes] = useState(lead?.notes || "");
 
   const [users, setUsers] = useState<User[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,10 +47,15 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
 
   useEffect(() => {
     setUsersLoading(true);
-    getUsers()
-      .then((data) => setUsers(data))
-      .catch(() => setUsers([]))
-      .finally(() => setUsersLoading(false));
+    Promise.all([
+      getUsers().catch(() => []),
+      getAccounts().catch(() => [])
+    ]).then(([usersRes, accountsRes]) => {
+      setUsers(usersRes || []);
+      setAccounts(accountsRes || []);
+    }).finally(() => {
+      setUsersLoading(false);
+    });
   }, []);
 
   const validate = (): boolean => {
@@ -77,8 +86,11 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
           source: source || undefined,
           status,
           assigned_to: assignedTo || undefined,
+          account_id: accountId || undefined,
           notes: notes.trim() || undefined,
         };
+        if (!assignedTo) data.assigned_to = null;
+        if (!accountId) data.account_id = null;
         savedLead = await updateLead(lead.id, data);
       } else {
         const data: CreateLeadRequest = {
@@ -88,8 +100,11 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
           source: source || undefined,
           status,
           assigned_to: assignedTo || undefined,
+          account_id: accountId || undefined,
           notes: notes.trim() || undefined,
         };
+        if (!assignedTo) data.assigned_to = null;
+        if (!accountId) data.account_id = null;
         savedLead = await createLead(data);
       }
       onSuccess(savedLead);
@@ -251,15 +266,33 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Assigned To</label>
-            <UserSearchDropdown
-              users={users}
-              value={assignedTo}
-              onChange={setAssignedTo}
-              disabled={loading}
-              loading={usersLoading}
-            />
+          <div className="form-row-2">
+            <div className="form-group">
+              <label>Account</label>
+              <select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                disabled={loading || usersLoading}
+              >
+                <option value="">-- Select Account --</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Assigned To</label>
+              <UserSearchDropdown
+                users={users}
+                value={assignedTo}
+                onChange={setAssignedTo}
+                disabled={loading}
+                loading={usersLoading}
+              />
+            </div>
           </div>
 
           <div className="form-group">

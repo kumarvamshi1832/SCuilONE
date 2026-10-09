@@ -158,7 +158,7 @@ export default function Leads() {
     setTimeout(() => setNotification(null), 3500);
   };
 
-  const getUserDisplay = (userId?: string): { name: string; role: string } => {
+  const getUserDisplay = (userId?: string | null): { name: string; role: string } => {
     if (!userId) return { name: "—", role: "" };
     const user = users.find((u) => u.id === userId);
     return user

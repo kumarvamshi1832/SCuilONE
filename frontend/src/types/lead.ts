@@ -15,13 +15,14 @@ export type LeadSource =
 export interface Lead {
   id: string;
   tenant_id: string;
+  account_id?: string | null;
   full_name: string;
   email?: string;
   phone?: string;
   source?: string;
   status: string;
-  assigned_to?: string;
-  notes?: string;
+  assigned_to?: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,8 +33,9 @@ export interface CreateLeadRequest {
   phone?: string;
   source?: string;
   status?: string;
-  assigned_to?: string;
-  notes?: string;
+  account_id?: string | null;
+  assigned_to?: string | null;
+  notes?: string | null;
 }
 
 export interface UpdateLeadRequest {
@@ -42,6 +44,7 @@ export interface UpdateLeadRequest {
   phone?: string;
   source?: string;
   status?: string;
-  assigned_to?: string;
-  notes?: string;
+  account_id?: string | null;
+  assigned_to?: string | null;
+  notes?: string | null;
 }

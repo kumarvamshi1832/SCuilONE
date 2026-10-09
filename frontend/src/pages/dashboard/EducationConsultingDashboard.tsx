@@ -37,7 +37,6 @@ function KpiCard({ title, value, icon, trend, colorClass = "blue" }: KpiCardProp
   );
 }
 
-
 const getCountryFlag = (country: string) => {
   const flags: Record<string, string> = {
     'Canada': '🇨🇦',

@@ -20,8 +20,9 @@ import Users from "../pages/users/Users";
 import Leads from "../pages/leads/Leads";
 import Contacts from "../pages/contacts/Contacts";
 import Accounts from "../pages/accounts/Accounts";
+import Deals from "../pages/deals/Deals";
 import {
-    Deals, Tasks, Activities, Reports, Settings
+    Tasks, Activities, Reports, Settings
 } from "../pages/dashboard/Placeholders";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";

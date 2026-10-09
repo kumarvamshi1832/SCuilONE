@@ -18,7 +18,7 @@ export const Contacts = () => (
   </div>
 );
 export const Accounts = () => <Placeholder title="Accounts" description="Real Estate accounts management will be available here." />;
-export const Deals = () => <Placeholder title="Deals" description="Real Estate deals management will be available here." />;
+
 export const Tasks = () => <Placeholder title="Tasks" description="Tasks and follow-ups will be available here." />;
 export const Activities = () => <Placeholder title="Activities" description="Activities will be available here." />;
 export const Reports = () => <Placeholder title="Reports" description="Real Estate reports will be available here." />;

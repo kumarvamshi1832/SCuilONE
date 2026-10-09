@@ -1,38 +1,46 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Contact } from "../../types/contact";
+import type { Deal } from "../../types/deal";
 import { User } from "../../types/user";
-import { getContacts } from "../../services/contactService";
+import { Lead } from "../../types/lead";
+import { Contact } from "../../types/contact";
+import { Account } from "../../types/account";
+import { getDeals } from "../../services/dealService";
 import { getUsers } from "../../services/userService";
+import { getLeads } from "../../services/leadService";
+import { getContacts } from "../../services/contactService";
 import { getAccounts } from "../../services/accountService";
-import { getContactPermissions } from "../../utils/contactPermissions";
-import ContactFormModal from "../../components/contacts/ContactFormModal";
-import ContactViewModal from "../../components/contacts/ContactViewModal";
-import ContactDeleteConfirm from "../../components/contacts/ContactDeleteConfirm";
+import { getDealPermissions } from "../../utils/dealPermissions";
+import DealFormModal from "../../components/deals/DealFormModal";
+import DealViewModal from "../../components/deals/DealViewModal";
+import DealDeleteConfirm from "../../components/deals/DealDeleteConfirm";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
 import "../leads/Leads.css";
 
-export default function Contacts() {
+export default function Deals() {
   /* ─── Permissions ─── */
-  const permissions = useMemo(() => getContactPermissions(), []);
+  const permissions = useMemo(() => getDealPermissions(), []);
 
   /* ─── State ─── */
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
 
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editContact, setEditContact] = useState<Contact | null>(null);
-  const [viewContact, setViewContact] = useState<Contact | null>(null);
-  const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
+  const [editDeal, setEditDeal] = useState<Deal | null>(null);
+  const [viewDeal, setViewDeal] = useState<Deal | null>(null);
+  const [deleteDealState, setDeleteDealState] = useState<Deal | null>(null);
 
   // Actions dropdown
   const [openActionId, setOpenActionId] = useState<string | null>(null);
@@ -49,26 +57,30 @@ export default function Contacts() {
     setLoading(true);
     setError(null);
     try {
-      const [contactsData, usersData, accountsData] = await Promise.all([
-        getContacts(),
-        getUsers(),
-        getAccounts(),
+      const [dealsData, usersData, leadsData, contactsData, accountsData] = await Promise.all([
+        getDeals(),
+        getUsers().catch(() => []),
+        getLeads().catch(() => []),
+        getContacts().catch(() => []),
+        getAccounts().catch(() => []),
       ]);
-      setContacts(contactsData);
+      setDeals(dealsData);
       setUsers(usersData);
+      setLeads(leadsData);
+      setContacts(contactsData);
       setAccounts(accountsData);
     } catch (err: any) {
-      console.error("Fetch contacts error:", err);
+      console.error("Fetch deals error:", err);
       if (err?.response?.status === 401 || err?.status === 401) {
         setError("Your session has expired. Please log in again.");
       } else if (err?.response?.status >= 500 || err?.status >= 500) {
-        setError("Unable to load contacts. Please try again.");
+        setError("Unable to load deals. Please try again.");
       } else {
         setError(
           err?.response?.data?.detail ||
           err?.response?.data?.message ||
           err?.message ||
-          "Unable to load contacts."
+          "Unable to load deals."
         );
       }
     } finally {
@@ -105,25 +117,25 @@ export default function Contacts() {
   }, [openActionId]);
 
   // Calculate dropdown position from the trigger button
-  const toggleActions = (contactId: string) => {
-    if (openActionId === contactId) {
+  const toggleActions = (dealId: string) => {
+    if (openActionId === dealId) {
       setOpenActionId(null);
       setDropdownPos(null);
       return;
     }
-    const btn = triggerRefs.current[contactId];
+    const btn = triggerRefs.current[dealId];
     if (btn) {
       const rect = btn.getBoundingClientRect();
-      const dropdownHeight = 140; // approximate height of the 3-item menu
+      const dropdownHeight = 140;
       const spaceBelow = window.innerHeight - rect.bottom;
       const openUp = spaceBelow < dropdownHeight + 8;
       setDropdownPos({
         top: openUp ? rect.top : rect.bottom + 4,
-        left: rect.right - 148, // 140 min-width + 8 padding
+        left: rect.right - 148,
         openUp,
       });
     }
-    setOpenActionId(contactId);
+    setOpenActionId(dealId);
   };
 
   /* ─── Helpers ─── */
@@ -141,93 +153,109 @@ export default function Contacts() {
       : { name: "—", role: "" };
   };
 
-  const getAccountDisplay = (accountId?: string | null): string => {
-    if (!accountId) return "—";
-    const account = accounts.find((a) => a.id === accountId);
-    return account ? account.name : "—";
+  const getAccountName = (accountId: string | null) => {
+    if (!accountId) return "";
+    const account = accounts.find(a => a.id === accountId);
+    return account ? account.name : "";
+  };
+
+  const getContactName = (contactId: string | null) => {
+    if (!contactId) return "";
+    const contact = contacts.find(c => c.id === contactId);
+    return contact ? contact.full_name : "";
   };
 
   const clearFilters = () => {
     setSearch("");
-    setSourceFilter("");
+    setStageFilter("");
     setAssignedFilter("");
   };
 
-  const hasActiveFilters = search || sourceFilter || assignedFilter;
+  const hasActiveFilters = search || stageFilter || assignedFilter;
 
   /* ─── Filtering (client-side) ─── */
 
-  const filteredContacts = contacts.filter((contact) => {
+  const filteredDeals = deals.filter((deal) => {
     // Text search
     if (search) {
       const q = search.toLowerCase();
+      const acctName = getAccountName(deal.account_id).toLowerCase();
+      const contName = getContactName(deal.contact_id).toLowerCase();
       const matchesSearch =
-        (contact.full_name || "").toLowerCase().includes(q) ||
-        (contact.email || "").toLowerCase().includes(q) ||
-        (contact.phone || "").toLowerCase().includes(q) ||
-        (contact.company || "").toLowerCase().includes(q);
+        (deal.name || "").toLowerCase().includes(q) ||
+        acctName.includes(q) ||
+        contName.includes(q);
       if (!matchesSearch) return false;
     }
-    // Source filter
-    if (sourceFilter && contact.source !== sourceFilter) return false;
+    // Stage filter
+    if (stageFilter && deal.stage !== stageFilter) return false;
     // Assigned filter
-    if (assignedFilter && contact.assigned_to !== assignedFilter) return false;
+    if (assignedFilter && deal.assigned_to !== assignedFilter) return false;
 
     return true;
   });
 
-  // Collect unique sources from data
-  const uniqueSources = Array.from(new Set(contacts.map((c) => c.source).filter(Boolean))) as string[];
+  // Collect unique values from data for filter dropdowns
+  const uniqueStages = Array.from(new Set(deals.map((d) => d.stage).filter(Boolean))) as string[];
 
   /* ─── Action Handlers ─── */
 
   const handleCreate = () => {
-    setEditContact(null);
+    setEditDeal(null);
     setIsFormOpen(true);
   };
 
-  const handleView = (contact: Contact) => {
+  const handleView = (deal: Deal) => {
     setOpenActionId(null);
-    setViewContact(contact);
+    setViewDeal(deal);
   };
 
-  const handleEdit = (contact: Contact) => {
+  const handleEdit = (deal: Deal) => {
     setOpenActionId(null);
-    setViewContact(null);
-    setEditContact(contact);
+    setViewDeal(null);
+    setEditDeal(deal);
     setIsFormOpen(true);
   };
 
-  const handleDeleteClick = (contact: Contact) => {
+  const handleDeleteClick = (deal: Deal) => {
     setOpenActionId(null);
-    setDeleteContact(contact);
+    setDeleteDealState(deal);
   };
 
-  const handleFormSuccess = (savedContact: Contact) => {
-    setContacts((prev) => {
-      const isExisting = prev.some((c) => c.id === savedContact.id);
+  const handleFormSuccess = (savedDeal: Deal) => {
+    setDeals((prev) => {
+      const isExisting = prev.some((d) => d.id === savedDeal.id);
       if (isExisting) {
-        return prev.map((c) => (c.id === savedContact.id ? savedContact : c));
+        return prev.map((d) => (d.id === savedDeal.id ? savedDeal : d));
       } else {
-        return [savedContact, ...prev];
+        return [savedDeal, ...prev];
       }
     });
-    fetchData();
-    showToast(editContact ? "Contact updated successfully" : "Contact created successfully");
+    fetchData(); // Optional, but guarantees latest relationships
+    showToast(editDeal ? "Deal updated successfully" : "Deal created successfully");
   };
 
   const handleDeleteSuccess = () => {
     fetchData();
-    showToast("Contact deleted successfully");
+    showToast("Deal deleted successfully");
   };
 
-  /* ─── Render ─── */
+  /* ─── Render Helpers ─── */
+  
+  const getStageBadgeClass = (stage: string) => {
+    const s = stage.toLowerCase();
+    if (s === "won") return "status-qualified";
+    if (s === "lost") return "status-lost";
+    if (s === "new") return "status-new";
+    if (s === "proposal" || s === "negotiation" || s === "discovery") return "status-contacted";
+    return "";
+  };
 
   if (!permissions.view) {
     return (
       <div className="leads-page">
         <div className="alert-box error" style={{ margin: "2rem" }}>
-          You do not have permission to view contacts.
+          You do not have permission to view deals.
         </div>
       </div>
     );
@@ -259,8 +287,8 @@ export default function Contacts() {
       {/* Header Section */}
       <div className="page-header">
         <div>
-          <h1>Contacts</h1>
-          <p className="text-muted">Manage your real estate customer/contact records.</p>
+          <h1>Deals</h1>
+          <p className="text-muted">Manage and track your sales opportunities.</p>
         </div>
         <div className="header-actions">
           {permissions.create && (
@@ -269,7 +297,7 @@ export default function Contacts() {
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
-              Add Contact
+              Add Deal
             </button>
           )}
         </div>
@@ -284,22 +312,24 @@ export default function Contacts() {
           </svg>
           <input
             type="text"
-            placeholder="Search contacts..."
+            placeholder="Search deals..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         
-        <select 
-          value={sourceFilter} 
-          onChange={(e) => setSourceFilter(e.target.value)}
-          className="filter-select"
-        >
-          <option value="">All Sources</option>
-          {uniqueSources.map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+        {uniqueStages.length > 0 && (
+          <select 
+            value={stageFilter} 
+            onChange={(e) => setStageFilter(e.target.value)}
+            className="filter-select"
+          >
+            <option value="">All Stages</option>
+            {uniqueStages.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        )}
         
         <select 
           value={assignedFilter} 
@@ -333,7 +363,7 @@ export default function Contacts() {
         {loading ? (
         <div className="leads-loading">
           <div className="leads-loading-spinner"></div>
-          <p>Loading contacts...</p>
+          <p>Loading deals...</p>
         </div>
       ) : error ? (
         <div className="error-state" style={{ padding: "60px 20px", textAlign: "center" }}>
@@ -352,80 +382,107 @@ export default function Contacts() {
             Retry
           </button>
         </div>
-      ) : filteredContacts.length === 0 ? (
+      ) : filteredDeals.length === 0 ? (
         <div className="leads-empty-state">
           <div className="leads-empty-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              <path d="M12 2v20"></path>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
             </svg>
           </div>
-          <h3>No contacts found</h3>
+          <h3>No deals found</h3>
           <p className="text-muted">
             {hasActiveFilters 
               ? "Try adjusting your filters or search term."
-              : "Get started by adding your first contact."}
+              : "Get started by adding your first deal."}
           </p>
         </div>
       ) : (
           <table className="leads-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Contact Info</th>
-                <th>Company / Title</th>
-                <th>Account</th>
-                <th>Source</th>
+                <th>Deal Name</th>
+                <th>Account / Contact</th>
+                <th>Amount</th>
+                <th>Stage</th>
+                <th>Expected Close</th>
                 <th>Assigned To</th>
                 <th>Updated</th>
                 <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredContacts.map((contact) => {
-                const assignedUser = getUserDisplay(contact.assigned_to);
+              {filteredDeals.map((deal) => {
+                const assignedUser = getUserDisplay(deal.assigned_to);
+                const accountName = getAccountName(deal.account_id);
+                const contactName = getContactName(deal.contact_id);
+                
                 return (
-                  <tr key={contact.id}>
+                  <tr key={deal.id}>
                     <td>
                       <div className="lead-name-cell">
-                        <div className="lead-avatar">
-                          {(contact.full_name || "-").charAt(0).toUpperCase()}
+                        <div className="lead-avatar" style={{ background: '#4299e1', color: 'white' }}>
+                          {(deal.name || "-").charAt(0).toUpperCase()}
                         </div>
-                        <span className="lead-name-text">{contact.full_name || "—"}</span>
+                        <span className="lead-name-text" style={{ fontWeight: 500 }}>{deal.name || "—"}</span>
                       </div>
                     </td>
                     <td>
-                      {contact.email && <div className="text-sm">{contact.email}</div>}
-                      {contact.phone && <div className="text-sm text-muted">{contact.phone}</div>}
-                      {!contact.email && !contact.phone && <div className="text-muted">—</div>}
+                      <div style={{ lineHeight: 1.4 }}>
+                        {accountName ? (
+                          <span className="lead-name-text" style={{ display: 'block' }}>{accountName}</span>
+                        ) : null}
+                        {contactName ? (
+                          <span className="text-dim" style={{ fontSize: '0.85rem' }}>{contactName}</span>
+                        ) : null}
+                        {!accountName && !contactName && <span className="text-muted">—</span>}
+                      </div>
                     </td>
                     <td>
-                      {contact.company && <div className="text-sm fw-medium">{contact.company}</div>}
-                      {contact.job_title && <div className="text-sm text-muted">{contact.job_title}</div>}
-                      {!contact.company && !contact.job_title && <div className="text-muted">—</div>}
-                    </td>
-                    <td>
-                      <div className="text-sm">{getAccountDisplay(contact.account_id)}</div>
-                    </td>
-                    <td>
-                      {contact.source ? (
-                        <span className="badge badge-secondary">{contact.source}</span>
+                      {deal.amount != null ? (
+                        <span style={{ fontWeight: 600 }}>
+                          {new Intl.NumberFormat("en-IN", {
+                            style: "currency",
+                            currency: "INR",
+                            maximumFractionDigits: 2,
+                            minimumFractionDigits: 0,
+                          }).format(Number(deal.amount))}
+                        </span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}
                     </td>
                     <td>
-                      {contact.assigned_to && assignedUser.name !== "—" ? (
-                        <div style={{ lineHeight: 1.3 }}>
-                          <span style={{ fontWeight: 500 }}>{assignedUser.name}</span>
-                          {assignedUser.role && (
-                            <>
-                              <br />
-                              <span className="text-dim" style={{ fontSize: '0.78rem' }}>{assignedUser.role}</span>
-                            </>
-                          )}
+                      {deal.stage ? (
+                        <span className={`lead-status-badge ${getStageBadgeClass(deal.stage)}`}>
+                          {deal.stage}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {deal.expected_close_date ? (
+                        <span>{deal.expected_close_date}</span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {deal.assigned_to && assignedUser.name !== "—" ? (
+                        <div className="lead-name-cell" style={{ gap: '10px' }}>
+                          <div className="lead-avatar">
+                            {assignedUser.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ lineHeight: 1.3 }}>
+                            <span className="lead-name-text">{assignedUser.name}</span>
+                            {assignedUser.role && (
+                              <>
+                                <br />
+                                <span className="text-dim" style={{ fontSize: '0.78rem' }}>{assignedUser.role}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <span className="text-muted">—</span>
@@ -433,16 +490,16 @@ export default function Contacts() {
                     </td>
                     <td>
                       <div className="text-sm text-muted">
-                        {formatDateTime(contact.updated_at)}
+                        {formatDateTime(deal.updated_at)}
                       </div>
                     </td>
                     <td className="actions-cell">
                       <button 
                         className="btn-icon" 
-                        ref={(el) => (triggerRefs.current[contact.id] = el)}
+                        ref={(el) => (triggerRefs.current[deal.id] = el)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          toggleActions(contact.id);
+                          toggleActions(deal.id);
                         }}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -460,7 +517,7 @@ export default function Contacts() {
       )}
       </div>
 
-      {/* Global dropdown menu via Portal or absolute positioning */}
+      {/* Global dropdown menu via fixed positioning */}
       {openActionId && dropdownPos && (
         <div 
           ref={actionsRef}
@@ -473,12 +530,12 @@ export default function Contacts() {
           }}
         >
           {(() => {
-            const activeContact = contacts.find(c => c.id === openActionId);
-            if (!activeContact) return null;
+            const activeDeal = deals.find(d => d.id === openActionId);
+            if (!activeDeal) return null;
             return (
               <>
                 {permissions.view && (
-                  <button className="dropdown-item" onClick={() => handleView(activeContact)}>
+                  <button className="dropdown-item" onClick={() => handleView(activeDeal)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                       <circle cx="12" cy="12" r="3"></circle>
@@ -487,24 +544,23 @@ export default function Contacts() {
                   </button>
                 )}
                 {permissions.update && (
-                  <button className="dropdown-item" onClick={() => handleEdit(activeContact)}>
+                  <button className="dropdown-item" onClick={() => handleEdit(activeDeal)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
-                    Edit Contact
+                    Edit Deal
                   </button>
                 )}
                 {permissions.delete && (
-                  <button className="dropdown-item text-danger" onClick={() => handleDeleteClick(activeContact)}>
+                  <button className="dropdown-item text-danger" onClick={() => handleDeleteClick(activeDeal)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6"></polyline>
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
-                    Delete Contact
+                    Delete Deal
                   </button>
                 )}
-                {/* Fallback if no permissions */}
                 {!permissions.view && !permissions.update && !permissions.delete && (
                   <div className="dropdown-item text-muted" style={{ pointerEvents: 'none' }}>
                     No actions available
@@ -518,26 +574,28 @@ export default function Contacts() {
 
       {/* Modals */}
       {isFormOpen && (
-        <ContactFormModal
-          contact={editContact}
+        <DealFormModal
+          deal={editDeal}
           onClose={() => setIsFormOpen(false)}
           onSuccess={handleFormSuccess}
         />
       )}
 
-      {viewContact && (
-        <ContactViewModal
-          contact={viewContact}
+      {viewDeal && (
+        <DealViewModal
+          deal={viewDeal}
           users={users}
+          leads={leads}
+          contacts={contacts}
           accounts={accounts}
-          onClose={() => setViewContact(null)}
+          onClose={() => setViewDeal(null)}
         />
       )}
 
-      {deleteContact && (
-        <ContactDeleteConfirm
-          contact={deleteContact}
-          onClose={() => setDeleteContact(null)}
+      {deleteDealState && (
+        <DealDeleteConfirm
+          deal={deleteDealState}
+          onClose={() => setDeleteDealState(null)}
           onSuccess={handleDeleteSuccess}
         />
       )}

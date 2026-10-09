@@ -1,6 +1,7 @@
 export interface Contact {
   id: string;
   tenant_id: string;
+  account_id?: string | null;
   full_name: string;
   email: string | null;
   phone: string | null;
@@ -22,6 +23,7 @@ export interface ContactCreate {
   job_title?: string | null;
   address?: string | null;
   source?: string | null;
+  account_id?: string | null;
   assigned_to?: string | null;
   notes?: string | null;
 }
@@ -34,6 +36,7 @@ export interface ContactUpdate {
   job_title?: string | null;
   address?: string | null;
   source?: string | null;
+  account_id?: string | null;
   assigned_to?: string | null;
   notes?: string | null;
 }
