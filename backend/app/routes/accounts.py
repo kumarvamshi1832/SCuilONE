@@ -205,6 +205,26 @@ def get_accounts(
     ).all()
 
 
+
+@router.get(
+    "/my-accounts",
+    response_model=list[AccountResponse],
+    dependencies=[Depends(require_permission("account.view"))]
+)
+def get_my_accounts(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(current_user["tenant_id"])
+
+    accounts = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.assigned_to == user_id
+    ).all()
+
+    return accounts
+
 @router.get(
     "/{account_id}",
     response_model=AccountDetailsResponse,

@@ -131,6 +131,26 @@ def get_contacts(
 
 
 @router.get(
+    "/my-contacts",
+    response_model=list[ContactResponse]
+)
+def get_my_contacts(
+    current_user: dict = Depends(get_current_user),
+    _=Depends(require_permission("contact.view")),
+    db: Session = Depends(get_db)
+):
+    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(current_user["tenant_id"])
+
+    contacts = db.query(Contact).filter(
+        Contact.tenant_id == tenant_id,
+        Contact.assigned_to == user_id
+    ).all()
+
+    return contacts
+
+
+@router.get(
     "/{contact_id}",
     response_model=ContactResponse
 )

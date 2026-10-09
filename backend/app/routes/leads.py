@@ -96,6 +96,24 @@ def get_leads(
     return leads
 
 
+@router.get(
+    "/my-leads",
+    response_model=list[LeadResponse]
+)
+def get_my_leads(
+    current_user: dict = Depends(get_current_user),
+    _=Depends(require_permission("lead.view")),
+    db: Session = Depends(get_db)
+):
+    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(current_user["tenant_id"])
+
+    leads = db.query(Lead).filter(
+        Lead.tenant_id == tenant_id,
+        Lead.assigned_to == user_id
+    ).all()
+
+    return leads
 
 @router.get(
     "/{lead_id}",

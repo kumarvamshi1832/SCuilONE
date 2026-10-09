@@ -3,6 +3,17 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from typing import Literal
+
+DealStage = Literal[
+    "New",
+    "Qualification",
+    "Needs Analysis",
+    "Proposal",
+    "Negotiation",
+    "Closed Won",
+    "Closed Lost"
+]
 
 class DealCreate(BaseModel):
     name: str
@@ -11,7 +22,7 @@ class DealCreate(BaseModel):
     account_id: UUID | None = None
     assigned_to: UUID | None = None
     amount: float | None = None
-    stage: str = "New"
+    stage: DealStage = "New"
     expected_close_date: date | None = None
     description: str | None = None
 
@@ -23,7 +34,7 @@ class DealUpdate(BaseModel):
     account_id: UUID | None = None
     assigned_to: UUID | None = None
     amount: float | None = None
-    stage: str | None = None
+    stage: DealStage | None = None
     expected_close_date: date | None = None
     description: str | None = None
 

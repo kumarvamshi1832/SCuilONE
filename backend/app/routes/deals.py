@@ -226,6 +226,25 @@ def get_deals(
 
 
 @router.get(
+    "/my-deals",
+    response_model=list[DealResponse],
+    dependencies=[Depends(require_permission("deal.view"))]
+)
+def get_my_deals(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(current_user["tenant_id"])
+
+    deals = db.query(Deal).filter(
+        Deal.tenant_id == tenant_id,
+        Deal.assigned_to == user_id
+    ).all()
+
+    return deals
+
+@router.get(
     "/{deal_id}",
     response_model=DealResponse,
     dependencies=[Depends(require_permission("deal.view"))]
