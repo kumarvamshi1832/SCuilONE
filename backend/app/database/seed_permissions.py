@@ -23,6 +23,11 @@ permissions = [
     ("deal.update", "Update deals"),
     ("deal.delete", "Delete deals"),
 
+    ("activity.view", "View activities"),
+    ("activity.create", "Create activities"), 
+    ("activity.update", "Update activities"), 
+    ("activity.delete", "Delete activities"),
+
     ("task.view", "View tasks"),
     ("task.create", "Create tasks"),
     ("task.update", "Update tasks"),

@@ -11,6 +11,7 @@ role_permissions = {
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
         "task.view", "task.create", "task.update", "task.delete",
+        "activity.view", "activity.create", "activity.update", "activity.delete",
     ],
 
     "Tenant Admin": [
@@ -19,6 +20,7 @@ role_permissions = {
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
         "task.view", "task.create", "task.update", "task.delete",
+        "activity.view", "activity.create", "activity.update", "activity.delete",
     ],
 
     "Manager": [
@@ -27,6 +29,7 @@ role_permissions = {
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
         "task.view", "task.create", "task.update", "task.delete",
+        "activity.view", "activity.create", "activity.update", "activity.delete",
     ],
 
     "Sales User": [
@@ -35,6 +38,7 @@ role_permissions = {
         "account.view", "account.create", "account.update",
         "deal.view", "deal.create", "deal.update",
         "task.view", "task.create", "task.update",
+        "activity.view", "activity.create", "activity.update",
     ],
 
     "Operations User": [
@@ -43,6 +47,7 @@ role_permissions = {
         "account.view", "account.create", "account.update",
         "deal.view",
         "task.view", "task.create", "task.update", "task.delete",
+        "activity.view", "activity.create", "activity.update", "activity.delete",
     ],
 
     "Support User": [
@@ -51,6 +56,7 @@ role_permissions = {
         "account.view", "account.create", "account.update",
         "deal.view",
         "task.view", "task.create", "task.update",
+        "activity.view", "activity.create", "activity.update",
     ],
 
     "Read-only / Auditor": [
@@ -59,6 +65,7 @@ role_permissions = {
         "account.view",
         "deal.view",
         "task.view",
+        "activity.view",
     ],
 }
 
@@ -66,7 +73,6 @@ role_permissions = {
 db = SessionLocal()
 
 for role_name, permission_names in role_permissions.items():
-
     role = db.query(Role).filter(
         Role.name == role_name
     ).first()
@@ -76,7 +82,6 @@ for role_name, permission_names in role_permissions.items():
         continue
 
     for permission_name in permission_names:
-
         permission = db.query(Permission).filter(
             Permission.name == permission_name
         ).first()

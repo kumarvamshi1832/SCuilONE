@@ -18,6 +18,7 @@ from app.models.lead import Lead
 from app.models.contact import Contact
 from app.models.account import Account
 from app.models.deal import Deal
+from app.models.activity import Activity
 
 config = context.config
 
