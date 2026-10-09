@@ -11,8 +11,8 @@ DealStage = Literal[
     "Needs Analysis",
     "Proposal",
     "Negotiation",
-    "Closed Won",
-    "Closed Lost"
+    "Won",
+    "Lost"
 ]
 
 class DealCreate(BaseModel):
