@@ -21,8 +21,8 @@ export interface Lead {
   phone?: string;
   source?: string;
   status: string;
-  assigned_to?: string;
-  notes?: string;
+  assigned_to?: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,8 +34,8 @@ export interface CreateLeadRequest {
   source?: string;
   status?: string;
   account_id?: string | null;
-  assigned_to?: string;
-  notes?: string;
+  assigned_to?: string | null;
+  notes?: string | null;
 }
 
 export interface UpdateLeadRequest {
@@ -45,6 +45,6 @@ export interface UpdateLeadRequest {
   source?: string;
   status?: string;
   account_id?: string | null;
-  assigned_to?: string;
-  notes?: string;
+  assigned_to?: string | null;
+  notes?: string | null;
 }
