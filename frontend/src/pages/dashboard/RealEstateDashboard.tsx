@@ -13,14 +13,14 @@ export default function RealEstateDashboard() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
-  
-  const [user, setUser] = useState<{name: string, role: string} | null>(null);
+
+  const [user, setUser] = useState<{ name: string, role: string } | null>(null);
 
   useEffect(() => {
     getDashboardSummary().then(setSummary);
     getRecentActivities().then(setActivities);
     getUsers().then(setUsers);
-    
+
     const storedUser = sessionStorage.getItem("user");
     if (storedUser) {
       try {
@@ -49,7 +49,7 @@ export default function RealEstateDashboard() {
       <div className="dashboard-grid">
         <div className="grid-main">
           <RecentUsers users={users} />
-          
+
           <div className="dashboard-section-card mt-4">
             <div className="section-header">
               <h3>Real Estate Activity</h3>
@@ -73,7 +73,7 @@ export default function RealEstateDashboard() {
             </div>
           </div>
         </div>
-        
+
         <div className="grid-side">
           <div className="dashboard-section-card">
             <div className="section-header">
@@ -99,7 +99,7 @@ export default function RealEstateDashboard() {
           </div>
         </div>
       </div>
-      
+
       {isLeadFormOpen && (
         <LeadFormModal
           onClose={() => setIsLeadFormOpen(false)}

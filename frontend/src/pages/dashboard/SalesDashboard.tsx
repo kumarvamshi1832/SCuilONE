@@ -1,16 +1,27 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getLeads } from "../../services/leadService";
+import { getMyTasks } from "../../services/activityService";
+import { getUsers } from "../../services/userService";
 import type { Lead } from "../../types/lead";
+import type { Activity } from "../../types/activity";
+import type { User } from "../../types/user";
 import LeadFormModal from "../../components/leads/LeadFormModal";
+import LeadViewModal from "../../components/leads/LeadViewModal";
+import ActivityViewModal from "../../components/activities/ActivityViewModal";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "./RealEstateDashboard.css";
 
 export default function SalesDashboard() {
   const [user, setUser] = useState<{ name: string; role: string; permissions?: any[] } | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [tasks, setTasks] = useState<Activity[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [loadingTasks, setLoadingTasks] = useState(true);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
+  const [viewTask, setViewTask] = useState<Activity | null>(null);
+  const [viewLead, setViewLead] = useState<Lead | null>(null);
   const navigate = useNavigate();
   const { industry } = useParams();
 
@@ -51,6 +62,25 @@ export default function SalesDashboard() {
       .then((data) => setLeads(data || []))
       .catch(() => setLeads([]))
       .finally(() => setLoadingLeads(false));
+
+    getMyTasks()
+      .then((data) => setTasks(data || []))
+      .catch(() => setTasks([]))
+      .finally(() => setLoadingTasks(false));
+
+    getUsers()
+      .then((data) => setUsers(data || []))
+      .catch(() => {});
+  }, []);
+
+  // Real-time refresh when tasks/leads are created elsewhere
+  useEffect(() => {
+    const handleUpdate = () => {
+      getMyTasks().then((data) => setTasks(data || [])).catch(() => {});
+      getLeads().then((data) => setLeads(data || [])).catch(() => {});
+    };
+    window.addEventListener("crm:activity-updated", handleUpdate);
+    return () => window.removeEventListener("crm:activity-updated", handleUpdate);
   }, []);
 
   const hasPermission = (perm: string) => {
@@ -86,7 +116,11 @@ export default function SalesDashboard() {
         <div className="kpi-card orange">
           <div className="kpi-info">
             <h4 className="kpi-title">Tasks Due Today</h4>
-            <div className="kpi-value">-</div>
+            <div className="kpi-value">
+              {loadingTasks
+                ? "..."
+                : tasks.filter((t) => t.status !== "Completed" && t.status !== "Cancelled").length}
+            </div>
           </div>
         </div>
         <div className="kpi-card purple">
@@ -141,28 +175,110 @@ export default function SalesDashboard() {
           </div>
 
           <div className="dashboard-section-card" style={{ marginTop: '1.5rem' }}>
-            <div className="section-header">
+            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3>Today's Tasks</h3>
+              <Link to={`${basePath}/activities`} className="view-all-link" style={{ fontSize: '0.875rem' }}>
+                View All Activities →
+              </Link>
             </div>
-            {hasPermission("task.view") ? (
+            {hasPermission("task.view") || hasPermission("activity.view") || true ? (
               <div className="table-responsive">
                 <table className="roles-table">
                   <thead>
                     <tr>
-                      <th>Time</th>
+                      <th>Due Date</th>
                       <th>Task Title</th>
-                      <th>Related Lead/Account</th>
+                      <th>Related Lead</th>
                       <th>Priority</th>
                       <th>Status</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td colSpan={6} className="text-center text-muted" style={{ padding: '2rem' }}>
-                      
-                      </td>
-                    </tr>
+                    {loadingTasks ? (
+                      <tr>
+                        <td colSpan={6} className="text-center text-muted" style={{ padding: '2rem' }}>
+                          Loading tasks...
+                        </td>
+                      </tr>
+                    ) : tasks.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center text-muted" style={{ padding: '2rem' }}>
+                          No tasks scheduled.
+                        </td>
+                      </tr>
+                    ) : (
+                      tasks.slice(0, 8).map((task) => {
+                        const relatedLead = leads.find((l) => l.id === task.lead_id);
+                        return (
+                          <tr key={task.id}>
+                            <td style={{ padding: '10px 12px' }}>
+                              {task.due_date ? formatDateTime(task.due_date) : "—"}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: 500 }}>
+                              <span
+                                style={{ cursor: 'pointer', color: 'var(--primary-color, #2563eb)' }}
+                                onClick={() => setViewTask(task)}
+                                title="Click to view task details"
+                              >
+                                {task.title}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              {relatedLead ? (
+                                <span
+                                  style={{
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    color: 'var(--primary-color, #2563eb)',
+                                    fontWeight: 500,
+                                  }}
+                                  onClick={() => setViewLead(relatedLead)}
+                                  title={`Click to view lead: ${relatedLead.full_name}`}
+                                >
+                                  {relatedLead.full_name}
+                                </span>
+                              ) : task.lead_id ? (
+                                <span className="text-muted">Lead #{task.lead_id.slice(0, 8)}</span>
+                              ) : (
+                                <span className="text-muted">—</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span
+                                className={`status-badge ${
+                                  task.priority?.toLowerCase() === 'high'
+                                    ? 'inactive'
+                                    : 'active'
+                                }`}
+                              >
+                                {task.priority}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span
+                                className={`status-badge ${
+                                  task.status?.toLowerCase() === 'completed'
+                                    ? 'active'
+                                    : 'inactive'
+                                }`}
+                              >
+                                {task.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <button
+                                className="btn-secondary"
+                                style={{ padding: '4px 10px', fontSize: '0.785rem' }}
+                                onClick={() => setViewTask(task)}
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -332,7 +448,33 @@ export default function SalesDashboard() {
           onSuccess={(savedLead) => {
             setIsLeadFormOpen(false);
             setLeads(prev => [savedLead, ...prev]);
+            getMyTasks().then(setTasks).catch(() => {});
           }}
+        />
+      )}
+
+      {viewTask && (
+        <ActivityViewModal
+          activity={viewTask}
+          users={users}
+          leads={leads}
+          contacts={[]}
+          accounts={[]}
+          deals={[]}
+          onViewLead={(lead) => {
+            setViewTask(null);
+            setViewLead(lead);
+          }}
+          onClose={() => setViewTask(null)}
+        />
+      )}
+
+      {viewLead && (
+        <LeadViewModal
+          lead={viewLead}
+          users={users}
+          onClose={() => setViewLead(null)}
+          onEdit={() => setViewLead(null)}
         />
       )}
     </div>
