@@ -28,9 +28,9 @@ function getStatusClass(status: string): string {
 
 
 export default function Leads() {
-  /* ─── Permissions ─── */
+  /* â”€â”€â”€ Permissions â”€â”€â”€ */
   const permissions = useMemo(() => getLeadPermissions(), []);
-  
+
   const { industry } = useParams();
   const tenantStr = sessionStorage.getItem("tenant");
   let tenantIndustry = "real-estate";
@@ -43,7 +43,7 @@ export default function Leads() {
   const currentIndustry = industry || tenantIndustry;
   const isEdu = currentIndustry === "education-consulting";
 
-  /* ─── State ─── */
+  /* â”€â”€â”€ State â”€â”€â”€ */
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +70,7 @@ export default function Leads() {
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  /* ─── Data Fetching ─── */
+  /* â”€â”€â”€ Data Fetching â”€â”€â”€ */
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -79,8 +79,11 @@ export default function Leads() {
       const [leadsData, usersData] = await Promise.all([
         getLeads(),
         getUsers(),
+
       ]);
-      setLeads(leadsData);
+
+      console.log("All leads from API:", leadsData);
+setLeads(leadsData);
       setUsers(usersData);
     } catch (err: any) {
       console.error("Fetch leads error:", err);
@@ -151,7 +154,7 @@ export default function Leads() {
     setOpenActionId(leadId);
   };
 
-  /* ─── Helpers ─── */
+  /* â”€â”€â”€ Helpers â”€â”€â”€ */
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setNotification({ message, type });
@@ -159,11 +162,11 @@ export default function Leads() {
   };
 
   const getUserDisplay = (userId?: string | null): { name: string; role: string } => {
-    if (!userId) return { name: "—", role: "" };
+    if (!userId) return { name: "â€”", role: "" };
     const user = users.find((u) => u.id === userId);
     return user
       ? { name: user.full_name, role: user.role }
-      : { name: "—", role: "" };
+      : { name: "â€”", role: "" };
   };
 
   const clearFilters = () => {
@@ -175,7 +178,7 @@ export default function Leads() {
 
   const hasActiveFilters = search || statusFilter || sourceFilter || assignedFilter;
 
-  /* ─── Filtering (client-side) ─── */
+  /* â”€â”€â”€ Filtering (client-side) â”€â”€â”€ */
 
   const filteredLeads = leads.filter((lead) => {
     // Text search
@@ -201,7 +204,7 @@ export default function Leads() {
   // Collect unique sources from data
   const uniqueSources = Array.from(new Set(leads.map((l) => l.source).filter(Boolean))) as string[];
 
-  /* ─── Action Handlers ─── */
+  /* â”€â”€â”€ Action Handlers â”€â”€â”€ */
 
   const handleCreate = () => {
     setEditLead(null);
@@ -209,9 +212,9 @@ export default function Leads() {
   };
 
   const handleView = (lead: Lead) => {
-    setOpenActionId(null);
-    setViewLead(lead);
-  };
+  console.log("Opening lead:", lead.id, lead.full_name);
+  setViewLead(lead);
+};
 
   const handleEdit = (lead: Lead) => {
     setOpenActionId(null);
@@ -243,7 +246,7 @@ export default function Leads() {
     showToast("Lead deleted successfully");
   };
 
-  /* ─── Render ─── */
+  /* â”€â”€â”€ Render â”€â”€â”€ */
 
   return (
     <div className="leads-page">
@@ -298,7 +301,7 @@ export default function Leads() {
           </svg>
           <input
             type="text"
-            placeholder="Search leads by name, email, phone, source…"
+            placeholder="Search leads by name, email, phone, sourceâ€¦"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             id="leads-search-input"
@@ -367,7 +370,7 @@ export default function Leads() {
         {loading ? (
           <div className="leads-loading">
             <div className="leads-loading-spinner" />
-            Loading leads…
+            Loading leadsâ€¦
           </div>
         ) : error ? (
           <div className="error-state" style={{ padding: "60px 20px", textAlign: "center" }}>
@@ -399,7 +402,7 @@ export default function Leads() {
             <p>
               {hasActiveFilters
                 ? "Try adjusting your search or filters."
-                : isEdu 
+                : isEdu
                   ? "Get started by creating your first student lead."
                   : "Get started by creating your first lead."}
             </p>
@@ -434,13 +437,13 @@ export default function Leads() {
                       <span className="lead-name-text">{lead.full_name}</span>
                     </div>
                   </td>
-                  <td className="text-dim">{lead.email || "—"}</td>
-                  <td className="text-dim">{lead.phone || "—"}</td>
+                  <td className="text-dim">{lead.email || "â€”"}</td>
+                  <td className="text-dim">{lead.phone || "â€”"}</td>
                   <td>
                     {lead.source ? (
                       <span className="lead-source-badge">{lead.source}</span>
                     ) : (
-                      <span className="text-dim">—</span>
+                      <span className="text-dim">â€”</span>
                     )}
                   </td>
                   <td>
@@ -484,7 +487,7 @@ export default function Leads() {
         )}
       </div>
 
-      {/* Actions Dropdown — rendered outside the table to avoid overflow clipping */}
+      {/* Actions Dropdown â€” rendered outside the table to avoid overflow clipping */}
       {openActionId && dropdownPos && (() => {
         const targetLead = leads.find((l) => l.id === openActionId);
         if (!targetLead) return null;

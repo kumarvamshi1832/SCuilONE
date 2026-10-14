@@ -12,6 +12,8 @@ role_permissions = {
         "deal.view", "deal.create", "deal.update", "deal.delete",
         "task.view", "task.create", "task.update", "task.delete",
         "activity.view", "activity.create", "activity.update", "activity.delete",
+        "pipeline.view", "pipeline.create", "pipeline.update", "pipeline.delete",
+        "user.view", "user.create", "user.update", "user.delete",
     ],
 
     "Tenant Admin": [
@@ -21,6 +23,8 @@ role_permissions = {
         "deal.view", "deal.create", "deal.update", "deal.delete",
         "task.view", "task.create", "task.update", "task.delete",
         "activity.view", "activity.create", "activity.update", "activity.delete",
+        "pipeline.view", "pipeline.create", "pipeline.update", "pipeline.delete",
+        "user.view", "user.create", "user.update", "user.delete",
     ],
 
     "Manager": [
@@ -30,6 +34,8 @@ role_permissions = {
         "deal.view", "deal.create", "deal.update", "deal.delete",
         "task.view", "task.create", "task.update", "task.delete",
         "activity.view", "activity.create", "activity.update", "activity.delete",
+        "pipeline.view", "pipeline.create", "pipeline.update", "pipeline.delete",
+        "user.view",
     ],
 
     "Sales User": [
@@ -39,6 +45,8 @@ role_permissions = {
         "deal.view", "deal.create", "deal.update",
         "task.view", "task.create", "task.update",
         "activity.view", "activity.create", "activity.update",
+        "pipeline.view",
+        "user.view",
     ],
 
     "Operations User": [
@@ -48,6 +56,8 @@ role_permissions = {
         "deal.view",
         "task.view", "task.create", "task.update", "task.delete",
         "activity.view", "activity.create", "activity.update", "activity.delete",
+        "pipeline.view",
+        "user.view",
     ],
 
     "Support User": [
@@ -57,6 +67,8 @@ role_permissions = {
         "deal.view",
         "task.view", "task.create", "task.update",
         "activity.view", "activity.create", "activity.update",
+        "pipeline.view",
+        "user.view",
     ],
 
     "Read-only / Auditor": [
@@ -66,44 +78,52 @@ role_permissions = {
         "deal.view",
         "task.view",
         "activity.view",
+        "pipeline.view",
+        "user.view",
     ],
 }
 
 
 db = SessionLocal()
 
-for role_name, permission_names in role_permissions.items():
-    role = db.query(Role).filter(
-        Role.name == role_name
-    ).first()
-
-    if not role:
-        print(f"Role not found: {role_name}")
-        continue
-
-    for permission_name in permission_names:
-        permission = db.query(Permission).filter(
-            Permission.name == permission_name
+try:
+    for role_name, permission_names in role_permissions.items():
+        role = db.query(Role).filter(
+            Role.name == role_name
         ).first()
 
-        if not permission:
-            print(f"Permission not found: {permission_name}")
+        if not role:
+            print(f"Role not found: {role_name}")
             continue
 
-        existing = db.query(RolePermission).filter(
-            RolePermission.role_id == role.id,
-            RolePermission.permission_id == permission.id
-        ).first()
+        for permission_name in permission_names:
+            permission = db.query(Permission).filter(
+                Permission.name == permission_name
+            ).first()
 
-        if not existing:
-            db.add(
-                RolePermission(
-                    role_id=role.id,
-                    permission_id=permission.id
+            if not permission:
+                print(f"Permission not found: {permission_name}")
+                continue
+
+            existing = db.query(RolePermission).filter(
+                RolePermission.role_id == role.id,
+                RolePermission.permission_id == permission.id
+            ).first()
+
+            if not existing:
+                db.add(
+                    RolePermission(
+                        role_id=role.id,
+                        permission_id=permission.id
+                    )
                 )
-            )
 
-db.commit()
-db.close()
+    db.commit()
+    print("Role permissions seeded successfully")
 
-print("Role permissions seeded successfully")
+except Exception:
+    db.rollback()
+    raise
+
+finally:
+    db.close()

@@ -6,7 +6,7 @@ import MFA from "../pages/auth/MFA";
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import VerifyResetOTP from "../pages/auth/VerifyResetOTP";
 import ResetPassword from "../pages/auth/ResetPassword";
-
+import CompleteProfile from "../pages/auth/CompleteProfile";
 import ProtectedRoute from "../components/layout/ProtectedRoute";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import RealEstateDashboard from "../pages/dashboard/RealEstateDashboard";
@@ -20,14 +20,17 @@ import Users from "../pages/users/Users";
 import Leads from "../pages/leads/Leads";
 import Contacts from "../pages/contacts/Contacts";
 import Accounts from "../pages/accounts/Accounts";
+import MyProfile from "../pages/profile/MyProfile";
 import Deals from "../pages/deals/Deals";
+import FormBuilder from "../pages/form-builder/FormBuilder";
 import {
     Tasks, Activities, Reports, Settings
 } from "../pages/dashboard/Placeholders";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";
-
+import AcceptInvitation from "../pages/auth/AcceptInvitation";
 import { useParams } from "react-router-dom";
+import Pipelines from "../pages/pipelines/Pipelines";
 
 // Resolver for Data-Driven Industry Dashboard
 function DashboardResolver() {
@@ -84,6 +87,8 @@ export default function AppRoutes() {
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/verify-reset-otp" element={<VerifyResetOTP />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/accept-invitation" element={<AcceptInvitation />}/>
+                <Route path="/complete-profile" element={<CompleteProfile />}/>
 
                 {/* Protected Routes */}
                 <Route element={<ProtectedRoute />}>
@@ -104,6 +109,30 @@ export default function AppRoutes() {
                     <Route path="/:industry/roles" element={<DashboardLayout><Roles /></DashboardLayout>} />
                     <Route path="/:industry/permissions" element={<DashboardLayout><Permissions /></DashboardLayout>} />
                     <Route path="/:industry/settings" element={<DashboardLayout><Settings /></DashboardLayout>} />
+                    <Route
+  path="/:industry/profile"
+  element={
+    <DashboardLayout>
+      <MyProfile />
+    </DashboardLayout>
+  }
+/>
+                    <Route
+  path="/:industry/pipelines"
+  element={
+    <DashboardLayout>
+      <Pipelines />
+    </DashboardLayout>
+  }
+/>
+<Route
+  path="/:industry/form-builder"
+  element={
+    <DashboardLayout>
+      <FormBuilder />
+    </DashboardLayout>
+  }
+/>
                 </Route>
 
                 <Route path="/empty" element={<div />} />
@@ -113,6 +142,7 @@ export default function AppRoutes() {
 
                 {/* Unknown Routes */}
                 <Route path="*" element={<RootRedirect />} />
+
             </Routes>
         </BrowserRouter>
     );

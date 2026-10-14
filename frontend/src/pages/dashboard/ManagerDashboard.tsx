@@ -4,6 +4,7 @@ import { getDashboardSummary, getRecentActivities } from "../../services/dashboa
 import { DashboardSummary, Activity } from "../../types/dashboard";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import "./RealEstateDashboard.css";
+import { getMyProfile } from "../../services/profileService";
 
 export default function ManagerDashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -31,10 +32,18 @@ export default function ManagerDashboard() {
     }
   }, []);
 
+  const [profileName, setProfileName] = useState("");
+
+useEffect(() => {
+  getMyProfile()
+    .then((profile) => setProfileName(profile.full_name || "User"))
+    .catch((error) => console.error("Failed to load profile:", error));
+}, []);
+
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {profileName || user?.name || "User"}!</h1>
         <p className="text-muted">
           Here is your Manager Overview & Operational Performance summary.
         </p>

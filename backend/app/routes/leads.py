@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
+
 from app.database.connection import SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.lead import Lead
-from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse
 from app.models.user import User
+from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse
+
 
 router = APIRouter(
     prefix="/api/v1/leads",
@@ -49,16 +51,17 @@ def validate_assigned_user(
 )
 def create_lead(
     data: LeadCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     permission=Depends(require_permission("lead.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
+
     validate_assigned_user(
-    data.assigned_to,
-    tenant_id,
-    db
-)
+        data.assigned_to,
+        tenant_id,
+        db
+    )
 
     lead = Lead(
         tenant_id=tenant_id,
@@ -83,11 +86,11 @@ def create_lead(
     response_model=list[LeadResponse]
 )
 def get_leads(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("lead.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     leads = db.query(Lead).filter(
         Lead.tenant_id == tenant_id
@@ -101,7 +104,7 @@ def get_leads(
     response_model=list[LeadResponse]
 )
 def get_my_leads(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("lead.view")),
     db: Session = Depends(get_db)
 ):
@@ -115,17 +118,18 @@ def get_my_leads(
 
     return leads
 
+
 @router.get(
     "/{lead_id}",
     response_model=LeadResponse
 )
 def get_lead(
     lead_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("lead.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
@@ -140,6 +144,7 @@ def get_lead(
 
     return lead
 
+
 @router.put(
     "/{lead_id}",
     response_model=LeadResponse
@@ -147,17 +152,18 @@ def get_lead(
 def update_lead(
     lead_id: UUID,
     data: LeadUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("lead.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
+
     if data.assigned_to is not None:
         validate_assigned_user(
             data.assigned_to,
             tenant_id,
             db
-    )
+        )
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
@@ -197,18 +203,17 @@ def update_lead(
     return lead
 
 
-
 @router.delete(
     "/{lead_id}",
     status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_lead(
     lead_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("lead.delete")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,

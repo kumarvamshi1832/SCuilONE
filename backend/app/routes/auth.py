@@ -2,7 +2,11 @@ import random
 import random
 from datetime import datetime, timedelta
 import traceback
+import hashlib
+from datetime import datetime, timedelta, timezone
 
+from app.models.user_invitation import UserInvitation
+from app.schemas.auth import InvitationSetupRequest
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -25,7 +29,9 @@ from app.schemas.auth import (
     LoginRequest,
     ForgotPasswordRequest,
     VerifyResetOTPRequest,
-    ResetPasswordRequest
+    ResetPasswordRequest,
+    ChangeTemporaryPasswordRequest,
+    ProfileCompletionRequest,
 )
 
 from app.core.security import (
@@ -364,14 +370,25 @@ def login(
             detail="Invalid email or password"
         )
 
-    if not verify_password(
-        data.password,
-        user.password
-    ):
+    if not verify_password(data.password, user.password):
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password"
         )
+
+    if user.status == "Inactive" and (
+        user.must_change_password or user.profile_completed
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is inactive. Contact your administrator."
+        )
+
+    is_onboarding = (
+        user.status == "Inactive"
+        and not user.must_change_password
+        and not user.profile_completed
+    )
 
     role = db.query(Role).join(
         UserRole,
@@ -386,7 +403,7 @@ def login(
 
     permissions = []
 
-    if role:
+    if role and not is_onboarding:
         permissions = [
             permission.name
             for permission in db.query(Permission).join(
@@ -397,25 +414,34 @@ def login(
             ).all()
         ]
 
-    access_token = create_access_token({
+    token_data = {
         "user_id": str(user.id),
         "tenant_id": str(user.tenant_id),
         "role": role.name if role else None
-    })
+    }
+
+    if is_onboarding:
+        token_data["purpose"] = "onboarding"
+
+    access_token = create_access_token(token_data)
 
     return {
         "message": "Login successful",
         "access_token": access_token,
         "token_type": "bearer",
+        "onboarding_required": is_onboarding,
         "user": {
             "id": str(user.id),
             "name": user.full_name,
-            "email": user.email
+            "email": user.email,
+            "status": user.status,
+            "must_change_password": user.must_change_password,
+            "profile_completed": user.profile_completed
         },
         "tenant": {
-            "id": str(tenant.id),
-            "name": tenant.name,
-            "industry": tenant.industry
+            "id": str(tenant.id) if tenant else None,
+            "name": tenant.name if tenant else None,
+            "industry": tenant.industry if tenant else None
         },
         "role": role.name if role else None,
         "permissions": permissions
@@ -570,4 +596,214 @@ def reset_password(
 
     return {
         "message": "Password reset successfully"
+    }
+
+
+@router.post("/change-temporary-password")
+def change_temporary_password(
+    data: ChangeTemporaryPasswordRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if data.new_password != data.confirm_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Passwords do not match"
+        )
+
+    if data.current_password == data.new_password:
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be different"
+        )
+
+    user = db.query(User).filter(
+        User.id == current_user["user_id"],
+        User.tenant_id == current_user["tenant_id"]
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    if not user.must_change_password:
+        raise HTTPException(
+            status_code=400,
+            detail="Password change is not required"
+        )
+
+    if not verify_password(data.current_password, user.password):
+        raise HTTPException(
+            status_code=400,
+            detail="Current password is incorrect"
+        )
+
+    user.password = hash_password(data.new_password)
+    user.must_change_password = False
+
+    db.commit()
+
+    return {
+        "message": "Password changed successfully",
+        "profile_completed": user.profile_completed,
+        "status": user.status
+    }
+
+
+@router.post("/complete-profile")
+def complete_profile(
+    data: ProfileCompletionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == current_user["user_id"],
+        User.tenant_id == current_user["tenant_id"]
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    token_purpose = current_user.get("token_purpose", "access")
+
+    if token_purpose == "onboarding":
+        if (
+            user.status != "Inactive"
+            or user.must_change_password
+            or user.profile_completed
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="This account is not awaiting onboarding"
+            )
+
+    else:
+        if user.status != "Active":
+            raise HTTPException(
+                status_code=403,
+                detail="Your account is inactive"
+            )
+
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=403,
+                detail="Change your temporary password first"
+            )
+
+    user.full_name = data.full_name.strip()
+    user.phone = data.phone.strip()
+    user.job_title = data.job_title.strip()
+    user.profile_completed = True
+    user.status = "Active"
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to complete profile"
+        )
+
+    return {
+        "message": "Profile completed successfully. Please log in again.",
+        "profile_completed": user.profile_completed,
+        "status": user.status,
+        "login_required": True
+    }
+
+
+@router.post("/accept-invitation")
+def accept_invitation(
+    data: InvitationSetupRequest,
+    db: Session = Depends(get_db)
+):
+    token_hash = hashlib.sha256(
+        data.invitation_token.encode("utf-8")
+    ).hexdigest()
+
+    invitation = db.query(UserInvitation).filter(
+        UserInvitation.token_hash == token_hash
+    ).with_for_update().first()
+
+    if not invitation or invitation.used:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or already used invitation"
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = invitation.expires_at
+
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if now >= expires_at:
+        invitation.used = True
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Invitation has expired. Ask your administrator for a new invitation."
+        )
+
+    user = db.query(User).filter(
+        User.id == invitation.user_id
+    ).with_for_update().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Invited user not found"
+        )
+
+    if (
+        user.status != "Inactive"
+        or not user.must_change_password
+        or user.profile_completed
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="This account is not awaiting invitation setup"
+        )
+
+    user.password = hash_password(data.password)
+    user.must_change_password = False
+    invitation.used = True
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to complete invitation setup"
+        )
+
+    role = db.query(Role).join(
+        UserRole,
+        UserRole.role_id == Role.id
+    ).filter(
+        UserRole.user_id == user.id
+    ).first()
+
+    onboarding_token = create_access_token({
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id),
+        "role": role.name if role else None,
+        "purpose": "onboarding"
+    })
+
+    return {
+        "message": "Password created successfully. Complete your profile.",
+        "access_token": onboarding_token,
+        "token_type": "bearer",
+        "email": user.email,
+        "next_step": "complete_profile"
     }

@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.connection import SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_active_user
 from app.models.user_role import UserRole
 from app.models.role_permission import RolePermission
 from app.models.permission import Permission
@@ -19,9 +19,9 @@ def get_db():
 def require_permission(permission_name: str):
 
     def permission_checker(
-        current_user: dict = Depends(get_current_user),
-        db: Session = Depends(get_db)
-    ):
+    current_user: dict = Depends(require_active_user),
+    db: Session = Depends(get_db)
+):
         user_id = current_user["user_id"]
 
         permission = (

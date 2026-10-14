@@ -6,6 +6,7 @@ import { DashboardSummary, Activity } from "../../types/dashboard";
 import { User } from "../../types/user";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import "./RealEstateDashboard.css";
+import { getMyProfile } from "../../services/profileService";
 
 const hasPermission = (perm: string) => {
   const userStr = sessionStorage.getItem("user");
@@ -55,11 +56,18 @@ export default function AuditorDashboard() {
       setUser({ name: "User", role: "Auditor" });
     }
   }, []);
+  const [profileName, setProfileName] = useState("");
+
+useEffect(() => {
+  getMyProfile()
+    .then((profile) => setProfileName(profile.full_name || "User"))
+    .catch((error) => console.error("Failed to load profile:", error));
+}, []);
 
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {profileName || user?.name || "User"}!</h1>
         <p className="text-muted">View CRM data and reports with read-only access.</p>
       </div>
 

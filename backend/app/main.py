@@ -9,6 +9,8 @@ from app.routes.contacts import router as contact_router
 from app.routes.accounts import router as account_router
 from app.routes import deals
 from app.routes.activities import router as activities_router
+from app.routes.pipelines import router as pipelines_router
+from app.routes.form_templates import router as form_templates_router
 
 app = FastAPI()
 
@@ -40,6 +42,8 @@ app.include_router(contact_router)
 app.include_router(account_router)
 app.include_router(deals.router)
 app.include_router(activities_router)
+app.include_router(pipelines_router)
+app.include_router(form_templates_router)
 
 @app.get("/")
 def home():

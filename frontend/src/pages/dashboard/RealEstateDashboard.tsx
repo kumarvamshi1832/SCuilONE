@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getMyProfile } from "../../services/profileService";
 import RealEstateOverview from "../../components/dashboard/RealEstateOverview";
 import RecentUsers from "../../components/dashboard/RecentUsers";
 import { getDashboardSummary, getRecentActivities } from "../../services/dashboardService";
@@ -37,10 +38,18 @@ export default function RealEstateDashboard() {
     }
   }, []);
 
+  const [profileName, setProfileName] = useState("");
+
+useEffect(() => {
+  getMyProfile()
+    .then((profile) => setProfileName(profile.full_name || "User"))
+    .catch((error) => console.error("Failed to load profile:", error));
+}, []);
+
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {profileName || user?.name || "User"}!</h1>
         <p className="text-muted">Here's an overview of your company activity.</p>
       </div>
 

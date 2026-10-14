@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database.connection import Base
 
 
+
 class Deal(Base):
     __tablename__ = "deals"
 
@@ -62,6 +63,20 @@ class Deal(Base):
         String(50),
         nullable=False,
         default="New"
+    )
+
+    pipeline_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipelines.id"),
+        nullable=True,
+        index=True
+    )
+
+    pipeline_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("pipeline_stages.id"),
+        nullable=True,
+        index=True
     )
 
     expected_close_date: Mapped[date | None] = mapped_column(

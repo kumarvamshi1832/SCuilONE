@@ -5,6 +5,7 @@ import type { Lead } from "../../types/lead";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "./RealEstateDashboard.css";
+import { getMyProfile } from "../../services/profileService";
 
 export default function SalesDashboard() {
   const [user, setUser] = useState<{ name: string; role: string; permissions?: any[] } | null>(null);
@@ -62,11 +63,18 @@ export default function SalesDashboard() {
       return false;
     });
   };
+const [profileName, setProfileName] = useState("");
+
+useEffect(() => {
+  getMyProfile()
+    .then((profile) => setProfileName(profile.full_name || "User"))
+    .catch((error) => console.error("Failed to load profile:", error));
+}, []);
 
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {profileName || user?.name || "User"}!</h1>
         <p className="text-muted">Here is your sales overview and today's activities.</p>
       </div>
 

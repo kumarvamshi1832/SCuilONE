@@ -6,6 +6,8 @@ export interface Deal {
   contact_id: string | null;
   account_id: string | null;
   assigned_to: string | null;
+ pipeline_id?: string | null;
+pipeline_stage_id?: string | null;
   amount: number | null;
   stage: string;
   expected_close_date: string | null;
@@ -20,6 +22,8 @@ export interface DealCreate {
   contact_id?: string | null;
   account_id?: string | null;
   assigned_to?: string | null;
+ pipeline_id?: string | null;
+pipeline_stage_id?: string | null;
   amount?: number | null;
   stage?: string | null;
   expected_close_date?: string | null;
@@ -32,6 +36,8 @@ export interface DealUpdate {
   contact_id?: string | null;
   account_id?: string | null;
   assigned_to?: string | null;
+ pipeline_id?: string | null;
+pipeline_stage_id?: string | null;
   amount?: number | null;
   stage?: string | null;
   expected_close_date?: string | null;

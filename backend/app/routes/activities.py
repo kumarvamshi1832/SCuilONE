@@ -1,11 +1,10 @@
-
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.connection import SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 
 from app.models.activity import Activity
@@ -70,7 +69,7 @@ def validate_related_records(data, tenant_id, db: Session):
 )
 def create_activity(
     data: ActivityCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("activity.create")),
     db: Session = Depends(get_db)
 ):
@@ -95,7 +94,7 @@ def create_activity(
     response_model=list[ActivityResponse]
 )
 def get_activities(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("activity.view")),
     db: Session = Depends(get_db)
 ):
@@ -106,13 +105,12 @@ def get_activities(
     ).order_by(Activity.created_at.desc()).all()
 
 
-
 @router.get(
     "/my-tasks",
     response_model=list[ActivityResponse]
 )
 def get_my_tasks(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("activity.view")),
     db: Session = Depends(get_db)
 ):
@@ -133,7 +131,7 @@ def get_my_tasks(
 )
 def get_activity(
     activity_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("activity.view")),
     db: Session = Depends(get_db)
 ):
@@ -160,7 +158,7 @@ def get_activity(
 def update_activity(
     activity_id: UUID,
     data: ActivityUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("activity.update")),
     db: Session = Depends(get_db)
 ):
@@ -211,7 +209,7 @@ def update_activity(
 )
 def delete_activity(
     activity_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("activity.delete")),
     db: Session = Depends(get_db)
 ):

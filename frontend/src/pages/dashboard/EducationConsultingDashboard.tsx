@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
-
+import { getMyProfile } from "../../services/profileService";
 import {
   educationDashboardStats,
   leadsTrendData,
@@ -72,11 +72,19 @@ export default function EducationConsultingDashboard() {
     }
   }, []);
 
+  const [profileName, setProfileName] = useState("");
+
+useEffect(() => {
+  getMyProfile()
+    .then((profile) => setProfileName(profile.full_name || "User"))
+    .catch((error) => console.error("Failed to load profile:", error));
+}, []);
+
   return (
     <div className="education-dashboard">
       <div className="edu-welcome-section">
         <div className="edu-welcome-content">
-          <h1>Welcome back, {user?.name}! 👋</h1>
+          <h1>Welcome back, {profileName || user?.name || "User"}!</h1>
           <p className="text-muted">Here's what's happening with your Education Consulting CRM today.</p>
         </div>
         <div className="edu-welcome-image">
