@@ -1,0 +1,565 @@
+/* ─── Activities Page Styles ─── */
+
+.activities-page {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* ─── Type Badges ─── */
+.activity-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.activity-type-task {
+  background: #ebf8ff;
+  color: #2b6cb0;
+}
+.dashboard-wrapper.dark .activity-type-task {
+  background: #2a3b4c;
+  color: #63b3ed;
+}
+
+.activity-type-call {
+  background: #e6fffa;
+  color: #234e52;
+}
+.dashboard-wrapper.dark .activity-type-call {
+  background: #1d3b38;
+  color: #4fd1c5;
+}
+
+.activity-type-meeting {
+  background: #faf5ff;
+  color: #553c9a;
+}
+.dashboard-wrapper.dark .activity-type-meeting {
+  background: #32264d;
+  color: #b794f4;
+}
+
+/* ─── Status Badges ─── */
+.activity-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.status-pending {
+  background: #edf2f7;
+  color: #4a5568;
+}
+.dashboard-wrapper.dark .status-pending {
+  background: #2d3748;
+  color: #cbd5e0;
+}
+
+.status-in-progress {
+  background: #feebc8;
+  color: #9c4221;
+}
+.dashboard-wrapper.dark .status-in-progress {
+  background: #4a3424;
+  color: #fbd38d;
+}
+
+.status-completed {
+  background: #c6f6d5;
+  color: #22543d;
+}
+.dashboard-wrapper.dark .status-completed {
+  background: #1c4532;
+  color: #9ae6b4;
+}
+
+.status-cancelled {
+  background: #fed7d7;
+  color: #9b2c2c;
+}
+.dashboard-wrapper.dark .status-cancelled {
+  background: #521b1b;
+  color: #feb2b2;
+}
+
+/* ─── Priority Badges ─── */
+.activity-priority-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.priority-high {
+  background: rgba(229, 62, 62, 0.12);
+  color: #e53e3e;
+}
+.dashboard-wrapper.dark .priority-high {
+  background: rgba(254, 178, 178, 0.15);
+  color: #feb2b2;
+}
+
+.priority-medium {
+  background: rgba(221, 107, 32, 0.12);
+  color: #dd6b20;
+}
+.dashboard-wrapper.dark .priority-medium {
+  background: rgba(251, 211, 141, 0.15);
+  color: #fbd38d;
+}
+
+.priority-low {
+  background: rgba(113, 128, 150, 0.12);
+  color: #718096;
+}
+.dashboard-wrapper.dark .priority-low {
+  background: rgba(160, 174, 192, 0.15);
+  color: #a0aec0;
+}
+
+/* ─── Segmented View Toggle (All vs My Tasks) ─── */
+.view-segmented-control {
+  display: inline-flex;
+  background: #edf2f7;
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+.dashboard-wrapper.dark .view-segmented-control {
+  background: #252525;
+}
+
+.view-segment-btn {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: #718096;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dashboard-wrapper.dark .view-segment-btn {
+  color: #a0aec0;
+}
+
+.view-segment-btn.active {
+  background: #ffffff;
+  color: #2b6cb0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+}
+.dashboard-wrapper.dark .view-segment-btn.active {
+  background: #333333;
+  color: #63b3ed;
+}
+
+.related-pill-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82rem;
+}
+
+.related-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4a5568;
+}
+.dashboard-wrapper.dark .related-pill {
+  color: #e2e8f0;
+}
+
+.related-pill-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: #718096;
+  font-weight: 600;
+}
+.dashboard-wrapper.dark .related-pill-label {
+  color: #94a3b8;
+}
+
+/* ─── Activity Title & Description ─── */
+.activity-title {
+  font-weight: 600;
+  color: #1a202c;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  display: inline-block;
+}
+
+.activity-title:hover {
+  color: #3182ce;
+  text-decoration: underline;
+}
+
+.dashboard-wrapper.dark .activity-title {
+  color: #f7fafc;
+}
+
+.dashboard-wrapper.dark .activity-title:hover {
+  color: #63b3ed;
+  text-decoration: underline;
+}
+
+.activity-description {
+  font-size: 0.8rem;
+  color: #718096;
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.dashboard-wrapper.dark .activity-description {
+  color: #94a3b8;
+}
+
+/* Ensure table header text in dark mode has clear contrast */
+.dashboard-wrapper.dark .activities-page .leads-table th {
+  color: #a0aec0;
+}
+
+/* ─── View Modal Content ─── */
+.activity-view-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.dashboard-wrapper.dark .activity-view-title {
+  color: #f7fafc;
+}
+
+.activity-view-description {
+  background: #f7fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #2d3748;
+  white-space: pre-wrap;
+}
+
+.activity-view-description.empty {
+  color: #a0aec0;
+}
+
+.dashboard-wrapper.dark .activity-view-description {
+  background: #252525;
+  border-color: #383838;
+  color: #e2e8f0;
+}
+
+.dashboard-wrapper.dark .activity-view-description.empty {
+  color: #718096;
+}
+
+.activity-view-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2d3748;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+}
+
+.dashboard-wrapper.dark .activity-view-section-title {
+  color: #f7fafc;
+  border-bottom-color: #383838;
+}
+
+/* ─── Form Modal Related Section ─── */
+.activity-form-section-divider {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+  margin-top: 8px;
+}
+
+.dashboard-wrapper.dark .activity-form-section-divider {
+  border-top-color: #383838;
+}
+
+.activity-form-section-title {
+  margin: 0 0 12px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.dashboard-wrapper.dark .activity-form-section-title {
+  color: #f7fafc;
+}
+
+/* ─── Actions Cell & Trigger Button ─── */
+.activities-page .actions-cell {
+  position: relative;
+  text-align: center;
+  width: 70px;
+  min-width: 70px;
+  padding: 8px 12px;
+}
+
+.activities-page .activity-action-btn,
+.activities-page .actions-cell .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  outline: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.activities-page .activity-action-btn:hover,
+.activities-page .activity-action-btn.active,
+.activities-page .actions-cell .btn-icon:hover,
+.activities-page .actions-cell .btn-icon.active {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  text-decoration: none;
+}
+
+.dashboard-wrapper.dark .activities-page .activity-action-btn,
+.dashboard-wrapper.dark .activities-page .actions-cell .btn-icon {
+  background: #252525;
+  border-color: #383838;
+  color: #94a3b8;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard-wrapper.dark .activities-page .activity-action-btn:hover,
+.dashboard-wrapper.dark .activities-page .activity-action-btn.active,
+.dashboard-wrapper.dark .activities-page .actions-cell .btn-icon:hover,
+.dashboard-wrapper.dark .activities-page .actions-cell .btn-icon.active {
+  background: #2f2f2f;
+  border-color: #4a4a4a;
+  color: #f1f5f9;
+  text-decoration: none;
+}
+
+.activities-page .activity-action-btn svg,
+.activities-page .actions-cell .btn-icon svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ─── Actions Dropdown Menu ─── */
+.activity-actions-dropdown,
+.actions-dropdown-menu {
+  position: fixed;
+  z-index: 9999;
+  width: 176px;
+  min-width: 160px;
+  max-width: 190px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.04);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: activityDropdownFade 0.15s ease-out;
+  box-sizing: border-box;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown,
+.dashboard-wrapper.dark .actions-dropdown-menu {
+  background: #222222;
+  border-color: #383838;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes activityDropdownFade {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.activity-actions-dropdown .activity-dropdown-item,
+.activity-actions-dropdown .dropdown-item,
+.actions-dropdown-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.835rem;
+  font-weight: 500;
+  color: #334155;
+  text-align: left;
+  border-radius: 5px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+  text-decoration: none;
+  line-height: 1.25;
+}
+
+.activity-actions-dropdown .activity-dropdown-item:hover,
+.activity-actions-dropdown .dropdown-item:hover,
+.actions-dropdown-menu .dropdown-item:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item {
+  color: #cbd5e1;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item:hover,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item:hover,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item:hover {
+  background: #2e2e2e;
+  color: #f8fafc;
+}
+
+/* Icon styles inside dropdown */
+.activity-actions-dropdown .activity-dropdown-item svg,
+.activity-actions-dropdown .dropdown-item svg,
+.actions-dropdown-menu .dropdown-item svg {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  flex-shrink: 0;
+  color: #64748b;
+  transition: color 0.15s ease;
+}
+
+.activity-actions-dropdown .activity-dropdown-item:hover svg,
+.activity-actions-dropdown .dropdown-item:hover svg,
+.actions-dropdown-menu .dropdown-item:hover svg {
+  color: #0284c7;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item svg,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item svg,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item svg {
+  color: #94a3b8;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item:hover svg,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item:hover svg,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item:hover svg {
+  color: #38bdf8;
+}
+
+/* Text label */
+.activity-actions-dropdown .activity-dropdown-item span,
+.activity-actions-dropdown .dropdown-item span,
+.actions-dropdown-menu .dropdown-item span {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Delete action (red warning color, subtle and refined) */
+.activity-actions-dropdown .activity-dropdown-item.delete-action,
+.activity-actions-dropdown .dropdown-item.delete-action,
+.activity-actions-dropdown .dropdown-item.text-danger,
+.actions-dropdown-menu .dropdown-item.text-danger {
+  color: #dc2626;
+}
+
+.activity-actions-dropdown .activity-dropdown-item.delete-action svg,
+.activity-actions-dropdown .dropdown-item.delete-action svg,
+.activity-actions-dropdown .dropdown-item.text-danger svg,
+.actions-dropdown-menu .dropdown-item.text-danger svg {
+  color: #dc2626;
+}
+
+.activity-actions-dropdown .activity-dropdown-item.delete-action:hover,
+.activity-actions-dropdown .dropdown-item.delete-action:hover,
+.activity-actions-dropdown .dropdown-item.text-danger:hover,
+.actions-dropdown-menu .dropdown-item.text-danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+}
+
+.activity-actions-dropdown .activity-dropdown-item.delete-action:hover svg,
+.activity-actions-dropdown .dropdown-item.delete-action:hover svg,
+.activity-actions-dropdown .dropdown-item.text-danger:hover svg,
+.actions-dropdown-menu .dropdown-item.text-danger:hover svg {
+  color: #b91c1c;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item.delete-action,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.delete-action,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.text-danger,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item.text-danger {
+  color: #f87171;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item.delete-action svg,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.delete-action svg,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.text-danger svg,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item.text-danger svg {
+  color: #f87171;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item.delete-action:hover,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.delete-action:hover,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.text-danger:hover,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item.text-danger:hover {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+.dashboard-wrapper.dark .activity-actions-dropdown .activity-dropdown-item.delete-action:hover svg,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.delete-action:hover svg,
+.dashboard-wrapper.dark .activity-actions-dropdown .dropdown-item.text-danger:hover svg,
+.dashboard-wrapper.dark .actions-dropdown-menu .dropdown-item.text-danger:hover svg {
+  color: #fca5a5;
+}
+
+/* ─── Form Modal Related CRM Hints ─── */
+.activity-related-hint {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 4px;
+  display: block;
+}
+
+.dashboard-wrapper.dark .activity-related-hint {
+  color: #a0aec0;
+}
