@@ -8,7 +8,7 @@ import VerifyResetOTP from "../pages/auth/VerifyResetOTP";
 import ResetPassword from "../pages/auth/ResetPassword";
 import CompleteProfile from "../pages/auth/CompleteProfile";
 import AcceptInvitation from "../pages/auth/AcceptInvitation";
-
+import Workflows from "../pages/workflows/Workflows";
 import ProtectedRoute from "../components/layout/ProtectedRoute";
 import DashboardLayout from "../components/layout/DashboardLayout";
 
@@ -312,6 +312,15 @@ export default function AppRoutes() {
               </DashboardLayout>
             }
           />
+
+          <Route
+  path="/:industry/workflows"
+  element={
+    <DashboardLayout>
+      <Workflows />
+    </DashboardLayout>
+  }
+/>
 
           <Route
             path="/:industry/form-builder"

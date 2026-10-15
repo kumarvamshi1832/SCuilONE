@@ -23,6 +23,7 @@ from app.models.pipeline import Pipeline
 from app.models.pipeline import PipelineStage
 from app.models.user_invitation import UserInvitation
 from app.models.form_template import FormTemplate, FormField, CustomFormSubmission
+from app.models.lead_assignment_audit import LeadAssignmentAudit
 
 config = context.config
 

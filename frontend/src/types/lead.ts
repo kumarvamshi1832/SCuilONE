@@ -38,6 +38,7 @@ export interface CreateLeadRequest {
   notes?: string | null;
 }
 
+
 export interface UpdateLeadRequest {
   full_name?: string;
   email?: string;
@@ -47,4 +48,7 @@ export interface UpdateLeadRequest {
   account_id?: string | null;
   assigned_to?: string | null;
   notes?: string | null;
+  override_capacity?: boolean;
+  override_reason?: string | null;
 }
+

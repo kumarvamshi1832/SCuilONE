@@ -14,6 +14,7 @@ class LeadCreate(BaseModel):
     notes: str | None = None
 
 
+
 class LeadUpdate(BaseModel):
     full_name: str | None = None
     email: EmailStr | None = None
@@ -22,6 +23,9 @@ class LeadUpdate(BaseModel):
     status: str | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
+    override_capacity: bool = False
+    override_reason: str | None = None
+
 
 
 class LeadResponse(BaseModel):

@@ -6,7 +6,7 @@ from app.models.role_permission import RolePermission
 
 role_permissions = {
     "Tenant Owner": [
-        "lead.view", "lead.create", "lead.update", "lead.delete",
+        "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
@@ -17,7 +17,7 @@ role_permissions = {
     ],
 
     "Tenant Admin": [
-        "lead.view", "lead.create", "lead.update", "lead.delete",
+        "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
@@ -28,7 +28,7 @@ role_permissions = {
     ],
 
     "Manager": [
-        "lead.view", "lead.create", "lead.update", "lead.delete",
+        "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",

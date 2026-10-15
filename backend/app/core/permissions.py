@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -17,12 +19,11 @@ def get_db():
 
 
 def require_permission(permission_name: str):
-
     def permission_checker(
-    current_user: dict = Depends(require_active_user),
-    db: Session = Depends(get_db)
-):
-        user_id = current_user["user_id"]
+        current_user: dict = Depends(require_active_user),
+        db: Session = Depends(get_db)
+    ):
+        user_id = UUID(str(current_user["user_id"]))
 
         permission = (
             db.query(Permission)
@@ -36,28 +37,20 @@ def require_permission(permission_name: str):
                 detail="Permission not found"
             )
 
-        user_role = (
+        has_permission = (
             db.query(UserRole)
-            .filter(UserRole.user_id == user_id)
-            .first()
-        )
-
-        if not user_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User has no role assigned"
+            .join(
+                RolePermission,
+                RolePermission.role_id == UserRole.role_id
             )
-
-        role_permission = (
-            db.query(RolePermission)
             .filter(
-                RolePermission.role_id == user_role.role_id,
+                UserRole.user_id == user_id,
                 RolePermission.permission_id == permission.id
             )
             .first()
         )
 
-        if not role_permission:
+        if not has_permission:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have permission to perform this action"

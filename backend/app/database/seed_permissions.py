@@ -7,6 +7,7 @@ permissions = [
     ("lead.create", "Create leads"),
     ("lead.update", "Update leads"),
     ("lead.delete", "Delete leads"),
+    ("lead.assignment.override", "Override salesperson lead capacity"),
 
     ("contact.view", "View contacts"),
     ("contact.create", "Create contacts"),
