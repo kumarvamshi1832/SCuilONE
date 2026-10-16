@@ -478,8 +478,10 @@ html, body, #root {
   .register-right {
     width: 100%;
     padding: 24px;
+    box-sizing: border-box;
     align-items: flex-start; /* Better scrolling if small screen */
     min-height: 100vh;
+    min-height: 100dvh;
   }
   .theme-toggle {
     top: 16px;
@@ -487,7 +489,8 @@ html, body, #root {
   }
   .form-card {
     padding: 32px 24px;
-    max-width: 500px;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .mobile-brand {
     display: flex;
@@ -506,8 +509,23 @@ html, body, #root {
     padding: 16px;
   }
   .form-card {
-    padding: 24px 20px;
+    padding: 24px 16px;
     border-radius: 12px;
+  }
+  .form-head h1 {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 360px) {
+  .register-right {
+    padding: 12px;
+  }
+  .form-card {
+    padding: 20px 14px;
+  }
+  .form-head h1 {
+    font-size: 22px;
   }
 }
 

@@ -55,10 +55,35 @@ export default function Login() {
         if (response.refresh_token) {
           sessionStorage.setItem("refresh_token", response.refresh_token);
         }
-        if (response.user) {
-          sessionStorage.setItem("user", JSON.stringify(response.user));
+        if (response.tenant) {
+          sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
         }
-        navigate("/empty");
+
+        const userObj = {
+          ...(response.user || {}),
+          role: response.role,
+          permissions: response.permissions || []
+        };
+        sessionStorage.setItem("user", JSON.stringify(userObj));
+
+        const userRole = (response.role || "").toUpperCase();
+        if (userRole === "MANAGER" || userRole.includes("MANAGER")) {
+          navigate("/manager/dashboard");
+        } else if (userRole === "SALES_USER" || userRole === "SALES USER" || userRole.includes("SALES")) {
+          navigate("/sales/dashboard");
+        } else if (userRole === "OPERATIONS_USER" || userRole === "OPERATIONS USER" || userRole.includes("OPERATIONS")) {
+          navigate("/operations/dashboard");
+        } else if (userRole === "SUPPORT_USER" || userRole === "SUPPORT USER" || userRole.includes("SUPPORT")) {
+          navigate("/support/dashboard");
+        } else if (userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR")) {
+          navigate("/auditor/dashboard");
+        } else {
+          const industrySlug = response.tenant?.industry 
+            ? response.tenant.industry.toLowerCase().replace(/\s+/g, '-') 
+            : 'real-estate';
+          
+          navigate(`/${industrySlug}/dashboard`);
+        }
       }
     } catch (err) {
       const apiError = err as { message?: string };
@@ -72,6 +97,14 @@ export default function Login() {
 
   return (
     <div className={`login-page-wrapper ${theme}`}>
+      <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+        {theme === "light" ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        )}
+      </button>
+
       <div className="login-container">
 
         {/* LEFT PANEL */}
@@ -81,20 +114,12 @@ export default function Login() {
         >
         </div>
 
-        {/* RIGHT PANEL */}
         <div className="login-right-panel">
-          <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "light" ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-            )}
-          </button>
 
           <div className="login-form-inner">
             <div className="login-head">
-              <h2>Welcome <span className="text-blue">Back</span></h2>
-              <p>Sign in to your SCuilONE account</p>
+              <h2>Login to <span className="text-blue">SCuilONE</span> CRM</h2>
+              <p>Welcome back! Please enter your details to continue.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="login-form">
@@ -106,7 +131,7 @@ export default function Login() {
                     <input
                       id="email"
                       type="email"
-                      placeholder="name@company.com"
+                      placeholder="Enter your email address"
                       value={email}
                       onChange={(e) => { setEmail(e.target.value); setError(""); }}
                       disabled={loading}
@@ -140,6 +165,9 @@ export default function Login() {
                 </div>
 
                 <div className="forgot-pwd-row">
+                  <label className="remember-me">
+                    <input type="checkbox" /> Remember me
+                  </label>
                   <button type="button" onClick={() => navigate("/forgot-password")} className="login-forgot-password">
                     Forgot Password?
                   </button>
@@ -148,10 +176,14 @@ export default function Login() {
                 {error && <div className="alert-box error">{error}</div>}
 
                 <button type="submit" className="login-btn" disabled={loading}>
-                  {loading ? "Signing In..." : "Sign In \u2192"}
+                  {loading ? "Logging In..." : "Login \u2192"}
                 </button>
               </div>
             </form>
+
+            <div className="login-divider">
+              <span>OR</span>
+            </div>
 
             <div className="signup-link">
               <span>Don't have an account?</span>

@@ -4,24 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.connection import SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 
 from app.models.account import Account
 from app.models.lead import Lead
 from app.models.user import User
-
-from sqlalchemy import func
-
 from app.models.contact import Contact
 from app.models.deal import Deal
-
-from app.schemas.account import AccountDetailsResponse
 
 from app.schemas.account import (
     AccountCreate,
     AccountUpdate,
-    AccountResponse
+    AccountResponse,
+    AccountDetailsResponse
 )
 
 
@@ -62,15 +58,15 @@ def validate_assigned_user(
 @router.post(
     "/",
     response_model=AccountResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("account.create"))]
+    status_code=status.HTTP_201_CREATED
 )
 def create_account(
     data: AccountCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("account.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     validate_assigned_user(
         data.assigned_to,
@@ -130,16 +126,16 @@ def create_account(
 
 @router.post(
     "/{account_id}/leads/{lead_id}",
-    status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_permission("lead.update"))]
+    status_code=status.HTTP_200_OK
 )
 def link_lead_to_account(
     account_id: UUID,
     lead_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("lead.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     account = db.query(Account).filter(
         Account.id == account_id,
@@ -191,51 +187,49 @@ def link_lead_to_account(
 
 @router.get(
     "/",
-    response_model=list[AccountResponse],
-    dependencies=[Depends(require_permission("account.view"))]
+    response_model=list[AccountResponse]
 )
 def get_accounts(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("account.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     return db.query(Account).filter(
         Account.tenant_id == tenant_id
     ).all()
 
 
-
 @router.get(
     "/my-accounts",
-    response_model=list[AccountResponse],
-    dependencies=[Depends(require_permission("account.view"))]
+    response_model=list[AccountResponse]
 )
 def get_my_accounts(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("account.view")),
     db: Session = Depends(get_db)
 ):
     user_id = UUID(current_user["user_id"])
     tenant_id = UUID(current_user["tenant_id"])
 
-    accounts = db.query(Account).filter(
+    return db.query(Account).filter(
         Account.tenant_id == tenant_id,
         Account.assigned_to == user_id
     ).all()
 
-    return accounts
 
 @router.get(
     "/{account_id}",
-    response_model=AccountDetailsResponse,
-    dependencies=[Depends(require_permission("account.view"))]
+    response_model=AccountDetailsResponse
 )
 def get_account(
     account_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("account.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     account = db.query(Account).filter(
         Account.id == account_id,
@@ -265,7 +259,10 @@ def get_account(
 
     won_deals = [
         deal for deal in deals
-        if deal.stage.strip().lower() == "won"
+        if deal.stage and deal.stage.strip().lower() in (
+            "won",
+            "closed won"
+        )
     ]
 
     total_revenue = sum(
@@ -300,18 +297,19 @@ def get_account(
         "total_revenue": total_revenue
     }
 
+
 @router.put(
     "/{account_id}",
-    response_model=AccountResponse,
-    dependencies=[Depends(require_permission("account.update"))]
+    response_model=AccountResponse
 )
 def update_account(
     account_id: UUID,
     data: AccountUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("account.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     account = db.query(Account).filter(
         Account.id == account_id,
@@ -343,15 +341,15 @@ def update_account(
 
 
 @router.delete(
-    "/{account_id}",
-    dependencies=[Depends(require_permission("account.delete"))]
+    "/{account_id}"
 )
 def delete_account(
     account_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("account.delete")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     account = db.query(Account).filter(
         Account.id == account_id,

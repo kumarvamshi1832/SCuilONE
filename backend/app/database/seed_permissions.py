@@ -7,6 +7,7 @@ permissions = [
     ("lead.create", "Create leads"),
     ("lead.update", "Update leads"),
     ("lead.delete", "Delete leads"),
+    ("lead.assignment.override", "Override salesperson lead capacity"),
 
     ("contact.view", "View contacts"),
     ("contact.create", "Create contacts"),
@@ -24,33 +25,49 @@ permissions = [
     ("deal.delete", "Delete deals"),
 
     ("activity.view", "View activities"),
-    ("activity.create", "Create activities"), 
-    ("activity.update", "Update activities"), 
+    ("activity.create", "Create activities"),
+    ("activity.update", "Update activities"),
     ("activity.delete", "Delete activities"),
 
     ("task.view", "View tasks"),
     ("task.create", "Create tasks"),
     ("task.update", "Update tasks"),
     ("task.delete", "Delete tasks"),
+
+    ("pipeline.view", "View pipelines"),
+    ("pipeline.create", "Create pipelines"),
+    ("pipeline.update", "Update pipelines"),
+    ("pipeline.delete", "Delete pipelines"),
+
+    ("user.view", "View users"),
+    ("user.create", "Create users"),
+    ("user.update", "Update users"),
+    ("user.delete", "Deactivate users"),
 ]
 
 
 db = SessionLocal()
 
-for name, description in permissions:
-    existing_permission = db.query(Permission).filter(
-        Permission.name == name
-    ).first()
+try:
+    for name, description in permissions:
+        existing_permission = db.query(Permission).filter(
+            Permission.name == name
+        ).first()
 
-    if not existing_permission:
-        permission = Permission(
-            name=name,
-            description=description
-        )
+        if not existing_permission:
+            db.add(
+                Permission(
+                    name=name,
+                    description=description
+                )
+            )
 
-        db.add(permission)
+    db.commit()
+    print("Permissions seeded successfully")
 
-db.commit()
-db.close()
+except Exception:
+    db.rollback()
+    raise
 
-print("Permissions seeded successfully")
+finally:
+    db.close()

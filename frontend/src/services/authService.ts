@@ -19,10 +19,22 @@ import type {
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
+
+// Auto-logout on 401 Unauthorized
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Token is invalid or expired
+      sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("tenant");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
 
 /* ─── Endpoints ─── */
 

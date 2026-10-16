@@ -9,10 +9,9 @@ async def send_otp_email(
     recipient_email: str,
     otp: str
 ):
-
     message = EmailMessage()
 
-    message["From"] = settings.SMTP_USERNAME
+    message["From"] = settings.SMTP_FROM_EMAIL
     message["To"] = recipient_email
     message["Subject"] = "SCuilONE Email Verification"
 
@@ -27,6 +26,51 @@ Your SCuilONE verification OTP is:
 This OTP is valid for 10 minutes.
 
 If you did not request this registration, please ignore this email.
+
+Regards,
+SCuilONE Team
+"""
+    )
+
+    await aiosmtplib.send(
+        message,
+        hostname=settings.SMTP_HOST,
+        port=settings.SMTP_PORT,
+        username=settings.SMTP_USERNAME,
+        password=settings.SMTP_PASSWORD,
+        start_tls=True
+    )
+
+
+async def send_user_invitation_email(
+    recipient_email: str,
+    full_name: str,
+    invitation_token: str
+):
+    from urllib.parse import quote
+
+    invitation_url = (
+        f"{settings.FRONTEND_URL.rstrip('/')}"
+        f"/accept-invitation?token={quote(invitation_token)}"
+    )
+
+    message = EmailMessage()
+    message["From"] = settings.SMTP_FROM_EMAIL
+    message["To"] = recipient_email
+    message["Subject"] = "You're invited to SCuilONE"
+
+    message.set_content(
+        f"""Hello {full_name},
+
+You have been invited to join SCuilONE.
+
+Use the secure link below to set your password and begin account setup:
+
+{invitation_url}
+
+This invitation expires in 24 hours and can only be used once.
+
+If you were not expecting this invitation, please ignore this email.
 
 Regards,
 SCuilONE Team
