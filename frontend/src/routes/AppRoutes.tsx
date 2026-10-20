@@ -21,8 +21,9 @@ import Leads from "../pages/leads/Leads";
 import Contacts from "../pages/contacts/Contacts";
 import Accounts from "../pages/accounts/Accounts";
 import Deals from "../pages/deals/Deals";
+import Activities from "../pages/activities/Activities";
 import {
-    Tasks, Activities, Reports, Settings
+    Reports, Settings
 } from "../pages/dashboard/Placeholders";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";
@@ -98,8 +99,11 @@ export default function AppRoutes() {
                     <Route path="/:industry/contacts" element={<DashboardLayout><Contacts /></DashboardLayout>} />
                     <Route path="/:industry/accounts" element={<DashboardLayout><Accounts /></DashboardLayout>} />
                     <Route path="/:industry/deals" element={<DashboardLayout><Deals /></DashboardLayout>} />
-                    <Route path="/:industry/tasks" element={<DashboardLayout><Tasks /></DashboardLayout>} />
+                    <Route path="/:industry/tasks" element={<DashboardLayout><Activities /></DashboardLayout>} />
+                    <Route path="/tasks" element={<DashboardLayout><Activities /></DashboardLayout>} />
+                    <Route path="/my-tasks" element={<DashboardLayout><Activities /></DashboardLayout>} />
                     <Route path="/:industry/activities" element={<DashboardLayout><Activities /></DashboardLayout>} />
+                    <Route path="/activities" element={<DashboardLayout><Activities /></DashboardLayout>} />
                     <Route path="/:industry/reports" element={<DashboardLayout><Reports /></DashboardLayout>} />
                     <Route path="/:industry/roles" element={<DashboardLayout><Roles /></DashboardLayout>} />
                     <Route path="/:industry/permissions" element={<DashboardLayout><Permissions /></DashboardLayout>} />

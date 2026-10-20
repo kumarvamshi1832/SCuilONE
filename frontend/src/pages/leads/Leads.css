@@ -274,6 +274,7 @@
 .dashboard-wrapper.dark .leads-table th {
   background: #252525;
   border-bottom-color: #333;
+  color: #a0aec0;
 }
 .leads-table td {
   padding: 14px 20px;
@@ -283,6 +284,7 @@
 }
 .dashboard-wrapper.dark .leads-table td {
   border-bottom-color: #333;
+  color: #e2e8f0;
 }
 
 .leads-table tbody tr {

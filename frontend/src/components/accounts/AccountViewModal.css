@@ -1,0 +1,558 @@
+/* ─── Account View Modal: Section Headings & Details ─── */
+.account-modal-section-title,
+.related-records-heading {
+  margin-bottom: 16px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1a202c;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+
+.dashboard-wrapper.dark .account-modal-section-title,
+.dashboard-wrapper.dark .related-records-heading,
+.dark .account-modal-section-title,
+.dark .related-records-heading,
+body.dark .account-modal-section-title,
+body.dark .related-records-heading {
+  color: #f7fafc;
+  border-bottom-color: #333333;
+}
+
+/* Detail Grid & Groups */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.detail-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-group label,
+.detail-group .text-muted {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.dashboard-wrapper.dark .detail-group label,
+.dashboard-wrapper.dark .detail-group .text-muted,
+.dark .detail-group label,
+.dark .detail-group .text-muted,
+body.dark .detail-group label,
+body.dark .detail-group .text-muted {
+  color: #94a3b8;
+}
+
+.detail-value {
+  font-size: 0.95rem;
+  color: #1a202c;
+  margin: 0;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .detail-value,
+.dark .detail-value,
+body.dark .detail-value {
+  color: #f1f5f9;
+}
+
+/* Revenue Summary Specifics */
+.revenue-summary-value {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #1a202c;
+}
+
+.dashboard-wrapper.dark .revenue-summary-value,
+.dark .revenue-summary-value,
+body.dark .revenue-summary-value {
+  color: #f7fafc;
+}
+
+.revenue-won-value {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #22543d;
+}
+
+.dashboard-wrapper.dark .revenue-won-value,
+.dark .revenue-won-value,
+body.dark .revenue-won-value {
+  color: #48bb78;
+}
+
+/* Notes Box */
+.notes-box {
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 6px;
+  padding: 12px 14px;
+  color: #2d3748;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.dashboard-wrapper.dark .notes-box,
+.dark .notes-box,
+body.dark .notes-box {
+  background: #252525;
+  border-color: #383838;
+  color: #f1f5f9;
+}
+
+/* Container & Cards */
+.related-sections-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.related-section-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-wrapper.dark .related-section-card,
+.dark .related-section-card,
+body.dark .related-section-card {
+  border-color: #333333;
+  background: #1f1f1f;
+}
+
+/* Accordion Header */
+.related-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  background: #ffffff;
+  transition: background-color 0.15s ease;
+}
+
+.related-section-header:hover {
+  background-color: #f8fafc;
+}
+
+.dashboard-wrapper.dark .related-section-header,
+.dark .related-section-header,
+body.dark .related-section-header {
+  background-color: #1f1f1f;
+}
+
+.dashboard-wrapper.dark .related-section-header:hover,
+.dark .related-section-header:hover,
+body.dark .related-section-header:hover {
+  background-color: #262626;
+}
+
+.related-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Category Icons */
+.related-icon-box {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.related-icon-deals {
+  background: #ebf8ff;
+  color: #3182ce;
+}
+.dashboard-wrapper.dark .related-icon-deals,
+.dark .related-icon-deals,
+body.dark .related-icon-deals {
+  background: #2a3b4c;
+  color: #63b3ed;
+}
+
+.related-icon-leads {
+  background: #e6fffa;
+  color: #319795;
+}
+.dashboard-wrapper.dark .related-icon-leads,
+.dark .related-icon-leads,
+body.dark .related-icon-leads {
+  background: #1d3b38;
+  color: #4fd1c5;
+}
+
+.related-icon-contacts {
+  background: #faf5ff;
+  color: #805ad5;
+}
+.dashboard-wrapper.dark .related-icon-contacts,
+.dark .related-icon-contacts,
+body.dark .related-icon-contacts {
+  background: #32264d;
+  color: #b794f4;
+}
+
+.related-header-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0;
+}
+
+.dashboard-wrapper.dark .related-header-title,
+.dark .related-header-title,
+body.dark .related-header-title {
+  color: #e2e8f0;
+}
+
+/* Count Badges */
+.related-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #edf2f7;
+  color: #718096;
+}
+
+.related-count-badge.has-records {
+  background: #ebf8ff;
+  color: #2b6cb0;
+}
+
+.dashboard-wrapper.dark .related-count-badge,
+.dark .related-count-badge,
+body.dark .related-count-badge {
+  background: #2d3748;
+  color: #a0aec0;
+}
+
+.dashboard-wrapper.dark .related-count-badge.has-records,
+.dark .related-count-badge.has-records,
+body.dark .related-count-badge.has-records {
+  background: #2a3b4c;
+  color: #90cdf4;
+}
+
+/* Toggle Button */
+.related-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #4a5568;
+  background: transparent;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.related-toggle-btn:hover {
+  background: #f7fafc;
+  border-color: #a0aec0;
+  color: #2d3748;
+}
+
+.dashboard-wrapper.dark .related-toggle-btn,
+.dark .related-toggle-btn,
+body.dark .related-toggle-btn {
+  color: #a0aec0;
+  border-color: #4a5568;
+}
+
+.dashboard-wrapper.dark .related-toggle-btn:hover,
+.dark .related-toggle-btn:hover,
+body.dark .related-toggle-btn:hover {
+  background: #2d3748;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.related-toggle-icon {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+/* Content Area */
+.related-content {
+  border-top: 1px solid #edf2f7;
+}
+
+.dashboard-wrapper.dark .related-content,
+.dark .related-content,
+body.dark .related-content {
+  border-top-color: #333333;
+}
+
+.related-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+/* Table */
+.related-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+/* Table Headers (Contrast Fix) */
+.related-table th {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  background: #f8fafc;
+  border-bottom: 1px solid #edf2f7;
+  white-space: nowrap;
+}
+
+.dashboard-wrapper.dark .related-table th,
+.dark .related-table th,
+body.dark .related-table th {
+  background: #181818;
+  color: #cbd5e1;
+  border-bottom: 1px solid #333333;
+}
+
+/* Table Rows & Cells */
+.related-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #edf2f7;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.dashboard-wrapper.dark .related-table td,
+.dark .related-table td,
+body.dark .related-table td {
+  background: #1f1f1f;
+  border-bottom: 1px solid #262626;
+  color: #e2e8f0;
+}
+
+.related-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Hover State */
+.related-table tr:hover td {
+  background: #f8fafc;
+}
+
+.dashboard-wrapper.dark .related-table tr:hover td,
+.dark .related-table tr:hover td,
+body.dark .related-table tr:hover td {
+  background: #262626;
+}
+
+/* 1. Deal Name */
+.related-deal-name {
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.dashboard-wrapper.dark .related-deal-name,
+.dark .related-deal-name,
+body.dark .related-deal-name {
+  color: #f7fafc;
+}
+
+/* 2. Lead and Contact Names */
+.related-lead-name,
+.related-contact-name {
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.dashboard-wrapper.dark .related-lead-name,
+.dark .related-lead-name,
+body.dark .related-lead-name,
+.dashboard-wrapper.dark .related-contact-name,
+.dark .related-contact-name,
+body.dark .related-contact-name {
+  color: #f7fafc;
+}
+
+.related-lead-ref,
+.related-contact-ref {
+  color: #475569;
+}
+
+.dashboard-wrapper.dark .related-lead-ref,
+.dark .related-lead-ref,
+body.dark .related-lead-ref,
+.dashboard-wrapper.dark .related-contact-ref,
+.dark .related-contact-ref,
+body.dark .related-contact-ref {
+  color: #e2e8f0;
+}
+
+/* Secondary Table Cells */
+.related-cell-muted {
+  color: #475569;
+}
+
+.dashboard-wrapper.dark .related-cell-muted,
+.dark .related-cell-muted,
+body.dark .related-cell-muted {
+  color: #cbd5e1;
+}
+
+.related-cell-dim {
+  color: #64748b;
+}
+
+.dashboard-wrapper.dark .related-cell-dim,
+.dark .related-cell-dim,
+body.dark .related-cell-dim {
+  color: #cbd5e1;
+}
+
+/* 6. Links and Clickable Names */
+.related-table a,
+.related-table .related-link,
+.related-table .clickable-name {
+  color: #3182ce;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.related-table a:hover,
+.related-table .related-link:hover,
+.related-table .clickable-name:hover {
+  color: #2b6cb0;
+  text-decoration: underline;
+}
+
+.dashboard-wrapper.dark .related-table a,
+.dark .related-table a,
+body.dark .related-table a,
+.dashboard-wrapper.dark .related-table .related-link,
+.dark .related-table .related-link,
+body.dark .related-table .related-link,
+.dashboard-wrapper.dark .related-table .clickable-name,
+.dark .related-table .clickable-name,
+body.dark .related-table .clickable-name {
+  color: #60a5fa;
+}
+
+.dashboard-wrapper.dark .related-table a:hover,
+.dark .related-table a:hover,
+body.dark .related-table a:hover,
+.dashboard-wrapper.dark .related-table .related-link:hover,
+.dark .related-table .related-link:hover,
+body.dark .related-table .related-link:hover,
+.dashboard-wrapper.dark .related-table .clickable-name:hover,
+.dark .related-table .clickable-name:hover,
+body.dark .related-table .clickable-name:hover {
+  color: #93c5fd;
+}
+
+/* 7. Stage & Status Badges */
+.related-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #edf2f7;
+  color: #2d3748;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.dashboard-wrapper.dark .related-badge,
+.dark .related-badge,
+body.dark .related-badge {
+  background: #2a3342;
+  color: #e2e8f0;
+  border-color: #3e4a5d;
+}
+
+.related-badge-teal {
+  background: #e6fffa;
+  color: #234e52;
+  border-color: #b2f5ea;
+}
+
+.dashboard-wrapper.dark .related-badge-teal,
+.dark .related-badge-teal,
+body.dark .related-badge-teal {
+  background: #163835;
+  color: #5eead4;
+  border-color: #20534e;
+}
+
+/* 8. Amount Cell (Preserve Blue Accent with High Contrast) */
+.related-amount-cell {
+  font-weight: 600;
+  text-align: right;
+  color: #2b6cb0;
+  white-space: nowrap;
+}
+
+.dashboard-wrapper.dark .related-amount-cell,
+.dark .related-amount-cell,
+body.dark .related-amount-cell {
+  color: #60a5fa;
+}
+
+/* Empty & Loading States */
+.related-empty-state {
+  padding: 18px;
+  text-align: center;
+  color: #a0aec0;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.dashboard-wrapper.dark .related-empty-state,
+.dark .related-empty-state,
+body.dark .related-empty-state {
+  color: #9ca3af;
+}
+
+.related-loading-state {
+  padding: 18px;
+  text-align: center;
+  color: #718096;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dashboard-wrapper.dark .related-loading-state,
+.dark .related-loading-state,
+body.dark .related-loading-state {
+  color: #9ca3af;
+}

@@ -94,7 +94,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         { label: "Counselors", path: `${basePath}/counselors`, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
         { label: "Consultations", path: `${basePath}/consultations`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
         { label: "Follow-ups", path: `${basePath}/follow-ups`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
-        { label: "Tasks", path: `${basePath}/tasks`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
         { label: "Reports", path: `${basePath}/reports`, icon: "M18 20V10 M12 20V4 M6 20v-4" },
         { label: "Settings", path: `${basePath}/settings`, icon: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" }
       ];
@@ -128,8 +127,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       if (hasPermission("deal.view")) {
         salesNav.push({ label: "Deals", path: `${basePath}/deals`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" });
       }
-      if (hasPermission("task.view")) {
-        salesNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
+      if (hasPermission("activity.view")) {
+        salesNav.push({ label: "Activities", path: `${basePath}/activities`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
       }
       return salesNav;
     }
@@ -150,8 +149,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       if (hasPermission("deal.view")) {
         opsNav.push({ label: "Deals", path: `${basePath}/deals`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" });
       }
-      if (hasPermission("task.view")) {
-        opsNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
+      if (hasPermission("activity.view")) {
+        opsNav.push({ label: "Activities", path: `${basePath}/activities`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
       }
       return opsNav;
     }
@@ -171,9 +170,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       }
       if (hasPermission("deal.view")) {
         supportNav.push({ label: "Deals", path: `${basePath}/deals`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" });
-      }
-      if (hasPermission("task.view")) {
-        supportNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
       }
       if (hasPermission("activity.view")) {
         supportNav.push({ label: "Activities", path: `${basePath}/activities`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
@@ -214,9 +210,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       }
       if (hasPermission("deal.view")) {
         auditorNav.push({ label: "Deals", path: `${basePath}/deals`, icon: "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" });
-      }
-      if (hasPermission("task.view")) {
-        auditorNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });
       }
       if (hasPermission("activity.view")) {
         auditorNav.push({ label: "Activities", path: `${basePath}/activities`, icon: "M22 12h-4l-3 9L9 3l-3 9H2" });

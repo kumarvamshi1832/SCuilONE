@@ -1,8 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { Account, AccountDetails } from "../../types/account";
 import { User } from "../../types/user";
 import { formatDateTime } from "../../utils/dateFormatter";
 import { getAccountById } from "../../services/accountService";
+import { getDeals } from "../../services/dealService";
+import { getLeads } from "../../services/leadService";
+import { getContacts } from "../../services/contactService";
+import type { Deal } from "../../types/deal";
+import type { Lead } from "../../types/lead";
+import type { Contact } from "../../types/contact";
+import "./AccountViewModal.css";
 
 interface AccountViewModalProps {
   account: Account;
@@ -31,6 +38,71 @@ export default function AccountViewModal({ account, users, onClose }: AccountVie
       });
   }, [account.id]);
 
+  // Section expand/collapse states (collapsed by default)
+  const [showDeals, setShowDeals] = useState(false);
+  const [showLeads, setShowLeads] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
+
+  // Filtered lists for this account
+  const [dealsList, setDealsList] = useState<Deal[] | null>(null);
+  const [leadsList, setLeadsList] = useState<Lead[] | null>(null);
+  const [contactsList, setContactsList] = useState<Contact[] | null>(null);
+  const [loadingRelated, setLoadingRelated] = useState(true);
+  const [errorRelated, setErrorRelated] = useState<string | null>(null);
+
+  // Cached lists for resolving lead and contact names
+  const [allLeads, setAllLeads] = useState<Lead[] | null>(null);
+  const [allContacts, setAllContacts] = useState<Contact[] | null>(null);
+  const allLeadsRef = useRef<Lead[] | null>(null);
+  const allContactsRef = useRef<Contact[] | null>(null);
+
+  // Name resolution lookup maps
+  const leadMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const list = allLeads || allLeadsRef.current;
+
+    if (list) {
+      list.forEach((lead) => {
+        if (lead.id) map.set(lead.id, lead.full_name);
+      });
+    }
+
+    return map;
+  }, [allLeads]);
+
+  const contactMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const list = allContacts || allContactsRef.current;
+
+    if (list) {
+      list.forEach((contact) => {
+        if (contact.id) map.set(contact.id, contact.full_name);
+      });
+    }
+
+    return map;
+  }, [allContacts]);
+
+  const getLeadName = (leadId: string | null | undefined): string => {
+    if (!leadId) return "—";
+    const name = leadMap.get(leadId);
+    if (name) return name;
+
+    const lead = allLeadsRef.current?.find((item) => item.id === leadId);
+    return lead ? lead.full_name : "Unknown Lead";
+  };
+
+  const getContactName = (contactId: string | null | undefined): string => {
+    if (!contactId) return "—";
+    const name = contactMap.get(contactId);
+    if (name) return name;
+
+    const contact = allContactsRef.current?.find(
+      (item) => item.id === contactId
+    );
+    return contact ? contact.full_name : "Unknown Contact";
+  };
+
   const getAssignedUser = (userId: string | null) => {
     if (!userId) return "—";
     const user = users.find((u) => u.id === userId);
@@ -47,12 +119,70 @@ export default function AccountViewModal({ account, users, onClose }: AccountVie
     }).format(Number(amount));
   };
 
+  // Fetch account details and related records
+  useEffect(() => {
+    setLoading(true);
+    setLoadingRelated(true);
+    setError(null);
+    setErrorRelated(null);
+
+    setShowDeals(false);
+    setShowLeads(false);
+    setShowContacts(false);
+
+    Promise.all([
+      getAccountById(account.id),
+      getDeals().catch((err) => {
+        console.error("Failed to load deals:", err);
+        return [] as Deal[];
+      }),
+      getLeads().catch((err) => {
+        console.error("Failed to load leads:", err);
+        return [] as Lead[];
+      }),
+      getContacts().catch((err) => {
+        console.error("Failed to load contacts:", err);
+        return [] as Contact[];
+      }),
+    ])
+      .then(([accountData, allDeals, allLeadsData, allContactsData]) => {
+        setDetails(accountData);
+
+        allLeadsRef.current = allLeadsData;
+        allContactsRef.current = allContactsData;
+        setAllLeads(allLeadsData);
+        setAllContacts(allContactsData);
+
+        setDealsList(allDeals.filter((d) => d.account_id === account.id));
+        setLeadsList(allLeadsData.filter((l) => l.account_id === account.id));
+        setContactsList(
+          allContactsData.filter((c) => c.account_id === account.id)
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to load account details:", err);
+        setError("Failed to load account details.");
+      })
+      .finally(() => {
+        setLoading(false);
+        setLoadingRelated(false);
+      });
+  }, [account.id]);
+
+  const dealsCount = dealsList ? dealsList.length : 0;
+  const leadsCount = leadsList ? leadsList.length : 0;
+  const contactsCount = contactsList ? contactsList.length : 0;
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+      <div
+        className="modal-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: "800px" }}
+      >
         <div className="modal-header">
           <h2>Account Details</h2>
-          <button className="btn-close" onClick={onClose}>
+          <button className="btn-close" onClick={onClose} aria-label="Close modal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -66,10 +196,12 @@ export default function AccountViewModal({ account, users, onClose }: AccountVie
           ) : error ? (
             <div style={{ textAlign: "center", padding: "40px", color: "#e53e3e" }}>{error}</div>
           ) : details ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               {/* Overview Section */}
               <section>
-                <h3 style={{ marginBottom: "16px", fontSize: "1.1rem", color: "#2d3748", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Overview</h3>
+                <h3 className="account-modal-section-title">
+                  Overview
+                </h3>
                 <div className="detail-grid">
                   <div className="detail-group">
                     <label className="text-muted">Account Name</label>
@@ -144,89 +276,323 @@ export default function AccountViewModal({ account, users, onClose }: AccountVie
 
               {/* Revenue Summary */}
               <section>
-                <h3 style={{ marginBottom: "16px", fontSize: "1.1rem", color: "#2d3748", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Revenue Summary</h3>
+                <h3 className="account-modal-section-title">
+                  Revenue Summary
+                </h3>
                 <div className="detail-grid">
                   <div className="detail-group">
                     <label className="text-muted">Total Deals</label>
-                    <p className="detail-value" style={{ fontWeight: 600 }}>{details.total_deals}</p>
+                    <p className="detail-value revenue-summary-value">
+                      {details.total_deals}
+                    </p>
                   </div>
                   <div className="detail-group">
                     <label className="text-muted">Won Deals</label>
-                    <p className="detail-value" style={{ fontWeight: 600, color: "#38a169" }}>{details.won_deals}</p>
+                    <p className="detail-value revenue-won-value">
+                      {details.won_deals}
+                    </p>
                   </div>
                   <div className="detail-group">
                     <label className="text-muted">Total Revenue (Won)</label>
-                    <p className="detail-value" style={{ fontWeight: 600, color: "#38a169" }}>{formatCurrency(details.total_revenue)}</p>
+                    <p className="detail-value revenue-won-value">
+                      {formatCurrency(details.total_revenue)}
+                    </p>
                   </div>
                 </div>
               </section>
 
-              {/* Related Deals */}
+              {/* Related Records Section */}
               <section>
-                <h3 style={{ marginBottom: "16px", fontSize: "1.1rem", color: "#2d3748", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Related Deals</h3>
-                {details.deals.length === 0 ? (
-                  <p className="text-muted italic">No deals related to this account.</p>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {details.deals.map((deal) => (
-                      <div key={deal.id} style={{ display: "flex", justifyContent: "space-between", padding: "12px", border: "1px solid #e2e8f0", borderRadius: "6px" }}>
-                        <div>
-                          <div style={{ fontWeight: 500 }}>{deal.name}</div>
-                          <div className="text-muted" style={{ fontSize: "0.85rem" }}>Stage: {deal.stage}</div>
-                        </div>
-                        <div style={{ fontWeight: 600 }}>
-                          {formatCurrency(deal.amount)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                <h3 className="account-modal-section-title">
+                  Related Records
+                </h3>
 
-              {/* Related Leads */}
-              <section>
-                <h3 style={{ marginBottom: "16px", fontSize: "1.1rem", color: "#2d3748", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Related Leads</h3>
-                {details.leads.length === 0 ? (
-                  <p className="text-muted italic">No leads related to this account.</p>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {details.leads.map((lead) => (
-                      <div key={lead.id} style={{ padding: "12px", border: "1px solid #e2e8f0", borderRadius: "6px" }}>
-                        <div style={{ fontWeight: 500 }}>{lead.full_name}</div>
-                        <div className="text-muted" style={{ fontSize: "0.85rem", marginTop: "4px" }}>
-                          {lead.email && <span style={{ marginRight: "12px" }}>📧 {lead.email}</span>}
-                          {lead.phone && <span style={{ marginRight: "12px" }}>📞 {lead.phone}</span>}
-                          <span>Status: {lead.status}</span>
+                <div className="related-sections-container">
+                  {/* Related Deals Card */}
+                  <div className="related-section-card">
+                    <div
+                      className="related-section-header"
+                      onClick={() => setShowDeals((prev) => !prev)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setShowDeals((prev) => !prev);
+                        }
+                      }}
+                    >
+                      <div className="related-header-left">
+                        <div className="related-icon-box related-icon-deals">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                          </svg>
                         </div>
+                        <h4 className="related-header-title">Related Deals</h4>
+                        <span className={`related-count-badge ${dealsCount > 0 ? "has-records" : ""}`}>
+                          {loadingRelated ? "…" : dealsCount}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                      <button
+                        type="button"
+                        className="related-toggle-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowDeals((prev) => !prev);
+                        }}
+                        aria-label={showDeals ? "Collapse Related Deals" : "Expand Related Deals"}
+                      >
+                        <span>{showDeals ? "Hide" : "View"}</span>
+                        <svg
+                          className="related-toggle-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{
+                            transform: showDeals ? "rotate(180deg)" : "rotate(0deg)",
+                          }}
+                        >
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </button>
+                    </div>
 
-              {/* Related Contacts */}
-              <section>
-                <h3 style={{ marginBottom: "16px", fontSize: "1.1rem", color: "#2d3748", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Related Contacts</h3>
-                {details.contacts.length === 0 ? (
-                  <p className="text-muted italic">No contacts related to this account.</p>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {details.contacts.map((contact) => (
-                      <div key={contact.id} style={{ padding: "12px", border: "1px solid #e2e8f0", borderRadius: "6px" }}>
-                        <div style={{ fontWeight: 500 }}>{contact.full_name}</div>
-                        <div className="text-muted" style={{ fontSize: "0.85rem", marginTop: "4px" }}>
-                          {contact.email && <span style={{ marginRight: "12px" }}>📧 {contact.email}</span>}
-                          {contact.phone && <span style={{ marginRight: "12px" }}>📞 {contact.phone}</span>}
-                          {(contact.job_title || contact.company) && (
-                            <span style={{ display: "block", marginTop: "4px" }}>
-                              {contact.job_title} {contact.job_title && contact.company && "at"} {contact.company}
-                            </span>
-                          )}
-                        </div>
+                    {showDeals && (
+                      <div className="related-content">
+                        {loadingRelated ? (
+                          <div className="related-loading-state">Loading deals...</div>
+                        ) : errorRelated ? (
+                          <div className="related-empty-state" style={{ color: "#e53e3e" }}>{errorRelated}</div>
+                        ) : (!dealsList || dealsList.length === 0) ? (
+                          <div className="related-empty-state">No related deals found for this account.</div>
+                        ) : (
+                          <div className="related-table-wrapper">
+                            <table className="related-table">
+                              <thead>
+                                <tr>
+                                  <th>Deal Name</th>
+                                  <th>Lead</th>
+                                  <th>Contact</th>
+                                  <th>Stage</th>
+                                  <th style={{ textAlign: "right" }}>Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {dealsList.map((deal) => (
+                                  <tr key={deal.id}>
+                                    <td className="related-deal-name">{deal.name || "—"}</td>
+                                    <td className="related-lead-ref">{getLeadName(deal.lead_id)}</td>
+                                    <td className="related-contact-ref">{getContactName(deal.contact_id)}</td>
+                                    <td>
+                                      <span className="related-badge">{deal.stage || "—"}</span>
+                                    </td>
+                                    <td className="related-amount-cell">
+                                      {formatCurrency(deal.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+
+                  {/* Related Leads Card */}
+                  <div className="related-section-card">
+                    <div
+                      className="related-section-header"
+                      onClick={() => setShowLeads((prev) => !prev)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setShowLeads((prev) => !prev);
+                        }
+                      }}
+                    >
+                      <div className="related-header-left">
+                        <div className="related-icon-box related-icon-leads">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                          </svg>
+                        </div>
+                        <h4 className="related-header-title">Related Leads</h4>
+                        <span className={`related-count-badge ${leadsCount > 0 ? "has-records" : ""}`}>
+                          {loadingRelated ? "…" : leadsCount}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="related-toggle-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowLeads((prev) => !prev);
+                        }}
+                        aria-label={showLeads ? "Collapse Related Leads" : "Expand Related Leads"}
+                      >
+                        <span>{showLeads ? "Hide" : "View"}</span>
+                        <svg
+                          className="related-toggle-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{
+                            transform: showLeads ? "rotate(180deg)" : "rotate(0deg)",
+                          }}
+                        >
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </button>
+                    </div>
+
+                    {showLeads && (
+                      <div className="related-content">
+                        {loadingRelated ? (
+                          <div className="related-loading-state">Loading leads...</div>
+                        ) : errorRelated ? (
+                          <div className="related-empty-state" style={{ color: "#e53e3e" }}>{errorRelated}</div>
+                        ) : (!leadsList || leadsList.length === 0) ? (
+                          <div className="related-empty-state">No related leads found for this account.</div>
+                        ) : (
+                          <div className="related-table-wrapper">
+                            <table className="related-table">
+                              <thead>
+                                <tr>
+                                  <th>Lead Name</th>
+                                  <th>Status</th>
+                                  <th>Email</th>
+                                  <th>Phone</th>
+                                  <th>Source</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {leadsList.map((lead) => (
+                                  <tr key={lead.id}>
+                                    <td className="related-lead-name">{lead.full_name}</td>
+                                    <td>
+                                      <span className="related-badge related-badge-teal">{lead.status || "—"}</span>
+                                    </td>
+                                    <td className="related-cell-muted">{lead.email || "—"}</td>
+                                    <td className="related-cell-muted">{lead.phone || "—"}</td>
+                                    <td className="related-cell-dim">{lead.source || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Related Contacts Card */}
+                  <div className="related-section-card">
+                    <div
+                      className="related-section-header"
+                      onClick={() => setShowContacts((prev) => !prev)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setShowContacts((prev) => !prev);
+                        }
+                      }}
+                    >
+                      <div className="related-header-left">
+                        <div className="related-icon-box related-icon-contacts">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                          </svg>
+                        </div>
+                        <h4 className="related-header-title">Related Contacts</h4>
+                        <span className={`related-count-badge ${contactsCount > 0 ? "has-records" : ""}`}>
+                          {loadingRelated ? "…" : contactsCount}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="related-toggle-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowContacts((prev) => !prev);
+                        }}
+                        aria-label={showContacts ? "Collapse Related Contacts" : "Expand Related Contacts"}
+                      >
+                        <span>{showContacts ? "Hide" : "View"}</span>
+                        <svg
+                          className="related-toggle-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{
+                            transform: showContacts ? "rotate(180deg)" : "rotate(0deg)",
+                          }}
+                        >
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </button>
+                    </div>
+
+                    {showContacts && (
+                      <div className="related-content">
+                        {loadingRelated ? (
+                          <div className="related-loading-state">Loading contacts...</div>
+                        ) : errorRelated ? (
+                          <div className="related-empty-state" style={{ color: "#e53e3e" }}>{errorRelated}</div>
+                        ) : (!contactsList || contactsList.length === 0) ? (
+                          <div className="related-empty-state">No related contacts found for this account.</div>
+                        ) : (
+                          <div className="related-table-wrapper">
+                            <table className="related-table">
+                              <thead>
+                                <tr>
+                                  <th>Contact Name</th>
+                                  <th>Title / Company</th>
+                                  <th>Email</th>
+                                  <th>Phone</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {contactsList.map((contact) => (
+                                  <tr key={contact.id}>
+                                    <td className="related-contact-name">{contact.full_name}</td>
+                                    <td className="related-cell-muted">
+                                      {contact.job_title || contact.company
+                                        ? [contact.job_title, contact.company].filter(Boolean).join(" at ")
+                                        : "—"}
+                                    </td>
+                                    <td className="related-cell-muted">{contact.email || "—"}</td>
+                                    <td className="related-cell-muted">{contact.phone || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </section>
             </div>
           ) : null}

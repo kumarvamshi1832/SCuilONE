@@ -14,6 +14,7 @@ const getHeaders = () => {
 
 const LEADS_ENDPOINTS = {
   LIST: "/api/v1/leads/",
+  MY_LEADS: "/api/v1/leads/my-leads",
   DETAIL: (id: string) => `/api/v1/leads/${id}`,
 } as const;
 
@@ -21,6 +22,11 @@ const LEADS_ENDPOINTS = {
 
 export const getLeads = async (): Promise<Lead[]> => {
   const response = await apiClient.get<Lead[]>(LEADS_ENDPOINTS.LIST, getHeaders());
+  return response.data;
+};
+
+export const getMyLeads = async (): Promise<Lead[]> => {
+  const response = await apiClient.get<Lead[]>(LEADS_ENDPOINTS.MY_LEADS, getHeaders());
   return response.data;
 };
 

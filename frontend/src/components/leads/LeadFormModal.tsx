@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Lead, CreateLeadRequest, UpdateLeadRequest, LeadStatus, LeadSource } from "../../types/lead";
 import { User } from "../../types/user";
 import { createLead, updateLead } from "../../services/leadService";
+import { createActivity, getActivities } from "../../services/activityService";
+import type { Activity } from "../../types/activity";
 import { getUsers } from "../../services/userService";
 import { getAccounts } from "../../services/accountService";
 import { friendlyAssignmentError } from "../../utils/leadPermissions";
@@ -43,7 +45,12 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
   const [usersLoading, setUsersLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [createdLead, setCreatedLead] = useState<Lead | null>(null);
+  const [createdTask, setCreatedTask] = useState<Activity | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     setUsersLoading(true);
@@ -70,11 +77,21 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
     return Object.keys(errors).length === 0;
   };
 
+  const handleClose = () => {
+    if (createdLead) {
+      onSuccess(createdLead);
+    }
+    onClose();
+  };
+
   const handleSubmit = async () => {
+    if (isSubmittingRef.current) return;
     if (!validate()) return;
 
+    isSubmittingRef.current = true;
     setLoading(true);
     setError(null);
+    setTaskError(null);
 
     try {
       let savedLead: Lead;
@@ -93,19 +110,71 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
         if (!accountId) data.account_id = null;
         savedLead = await updateLead(lead.id, data);
       } else {
-        const data: CreateLeadRequest = {
-          full_name: fullName.trim(),
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          source: source || undefined,
-          status,
-          assigned_to: assignedTo || undefined,
-          account_id: accountId || undefined,
-          notes: notes.trim() || undefined,
-        };
-        if (!assignedTo) data.assigned_to = null;
-        if (!accountId) data.account_id = null;
-        savedLead = await createLead(data);
+        // Prevent duplicate Lead creation on repeated submissions or retry
+        if (createdLead) {
+          savedLead = createdLead;
+        } else {
+          const data: CreateLeadRequest = {
+            full_name: fullName.trim(),
+            email: email.trim() || undefined,
+            phone: phone.trim() || undefined,
+            source: source || undefined,
+            status,
+            assigned_to: assignedTo || undefined,
+            account_id: accountId || undefined,
+            notes: notes.trim() || undefined,
+          };
+          if (!assignedTo) data.assigned_to = null;
+          if (!accountId) data.account_id = null;
+          savedLead = await createLead(data);
+          setCreatedLead(savedLead);
+        }
+
+        // When assigned to an employee, automatically create follow-up task (or reuse existing)
+        if (assignedTo && !createdTask) {
+          try {
+            // Check if follow-up task already exists for this lead to avoid duplicates
+            const existingActivities = await getActivities().catch(() => []);
+            const existingTask = existingActivities.find(
+              (a) => a.lead_id === savedLead.id && a.activity_type === "Task"
+            );
+
+            if (existingTask) {
+              setCreatedTask(existingTask);
+            } else {
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const newTask = await createActivity({
+                title: `Follow up with ${savedLead.full_name}`,
+                description: `Initial follow-up task for newly assigned lead ${savedLead.full_name}.`,
+                activity_type: "Task",
+                status: "Pending",
+                priority: "Medium",
+                due_date: tomorrow.toISOString(),
+                assigned_to: assignedTo,
+                lead_id: savedLead.id,
+                account_id: savedLead.account_id || null,
+              });
+              setCreatedTask(newTask);
+            }
+            // Dispatch update event so any active task lists refresh automatically
+            window.dispatchEvent(new CustomEvent("crm:activity-updated"));
+          } catch (taskErr: any) {
+            console.error("Follow-up task creation error:", taskErr);
+            const rawTaskMsg =
+              taskErr?.response?.data?.detail ||
+              taskErr?.response?.data?.message ||
+              taskErr?.message ||
+              "Failed to create follow-up task.";
+            const taskMsg = typeof rawTaskMsg === "string" ? rawTaskMsg : "Failed to create follow-up task.";
+            setTaskError(
+              `Lead "${savedLead.full_name}" was created successfully, but creating the follow-up task failed: ${taskMsg}. Click "Retry Creating Follow-up Task" to try again without duplicating the lead.`
+            );
+            setLoading(false);
+            isSubmittingRef.current = false;
+            return;
+          }
+        }
       }
       onSuccess(savedLead);
       onClose();
@@ -144,15 +213,16 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
       setError(friendlyAssignmentError(message));
     } finally {
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content leads-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{isEdit ? "Edit Lead" : "Create Lead"}</h2>
-          <button className="btn-close" onClick={onClose}>
+          <button className="btn-close" onClick={handleClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -177,6 +247,25 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
             </div>
           )}
 
+          {taskError && (
+            <div
+              className="alert-box warning"
+              style={{
+                padding: "12px 14px",
+                marginBottom: "16px",
+                borderRadius: "6px",
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                color: "#92400e",
+                fontSize: "0.875rem",
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>Follow-up Task Pending</div>
+              <div>{taskError}</div>
+            </div>
+          )}
+
           <div className="form-group">
             <label>
               Full Name <span style={{ color: "#e53e3e" }}>*</span>
@@ -190,7 +279,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
                 setFieldErrors((prev) => ({ ...prev, full_name: "" }));
                 setError(null);
               }}
-              disabled={loading}
+              disabled={loading || !!createdLead}
               className={fieldErrors.full_name ? "input-error" : ""}
             />
             {fieldErrors.full_name && (
@@ -210,7 +299,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
                   setFieldErrors((prev) => ({ ...prev, email: "" }));
                   setError(null);
                 }}
-                disabled={loading}
+                disabled={loading || !!createdLead}
                 className={fieldErrors.email ? "input-error" : ""}
               />
               {fieldErrors.email && (
@@ -228,7 +317,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
                   setPhone(e.target.value);
                   setError(null);
                 }}
-                disabled={loading}
+                disabled={loading || !!createdLead}
               />
             </div>
           </div>
@@ -239,7 +328,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
               <select
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
-                disabled={loading}
+                disabled={loading || !!createdLead}
               >
                 <option value="">-- Select Source --</option>
                 {LEAD_SOURCES.map((s) => (
@@ -255,7 +344,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                disabled={loading}
+                disabled={loading || !!createdLead}
               >
                 {LEAD_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -272,7 +361,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                disabled={loading || usersLoading}
+                disabled={loading || usersLoading || !!createdLead}
               >
                 <option value="">-- Select Account --</option>
                 {accounts.map((a) => (
@@ -289,7 +378,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
                 users={users}
                 value={assignedTo}
                 onChange={setAssignedTo}
-                disabled={loading}
+                disabled={loading || !!createdLead}
                 loading={usersLoading}
               />
             </div>
@@ -304,23 +393,27 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
                 setNotes(e.target.value);
                 setError(null);
               }}
-              disabled={loading}
+              disabled={loading || !!createdLead}
               rows={3}
             />
           </div>
         </div>
 
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose} disabled={loading}>
-            Cancel
+          <button className="btn-secondary" onClick={handleClose} disabled={loading}>
+            {createdLead ? "Close (Lead Saved)" : "Cancel"}
           </button>
           <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
             {loading
               ? isEdit
                 ? "Saving…"
+                : createdLead
+                ? "Retrying Task…"
                 : "Creating…"
               : isEdit
               ? "Save Changes"
+              : createdLead
+              ? "Retry Creating Follow-up Task"
               : "Create Lead"}
           </button>
         </div>
