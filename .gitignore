@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 venv/
 backend/venv/
 __pycache__/
@@ -19,3 +19,11 @@ __pycache__/
 
 # Node dependencies
 node_modules/
+
+# Frontend build output
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+
+# Backend virtual environment created locally
+backend/vev/
