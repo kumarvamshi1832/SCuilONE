@@ -32,33 +32,42 @@ export default function ActivityViewModal({
   onViewLead,
   onClose,
 }: ActivityViewModalProps) {
+  const areIdsEqual = (a?: string | null, b?: string | null): boolean => {
+    if (!a || !b) return false;
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+  };
+
   const getAssignedUser = (userId: string | null) => {
     if (!userId) return "—";
-    const user = users.find((u) => u.id === userId);
+    const user = users.find((u) => areIdsEqual(u.id, userId));
     return user ? `${user.full_name} (${user.role})` : userId;
   };
 
   const getLeadName = (leadId: string | null) => {
     if (!leadId) return "—";
-    const lead = leads.find((l) => l.id === leadId);
-    return lead ? lead.full_name : "Unknown Lead";
+    const lead = leads.find((l) => areIdsEqual(l.id, leadId));
+    if (lead) return lead.full_name;
+    if (activity.title?.toLowerCase().startsWith("follow up with ")) {
+      return activity.title.slice(15).trim();
+    }
+    return "Unknown Lead";
   };
 
   const getContactName = (contactId: string | null) => {
     if (!contactId) return "—";
-    const contact = contacts.find((c) => c.id === contactId);
+    const contact = contacts.find((c) => areIdsEqual(c.id, contactId));
     return contact ? contact.full_name : "Unknown Contact";
   };
 
   const getAccountName = (accountId: string | null) => {
     if (!accountId) return "—";
-    const account = accounts.find((a) => a.id === accountId);
+    const account = accounts.find((a) => areIdsEqual(a.id, accountId));
     return account ? account.name : "Unknown Account";
   };
 
   const getDealName = (dealId: string | null) => {
     if (!dealId) return "—";
-    const deal = deals.find((d) => d.id === dealId);
+    const deal = deals.find((d) => areIdsEqual(d.id, dealId));
     return deal ? deal.name : "Unknown Deal";
   };
 
@@ -175,7 +184,7 @@ export default function ActivityViewModal({
               <div className="detail-group">
                 <label className="text-muted">Related Lead</label>
                 {(() => {
-                  const leadObj = activity.lead_id ? leads.find((l) => l.id === activity.lead_id) : null;
+                  const leadObj = activity.lead_id ? leads.find((l) => areIdsEqual(l.id, activity.lead_id)) : null;
                   if (leadObj && onViewLead) {
                     return (
                       <p

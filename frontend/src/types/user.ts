@@ -18,5 +18,6 @@ export interface User {
   phone?: string;
   role: string;
   status: string;
+  photo_url?: string | null;
   created_at?: string;
 }

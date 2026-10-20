@@ -18,6 +18,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.core.security import hash_password, verify_password
 
+from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.role import Role
 from app.models.user_role import UserRole
@@ -119,39 +120,23 @@ async def create_user(
         db.rollback()
         raise
 
+    email_sent = True
     try:
         await send_user_invitation_email(
             recipient_email=new_user.email,
             full_name=new_user.full_name,
             invitation_token=invitation_token,
         )
-    except Exception:
-        db.rollback()
-
-        db.query(UserInvitation).filter(
-            UserInvitation.token_hash == token_hash
-        ).delete(synchronize_session=False)
-
-        db.query(UserRole).filter(
-            UserRole.user_id == new_user.id
-        ).delete(synchronize_session=False)
-
-        db.query(User).filter(
-            User.id == new_user.id
-        ).delete(synchronize_session=False)
-
-        db.commit()
-
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                "Invitation email could not be sent. "
-                "Please try again."
-            ),
-        )
+    except Exception as email_err:
+        email_sent = False
+        print(f"Warning: invitation email delivery failed: {email_err}")
 
     return {
-        "message": "User created and invitation sent successfully",
+        "message": (
+            "User created and invitation sent successfully"
+            if email_sent
+            else "User created successfully (invitation email could not be delivered, please verify the email address)"
+        ),
         "user": {
             "id": str(new_user.id),
             "full_name": new_user.full_name,
@@ -160,6 +145,7 @@ async def create_user(
             "role": role.name,
             "status": new_user.status,
         },
+        "invitation_sent": email_sent,
     }
 
 
@@ -415,12 +401,22 @@ async def upload_my_profile_photo(
     except HTTPException:
         db.rollback()
         raise
-    except Exception:
-        db.rollback()
-        raise HTTPException(
-            status_code=502,
-            detail="Photo upload failed. Please try again.",
-        )
+    except Exception as upload_err:
+        try:
+            import base64
+            mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+            mime_type = mime_map.get(image.format, "image/jpeg")
+            encoded = base64.b64encode(contents).decode("utf-8")
+            data_url = f"data:{mime_type};base64,{encoded}"
+            user.photo_url = data_url
+            db.commit()
+            db.refresh(user)
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Photo upload failed: {str(upload_err)}",
+            )
     finally:
         await file.close()
 

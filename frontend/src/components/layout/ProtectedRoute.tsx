@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { normalizeIndustry } from "../../utils/industryUtils";
 
 export default function ProtectedRoute() {
   const token = sessionStorage.getItem("access_token");
@@ -23,39 +24,38 @@ export default function ProtectedRoute() {
   const isOps = userRole === "OPERATIONS_USER" || userRole === "OPERATIONS USER" || userRole.includes("OPERATIONS");
   const isSupport = userRole === "SUPPORT_USER" || userRole === "SUPPORT USER" || userRole.includes("SUPPORT");
   const isAuditor = userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR");
+  const isTenantAdmin = !isManager && !isSales && !isOps && !isSupport && !isAuditor;
 
-  const getExpectedDashboard = () => {
+  const getExpectedDashboard = (): string | null => {
     if (isManager) return "/manager/dashboard";
     if (isSales) return "/sales/dashboard";
     if (isOps) return "/operations/dashboard";
     if (isSupport) return "/support/dashboard";
     if (isAuditor) return "/auditor/dashboard";
-    
+
     const tenantStr = sessionStorage.getItem("tenant");
-    let expectedSlug = "real-estate";
     if (tenantStr) {
       try {
         const tenant = JSON.parse(tenantStr);
         if (tenant && tenant.industry) {
-          expectedSlug = tenant.industry.toLowerCase().replace(/\s+/g, "-");
+          const expectedSlug = normalizeIndustry(tenant.industry);
+          return `/${expectedSlug}/dashboard`;
         }
       } catch (e) {}
     }
-    return `/${expectedSlug}/dashboard`;
+
+    // Do NOT default to real-estate if tenant/industry data is not yet available
+    return null;
   };
 
   const expectedDashboard = getExpectedDashboard();
-
-  // Prevent accessing dashboards they shouldn't
   const path = location.pathname;
-  if (path.endsWith("/dashboard") && path !== expectedDashboard) {
-     return <Navigate to={expectedDashboard} replace />;
-  }
 
-  // Prevent restricted users from accessing Tenant Admin routes (users, roles, permissions, settings)
-  const isTenantAdmin = !isManager && !isSales && !isOps && !isSupport && !isAuditor;
-
-  if (!isTenantAdmin) {
+  // For role-based users, enforce role dashboard
+  if (!isTenantAdmin && expectedDashboard) {
+    if (path.endsWith("/dashboard") && path !== expectedDashboard) {
+      return <Navigate to={expectedDashboard} replace />;
+    }
     if (
       path.endsWith("/users") ||
       path.endsWith("/roles") ||
@@ -66,11 +66,14 @@ export default function ProtectedRoute() {
     }
   }
 
-  // Enforce industry matching for tenant admins
-  if (isTenantAdmin) {
+  // For tenant admin, if tenant industry is known, enforce correct industry dashboard and routes
+  if (isTenantAdmin && expectedDashboard) {
+    if (path.endsWith("/dashboard") && path !== expectedDashboard) {
+      return <Navigate to={expectedDashboard} replace />;
+    }
+
     const urlIndustry = path.split("/")[1];
     const expectedSlug = expectedDashboard.split("/")[1];
-    
     if (urlIndustry && urlIndustry !== expectedSlug && urlIndustry !== "empty") {
       return <Navigate to={expectedDashboard} replace />;
     }

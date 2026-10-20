@@ -434,6 +434,7 @@ def login(
             "id": str(user.id),
             "name": user.full_name,
             "email": user.email,
+            "photo_url": user.photo_url,
             "status": user.status,
             "must_change_password": user.must_change_password,
             "profile_completed": user.profile_completed

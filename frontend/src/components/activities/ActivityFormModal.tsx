@@ -22,6 +22,7 @@ import "../../pages/activities/Activities.css";
 
 interface ActivityFormModalProps {
   activity?: Activity | null;
+  defaultType?: ActivityType;
   onClose: () => void;
   onSuccess: (savedActivity: Activity) => void;
 }
@@ -54,6 +55,7 @@ const formatForDateTimeLocal = (isoString?: string | null): string => {
 
 export default function ActivityFormModal({
   activity,
+  defaultType,
   onClose,
   onSuccess,
 }: ActivityFormModalProps) {
@@ -61,7 +63,9 @@ export default function ActivityFormModal({
 
   const [title, setTitle] = useState(activity?.title || "");
   const [description, setDescription] = useState(activity?.description || "");
-  const [activityType, setActivityType] = useState<ActivityType>(activity?.activity_type || "Task");
+  const [activityType, setActivityType] = useState<ActivityType>(
+    activity?.activity_type || defaultType || "Task"
+  );
   const [status, setStatus] = useState<ActivityStatus>(activity?.status || "Pending");
   const [priority, setPriority] = useState<ActivityPriority>(activity?.priority || "Medium");
   const [dueDate, setDueDate] = useState<string>(formatForDateTimeLocal(activity?.due_date));
@@ -252,6 +256,7 @@ export default function ActivityFormModal({
         const created = await createActivity(createPayload);
         onSuccess(created);
       }
+      window.dispatchEvent(new CustomEvent("crm:activity-updated"));
       onClose();
     } catch (err: any) {
       console.error("Save activity error:", err);
@@ -274,7 +279,15 @@ export default function ActivityFormModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "700px" }}>
         <div className="modal-header">
-          <h2>{isEdit ? "Edit Activity" : "Create New Activity"}</h2>
+          <h2>
+            {isEdit
+              ? activityType === "Task"
+                ? "Edit Task"
+                : "Edit Activity"
+              : activityType === "Task"
+              ? "Create New Task"
+              : "Create New Activity"}
+          </h2>
           <button className="btn-close" onClick={onClose} disabled={loading} aria-label="Close modal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -535,7 +548,15 @@ export default function ActivityFormModal({
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? (isEdit ? "Saving..." : "Creating...") : isEdit ? "Save Changes" : "Create Activity"}
+              {loading
+                ? isEdit
+                  ? "Saving..."
+                  : "Creating..."
+                : isEdit
+                ? "Save Changes"
+                : activityType === "Task"
+                ? "Create Task"
+                : "Create Activity"}
             </button>
           </div>
         </form>

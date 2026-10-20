@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { normalizeIndustry } from "../../utils/industryUtils";
 import "./RealEstateDashboard.css";
 import { getMyProfile } from "../../services/profileService";
 
@@ -13,10 +14,10 @@ export default function OperationsDashboard() {
   if (tenantStr) {
     try {
       const t = JSON.parse(tenantStr);
-      if (t?.industry) tenantIndustry = t.industry.toLowerCase().replace(/\s+/g, '-');
+      if (t?.industry) tenantIndustry = normalizeIndustry(t.industry);
     } catch(e) {}
   }
-  const currentIndustry = industry || tenantIndustry;
+  const currentIndustry = normalizeIndustry(industry || tenantIndustry);
   const basePath = `/${currentIndustry}`;
 
   useEffect(() => {

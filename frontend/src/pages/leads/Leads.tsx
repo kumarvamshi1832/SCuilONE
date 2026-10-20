@@ -9,6 +9,7 @@ import LeadFormModal from "../../components/leads/LeadFormModal";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import LeadDeleteConfirm from "../../components/leads/LeadDeleteConfirm";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { normalizeIndustry } from "../../utils/industryUtils";
 import "../users/Users.css";
 import "./Leads.css";
 
@@ -28,8 +29,41 @@ function getStatusClass(status: string): string {
 
 
 export default function Leads() {
-  /* â”€â”€â”€ Permissions â”€â”€â”€ */
+  /* ─── Permissions & User Context ─── */
   const permissions = useMemo(() => getLeadPermissions(), []);
+  const userContext = useMemo(() => {
+    const userStr = sessionStorage.getItem("user");
+    let userId = "";
+    let role = "";
+    if (userStr) {
+      try {
+        const u = JSON.parse(userStr);
+        userId = u.id || u.user_id || u.userId || u.uuid || "";
+        role = (u.role || "").toUpperCase();
+      } catch (e) {}
+    }
+    const token = sessionStorage.getItem("access_token");
+    if (!userId && token) {
+      try {
+        const parts = token.split(".");
+        if (parts.length === 3 && parts[1]) {
+          const payload = JSON.parse(atob(parts[1]));
+          userId = payload.user_id || payload.sub || "";
+          if (!role && payload.role) role = String(payload.role).toUpperCase();
+        }
+      } catch (e) {}
+    }
+    const isManager = role.includes("MANAGER");
+    const isTenantOwnerOrAdmin =
+      role.includes("ADMIN") ||
+      role.includes("OWNER") ||
+      role === "TENANT ADMIN" ||
+      role === "TENANT OWNER" ||
+      role === "SUPER ADMIN";
+    const isAuditor = role.includes("AUDITOR") || role.includes("READ_ONLY") || role.includes("READ ONLY");
+    const canViewAllLeads = isTenantOwnerOrAdmin || isManager || isAuditor;
+    return { userId, role, canViewAllLeads };
+  }, []);
 
   const { industry } = useParams();
   const tenantStr = sessionStorage.getItem("tenant");
@@ -37,13 +71,13 @@ export default function Leads() {
   if (tenantStr) {
     try {
       const t = JSON.parse(tenantStr);
-      if (t?.industry) tenantIndustry = t.industry.toLowerCase().replace(/\s+/g, '-');
+      if (t?.industry) tenantIndustry = normalizeIndustry(t.industry);
     } catch(e) {}
   }
-  const currentIndustry = industry || tenantIndustry;
+  const currentIndustry = normalizeIndustry(industry || tenantIndustry);
   const isEdu = currentIndustry === "education-consulting";
 
-  /* â”€â”€â”€ State â”€â”€â”€ */
+  /* ─── State ─── */
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +104,7 @@ export default function Leads() {
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  /* â”€â”€â”€ Data Fetching â”€â”€â”€ */
+  /* ─── Data Fetching ─── */
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -79,11 +113,9 @@ export default function Leads() {
       const [leadsData, usersData] = await Promise.all([
         getLeads(),
         getUsers(),
-
       ]);
 
-      console.log("All leads from API:", leadsData);
-setLeads(leadsData);
+      setLeads(leadsData);
       setUsers(usersData);
     } catch (err: any) {
       console.error("Fetch leads error:", err);
@@ -106,6 +138,15 @@ setLeads(leadsData);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // Real-time synchronization when a lead is created or updated
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchData();
+    };
+    window.addEventListener("crm:lead-updated", handleUpdate);
+    return () => window.removeEventListener("crm:lead-updated", handleUpdate);
   }, [fetchData]);
 
   // Close actions dropdown on outside click
@@ -176,12 +217,24 @@ setLeads(leadsData);
     setAssignedFilter("");
   };
 
-  const hasActiveFilters = search || statusFilter || sourceFilter || assignedFilter;
+  const hasActiveFilters =
+    Boolean(search) ||
+    Boolean(statusFilter) ||
+    Boolean(sourceFilter) ||
+    Boolean(userContext.canViewAllLeads && assignedFilter);
 
-  /* â”€â”€â”€ Filtering (client-side) â”€â”€â”€ */
+  /* ─── Filtering (client-side) ─── */
 
   const filteredLeads = leads.filter((lead) => {
-    // Text search
+    // 1. Role-based visibility check: non-team-leads only see leads assigned to them
+    if (!userContext.canViewAllLeads) {
+      if (!lead.assigned_to || !userContext.userId) return false;
+      if (String(lead.assigned_to).toLowerCase() !== String(userContext.userId).toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 2. Text search
     if (search) {
       const q = search.toLowerCase();
       const matchesSearch =
@@ -191,12 +244,12 @@ setLeads(leadsData);
         (lead.source || "").toLowerCase().includes(q);
       if (!matchesSearch) return false;
     }
-    // Status filter
+    // 3. Status filter
     if (statusFilter && lead.status !== statusFilter) return false;
-    // Source filter
+    // 4. Source filter
     if (sourceFilter && lead.source !== sourceFilter) return false;
-    // Assigned filter
-    if (assignedFilter && lead.assigned_to !== assignedFilter) return false;
+    // 5. Assigned filter (only applicable for users who can view all leads)
+    if (userContext.canViewAllLeads && assignedFilter && lead.assigned_to !== assignedFilter) return false;
 
     return true;
   });
@@ -204,7 +257,7 @@ setLeads(leadsData);
   // Collect unique sources from data
   const uniqueSources = Array.from(new Set(leads.map((l) => l.source).filter(Boolean))) as string[];
 
-  /* â”€â”€â”€ Action Handlers â”€â”€â”€ */
+  /* ─── Action Handlers ─── */
 
   const handleCreate = () => {
     setEditLead(null);
@@ -212,9 +265,8 @@ setLeads(leadsData);
   };
 
   const handleView = (lead: Lead) => {
-  console.log("Opening lead:", lead.id, lead.full_name);
-  setViewLead(lead);
-};
+    setViewLead(lead);
+  };
 
   const handleEdit = (lead: Lead) => {
     setOpenActionId(null);
@@ -238,11 +290,13 @@ setLeads(leadsData);
       }
     });
     fetchData();
+    window.dispatchEvent(new CustomEvent("crm:activity-updated"));
     showToast(editLead ? "Lead updated successfully" : "Lead created successfully");
   };
 
   const handleDeleteSuccess = () => {
     fetchData();
+    window.dispatchEvent(new CustomEvent("crm:activity-updated"));
     showToast("Lead deleted successfully");
   };
 
@@ -332,17 +386,19 @@ setLeads(leadsData);
           ))}
         </select>
 
-        <select
-          className="filter-select"
-          value={assignedFilter}
-          onChange={(e) => setAssignedFilter(e.target.value)}
-          id="leads-assigned-filter"
-        >
-          <option value="">All Users</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>{u.full_name}</option>
-          ))}
-        </select>
+        {userContext.canViewAllLeads && (
+          <select
+            className="filter-select"
+            value={assignedFilter}
+            onChange={(e) => setAssignedFilter(e.target.value)}
+            id="leads-assigned-filter"
+          >
+            <option value="">All Users</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.full_name}</option>
+            ))}
+          </select>
+        )}
 
         {hasActiveFilters && (
           <button className="btn-clear-filters" onClick={clearFilters}>
@@ -370,7 +426,7 @@ setLeads(leadsData);
         {loading ? (
           <div className="leads-loading">
             <div className="leads-loading-spinner" />
-            Loading leadsâ€¦
+            Loading leads…
           </div>
         ) : error ? (
           <div className="error-state" style={{ padding: "60px 20px", textAlign: "center" }}>
@@ -398,7 +454,13 @@ setLeads(leadsData);
                 <line x1="23" y1="11" x2="17" y2="11"></line>
               </svg>
             </div>
-            <h3>{hasActiveFilters ? "No leads match your filters." : "No leads found"}</h3>
+            <h3>
+              {hasActiveFilters
+                ? "No leads match your filters."
+                : !userContext.canViewAllLeads
+                ? "No leads currently assigned to you."
+                : "No leads found"}
+            </h3>
             <p>
               {hasActiveFilters
                 ? "Try adjusting your search or filters."

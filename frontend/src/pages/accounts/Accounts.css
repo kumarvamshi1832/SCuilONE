@@ -1,0 +1,227 @@
+/* ─── Accounts Page Table & Actions Alignment ─── */
+
+.accounts-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.accounts-table th {
+  text-align: left;
+  padding: 14px 20px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  color: #718096;
+  border-bottom: 1px solid #eaeaea;
+  font-weight: 600;
+  background: #fcfcfc;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.dashboard-wrapper.dark .accounts-table th {
+  background: #252525;
+  border-bottom-color: #333;
+  color: #a0aec0;
+}
+
+.accounts-table td {
+  padding: 14px 20px;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #eaeaea;
+  vertical-align: middle;
+}
+
+.dashboard-wrapper.dark .accounts-table td {
+  border-bottom-color: #333;
+  color: #e2e8f0;
+}
+
+.accounts-table tbody tr {
+  transition: background 0.15s;
+}
+
+.accounts-table tbody tr:hover {
+  background: rgba(74, 144, 226, 0.02);
+}
+
+.dashboard-wrapper.dark .accounts-table tbody tr:hover {
+  background: rgba(74, 144, 226, 0.05);
+}
+
+/* Actions Column Header & Cell Alignment */
+.accounts-table th.actions-header,
+.accounts-table th:last-child {
+  text-align: center;
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  padding: 14px 16px;
+}
+
+.accounts-table td.actions-cell,
+.accounts-table td:last-child {
+  text-align: center;
+  vertical-align: middle;
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  padding: 10px 16px;
+  position: relative;
+}
+
+/* Actions Cell Container (Relative Anchor) */
+.actions-cell-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+/* Three-dot Trigger Button */
+.actions-cell-container .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #718096;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.actions-cell-container .btn-icon:hover,
+.actions-cell-container .btn-icon.active {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .btn-icon {
+  color: #94a3b8;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .btn-icon:hover,
+.dashboard-wrapper.dark .actions-cell-container .btn-icon.active {
+  background: #2a2a2a;
+  border-color: #404040;
+  color: #f1f5f9;
+}
+
+.actions-cell-container .btn-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* Absolutely Positioned Actions Dropdown */
+.actions-cell-container .actions-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  min-width: 156px;
+  overflow: hidden;
+  animation: fadeIn 0.15s ease;
+  box-sizing: border-box;
+}
+
+/* Open upward when space below is tight */
+.actions-cell-container .actions-dropdown.open-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown {
+  background: #222222;
+  border-color: #383838;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Dropdown Menu Items */
+.actions-cell-container .actions-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #334155;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.actions-cell-container .actions-dropdown .dropdown-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item {
+  color: #cbd5e1;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item:hover {
+  background: #2d2d2d;
+  color: #f8fafc;
+}
+
+.actions-cell-container .actions-dropdown .dropdown-item svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: #64748b;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item svg {
+  color: #94a3b8;
+}
+
+.actions-cell-container .actions-dropdown .dropdown-item:hover svg {
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item:hover svg {
+  color: #f8fafc;
+}
+
+/* Delete item styling */
+.actions-cell-container .actions-dropdown .dropdown-item.text-danger {
+  color: #dc2626;
+}
+
+.actions-cell-container .actions-dropdown .dropdown-item.text-danger svg {
+  color: #dc2626;
+}
+
+.actions-cell-container .actions-dropdown .dropdown-item.text-danger:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item.text-danger {
+  color: #f87171;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item.text-danger svg {
+  color: #f87171;
+}
+
+.dashboard-wrapper.dark .actions-cell-container .actions-dropdown .dropdown-item.text-danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: #fca5a5;
+}

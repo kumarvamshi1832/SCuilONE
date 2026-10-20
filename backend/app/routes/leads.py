@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -8,10 +9,12 @@ from app.services.lead_assignment import (
 from app.services.lead_assignment import ACTIVE_LEAD_STATUSES
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
-from app.core.permissions import require_permission
+from app.core.permissions import require_permission, check_is_team_lead
 from app.models.lead import Lead
+from app.models.account import Account
 from app.models.deal import Deal
 from app.models.user import User
+from app.models.activity import Activity
 from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse
 from app.services.lead_assignment import (
     get_active_lead_count,
@@ -58,8 +61,31 @@ def validate_assigned_user(
             detail="Assigned user does not belong to this tenant"
         )
 
+def validate_account(
+    account_id: UUID | None,
+    tenant_id: UUID,
+    db: Session
+):
+    if account_id is None:
+        return
 
+    account = db.query(Account).filter(
+        Account.id == account_id,
+        Account.tenant_id == tenant_id
+    ).first()
 
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account does not exist in this tenant"
+        )
+
+@router.post(
+    "",
+    response_model=LeadResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False
+)
 @router.post(
     "/",
     response_model=LeadResponse,
@@ -71,14 +97,18 @@ def create_lead(
     permission=Depends(require_permission("lead.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     validate_assigned_user(
         data.assigned_to,
         tenant_id,
         db
     )
-
+    validate_account(
+        data.account_id,
+        tenant_id,
+        db
+    )
     try:
         assigned_to = data.assigned_to
 
@@ -95,11 +125,39 @@ def create_lead(
             phone=data.phone,
             source=data.source,
             status=data.status,
+            account_id=data.account_id,
             assigned_to=assigned_to,
             notes=data.notes
         )
 
         db.add(lead)
+        db.flush()
+
+        # If lead is assigned, automatically create/link a related follow-up task
+        if lead.assigned_to:
+            existing_task = db.query(Activity).filter(
+                Activity.tenant_id == tenant_id,
+                Activity.lead_id == lead.id,
+                Activity.activity_type == "Task"
+            ).first()
+
+            if not existing_task:
+                follow_up_task = Activity(
+                    tenant_id=tenant_id,
+                    title=f"Follow up with {lead.full_name}",
+                    description=f"Initial follow-up with lead {lead.full_name}",
+                    activity_type="Task",
+                    status="Pending",
+                    priority="Medium",
+                    due_date=datetime.utcnow() + timedelta(days=3),
+                    assigned_to=lead.assigned_to,
+                    lead_id=lead.id,
+                    account_id=lead.account_id
+                )
+                db.add(follow_up_task)
+            else:
+                existing_task.assigned_to = lead.assigned_to
+
         db.commit()
         db.refresh(lead)
 
@@ -109,6 +167,12 @@ def create_lead(
         db.rollback()
         raise
 
+
+@router.get(
+    "",
+    response_model=list[LeadResponse],
+    include_in_schema=False
+)
 @router.get(
     "/",
     response_model=list[LeadResponse]
@@ -118,11 +182,21 @@ def get_leads(
     _=Depends(require_permission("lead.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
+
+    is_team_lead = check_is_team_lead(current_user, db)
+
+    if not is_team_lead:
+        leads = db.query(Lead).filter(
+            Lead.tenant_id == tenant_id,
+            Lead.assigned_to == user_id
+        ).order_by(Lead.created_at.desc()).all()
+        return leads
 
     leads = db.query(Lead).filter(
         Lead.tenant_id == tenant_id
-    ).all()
+    ).order_by(Lead.created_at.desc()).all()
 
     return leads
 
@@ -272,7 +346,8 @@ def get_lead(
     _=Depends(require_permission("lead.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
@@ -283,6 +358,13 @@ def get_lead(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Lead not found"
+        )
+
+    is_team_lead = check_is_team_lead(current_user, db)
+    if not is_team_lead and lead.assigned_to != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this lead"
         )
 
     return lead
@@ -301,8 +383,8 @@ def update_lead(
     _=Depends(require_permission("lead.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
-    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
@@ -315,13 +397,25 @@ def update_lead(
             detail="Lead not found"
         )
 
+    is_team_lead = check_is_team_lead(current_user, db)
+    if not is_team_lead and lead.assigned_to != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this lead"
+        )
+
     if data.assigned_to is not None:
         validate_assigned_user(
             data.assigned_to,
             tenant_id,
             db
         )
-
+    if "account_id" in data.model_fields_set:
+        validate_account(
+            data.account_id,
+            tenant_id,
+            db
+        )
     previous_status = lead.status
     previous_assigned_to = lead.assigned_to
     assignment_changed = (
@@ -439,6 +533,9 @@ def update_lead(
         if data.status is not None:
             lead.status = data.status
 
+        if "account_id" in data.model_fields_set:
+            lead.account_id = data.account_id
+
         if data.assigned_to is not None:
             lead.assigned_to = data.assigned_to
 
@@ -446,6 +543,41 @@ def update_lead(
             lead.notes = data.notes
 
         db.flush()
+
+        # Synchronize follow-up task on reassignment or lead update
+        if lead.assigned_to:
+            existing_task = db.query(Activity).filter(
+                Activity.tenant_id == tenant_id,
+                Activity.lead_id == lead.id,
+                Activity.activity_type == "Task"
+            ).first()
+
+            if existing_task:
+                existing_task.assigned_to = lead.assigned_to
+                if data.full_name is not None and existing_task.title.startswith("Follow up with"):
+                    existing_task.title = f"Follow up with {lead.full_name}"
+            else:
+                follow_up_task = Activity(
+                    tenant_id=tenant_id,
+                    title=f"Follow up with {lead.full_name}",
+                    description=f"Follow-up with lead {lead.full_name}",
+                    activity_type="Task",
+                    status="Pending",
+                    priority="Medium",
+                    due_date=datetime.utcnow() + timedelta(days=3),
+                    assigned_to=lead.assigned_to,
+                    lead_id=lead.id,
+                    account_id=lead.account_id
+                )
+                db.add(follow_up_task)
+        elif "assigned_to" in data.model_fields_set and data.assigned_to is None:
+            existing_task = db.query(Activity).filter(
+                Activity.tenant_id == tenant_id,
+                Activity.lead_id == lead.id,
+                Activity.activity_type == "Task"
+            ).first()
+            if existing_task:
+                existing_task.assigned_to = None
 
         capacity_freed = (
             previous_status in ACTIVE_LEAD_STATUSES
@@ -481,7 +613,8 @@ def delete_lead(
     _=Depends(require_permission("lead.delete")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
@@ -492,6 +625,13 @@ def delete_lead(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Lead not found"
+        )
+
+    is_team_lead = check_is_team_lead(current_user, db)
+    if not is_team_lead and lead.assigned_to != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this lead"
         )
 
     linked_deal = db.query(Deal.id).filter(
@@ -509,6 +649,12 @@ def delete_lead(
         )
 
     try:
+        # Delete associated activities to maintain foreign key integrity
+        db.query(Activity).filter(
+            Activity.tenant_id == tenant_id,
+            Activity.lead_id == lead.id
+        ).delete(synchronize_session=False)
+
         db.delete(lead)
         db.commit()
     except Exception:

@@ -3,6 +3,7 @@ import { User } from "../../types/user";
 import { getUsers } from "../../services/userService";
 import EditUserModal from "../../components/users/EditUserModal";
 import AddUserModal from "../../components/users/AddUserModal";
+import ProfileAvatar from "../../components/common/ProfileAvatar";
 import "./Users.css";
 
 export default function Users() {
@@ -115,7 +116,12 @@ export default function Users() {
                 <tr key={user.id}>
                   <td>
                     <div className="user-cell">
-                      <div className="avatar-small">{(user.full_name || "?").charAt(0).toUpperCase()}</div>
+                      <ProfileAvatar
+                        photoUrl={user.photo_url}
+                        name={user.full_name}
+                        size={32}
+                        className="avatar-small"
+                      />
                       <span className="font-medium">{user.full_name}</span>
                     </div>
                   </td>

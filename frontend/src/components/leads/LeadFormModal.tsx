@@ -22,6 +22,7 @@ import type {
 FormField,
 FormTemplate,
 } from "../../services/formTemplateService";
+import "./LeadFormModal.css";
 
 interface LeadFormModalProps {
 lead?: Lead | null;
@@ -430,7 +431,7 @@ return (
     )}
 
     {field.field_type === "checkbox" && (
-      <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <label className="checkbox-field-label">
         <input
           type="checkbox"
           checked={typeof value === "boolean" ? value : false}
@@ -439,9 +440,9 @@ return (
             updateCustomValue(field.field_key, event.target.checked)
           }
         />
-        {field.field_label}
+        <span>{field.field_label}</span>
         {field.is_required && (
-          <span style={{ color: "#e53e3e" }}> *</span>
+          <span className="required-star"> *</span>
         )}
       </label>
     )}
@@ -541,6 +542,8 @@ try {
     }
   }
 
+  window.dispatchEvent(new CustomEvent("crm:lead-updated"));
+  window.dispatchEvent(new CustomEvent("crm:activity-updated"));
   onSuccess(savedLead);
   onClose();
 } catch (err: any) {
@@ -591,23 +594,34 @@ try {
 
 };
 
-return ( <div className="modal-overlay" onClick={onClose}>
-<div
-className="modal-content leads-modal-content"
-onClick={(event) => event.stopPropagation()}
-> <div className="modal-header"> <h2>{isEdit ? "Edit Lead" : "Create Lead"}</h2> <button
-         className="btn-close"
-         onClick={onClose}
-         disabled={loading}
-       > <svg
-           viewBox="0 0 24 24"
-           fill="none"
-           stroke="currentColor"
-           strokeWidth="2"
-         > <line x1="18" y1="6" x2="6" y2="18" /> <line x1="6" y1="6" x2="18" y2="18" /> </svg> </button> </div>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-content leads-modal-content lead-form-modal-content"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h2>{isEdit ? "Edit Lead" : "Create Lead"}</h2>
+          <button
+            type="button"
+            className="btn-close"
+            onClick={onClose}
+            disabled={loading}
+            aria-label="Close modal"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
 
-```
-    <div className="modal-body">
+        <div className="modal-body">
       {error && (
         <div
           className="alert-box error"
@@ -762,14 +776,8 @@ onClick={(event) => event.stopPropagation()}
         />
       </div>
 
-      <div
-        style={{
-          borderTop: "1px solid #e5e7eb",
-          margin: "20px 0",
-          paddingTop: "18px",
-        }}
-      >
-        <h3 style={{ marginBottom: "12px" }}>Custom Form Fields</h3>
+      <div className="custom-fields-section">
+        <h3 className="custom-fields-title">Custom Form Fields</h3>
 
         <div className="form-group">
           <label>Select Form Template</label>
@@ -797,17 +805,17 @@ onClick={(event) => event.stopPropagation()}
         </div>
 
         {selectedTemplate && (
-          <div>
+          <div className="custom-fields-container">
             {selectedTemplate.description && (
-              <p style={{ marginBottom: "14px", color: "#666" }}>
+              <p className="custom-fields-description">
                 {selectedTemplate.description}
               </p>
             )}
 
             {customValuesLoading ? (
-              <p>Loading saved custom values...</p>
+              <p className="custom-fields-status">Loading saved custom values...</p>
             ) : selectedTemplate.fields.length === 0 ? (
-              <p>This template has no custom fields.</p>
+              <p className="custom-fields-status">This template has no custom fields.</p>
             ) : (
               [...selectedTemplate.fields]
                 .sort(

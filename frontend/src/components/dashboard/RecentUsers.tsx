@@ -1,6 +1,8 @@
 import { User } from "../../types/user";
 import { Link, useParams } from "react-router-dom";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { normalizeIndustry } from "../../utils/industryUtils";
+import ProfileAvatar from "../common/ProfileAvatar";
 
 interface RecentUsersProps {
   users: User[];
@@ -10,12 +12,12 @@ export default function RecentUsers({ users }: RecentUsersProps) {
   const { industry } = useParams();
   
   const getBasePath = () => {
-    if (industry) return `/${industry}`;
+    if (industry) return `/${normalizeIndustry(industry)}`;
     const tenantStr = sessionStorage.getItem("tenant");
     if (tenantStr) {
       try {
         const t = JSON.parse(tenantStr);
-        if (t?.industry) return `/${t.industry.toLowerCase().replace(/\s+/g, '-')}`;
+        if (t?.industry) return `/${normalizeIndustry(t.industry)}`;
       } catch(e) {}
     }
     return "/real-estate";
@@ -43,7 +45,12 @@ export default function RecentUsers({ users }: RecentUsersProps) {
               <tr key={user.id}>
                 <td>
                   <div className="user-cell">
-                    <div className="avatar-small">{(user.full_name || "?").charAt(0).toUpperCase()}</div>
+                    <ProfileAvatar
+                      photoUrl={user.photo_url}
+                      name={user.full_name}
+                      size={32}
+                      className="avatar-small"
+                    />
                     <span className="font-medium">{user.full_name}</span>
                   </div>
                 </td>

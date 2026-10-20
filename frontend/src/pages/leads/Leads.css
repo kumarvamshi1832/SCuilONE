@@ -195,6 +195,11 @@
 .actions-dropdown-fixed {
   position: fixed;
   z-index: 9999;
+  right: auto;
+  top: auto;
+  margin-top: 0;
+  width: 192px;
+  min-width: 192px;
 }
 
 .actions-dropdown button {
@@ -384,21 +389,44 @@
 /* ─── Modal Tweaks ─── */
 
 .leads-modal-content {
-  max-width: 560px;
-  max-height: 90vh;
+  width: min(600px, calc(100vw - 32px));
+  max-width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+}
+
+.leads-modal-content .modal-header {
+  flex-shrink: 0;
 }
 
 .leads-modal-content .modal-body {
   overflow-y: auto;
-  flex: 1;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.leads-modal-content .modal-footer {
+  flex-shrink: 0;
 }
 
 .form-row-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .form-group textarea {
