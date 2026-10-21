@@ -8,6 +8,7 @@ from app.routes.leads import router as lead_router
 from app.routes.contacts import router as contact_router
 from app.routes.accounts import router as account_router
 from app.routes import deals
+from app.routes.activities import router as activity_router
 
 
 app = FastAPI()
@@ -23,8 +24,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth_router)
@@ -34,6 +35,7 @@ app.include_router(lead_router)
 app.include_router(contact_router)
 app.include_router(account_router)
 app.include_router(deals.router)
+app.include_router(activity_router)
 
 @app.get("/")
 def home():
