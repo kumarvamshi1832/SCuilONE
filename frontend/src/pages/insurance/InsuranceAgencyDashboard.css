@@ -1,0 +1,770 @@
+/* ==========================================================================
+   SCuilONE CRM — Insurance Agency Dashboard Design System
+   Color Palette: Deep Teal (#073B3A / #062C35), Primary Teal (#0D9488),
+   Emerald (#10B981), Warm Amber (#F59E0B), Soft Slate (#F5F8F6)
+   ========================================================================== */
+
+:root {
+  --ia-teal-deep: #073B3A;
+  --ia-teal-dark: #062C35;
+  --ia-teal-primary: #0D9488;
+  --ia-teal-hover: #0F766E;
+  --ia-teal-light: rgba(13, 148, 136, 0.12);
+  --ia-emerald: #10B981;
+  --ia-emerald-light: rgba(16, 185, 129, 0.12);
+  --ia-amber: #F59E0B;
+  --ia-amber-light: rgba(245, 158, 11, 0.12);
+  --ia-red: #EF4444;
+  --ia-red-light: rgba(239, 68, 68, 0.12);
+  --ia-blue: #0284C7;
+  --ia-blue-light: rgba(2, 132, 199, 0.12);
+  --ia-purple: #7C3AED;
+  --ia-purple-light: rgba(124, 58, 237, 0.12);
+
+  /* Light Theme Defaults */
+  --ia-bg-main: #F5F8F6;
+  --ia-card-bg: #FFFFFF;
+  --ia-text-primary: #102A43;
+  --ia-text-secondary: #526779;
+  --ia-text-muted: #829ab1;
+  --ia-border: #DCE7E3;
+  --ia-border-subtle: #EEF4F1;
+  --ia-table-header-bg: #F8FAF9;
+  --ia-table-hover-bg: #F0F6F4;
+  --ia-shadow-sm: 0 1px 3px rgba(7, 59, 58, 0.05);
+  --ia-shadow-md: 0 4px 14px rgba(7, 59, 58, 0.07);
+}
+
+.ia-dashboard {
+  padding: 24px 28px;
+  background-color: var(--ia-bg-main);
+  min-height: 100%;
+  color: var(--ia-text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   Dark Theme Tokens & Adaptations
+   ========================================================================== */
+.ia-dashboard.dark,
+.dark .ia-dashboard,
+.dashboard-wrapper.dark .ia-dashboard,
+body.dark .ia-dashboard {
+  --ia-bg-main: #061D24;
+  --ia-card-bg: #0C262B;
+  --ia-text-primary: #F1F7F6;
+  --ia-text-secondary: #A3C5BD;
+  --ia-text-muted: #72968E;
+  --ia-border: #163E44;
+  --ia-border-subtle: #123338;
+  --ia-table-header-bg: #092126;
+  --ia-table-hover-bg: #103239;
+  --ia-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.35);
+  --ia-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+/* ==========================================================================
+   Top Header & Welcome Banner
+   ========================================================================== */
+.ia-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.ia-header-left {
+  flex: 1;
+  min-width: 280px;
+}
+
+.ia-title {
+  font-size: 1.85rem;
+  font-weight: 800;
+  margin: 0 0 4px 0;
+  color: var(--ia-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.ia-title-teal {
+  color: var(--ia-teal-primary);
+}
+
+.ia-card-mini-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--ia-teal-primary);
+  letter-spacing: 0.3px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.ia-dashboard.dark .ia-card-mini-tag {
+  background: rgba(13, 148, 136, 0.22);
+  color: #5EEAD4;
+}
+
+.ia-card-mini-tag.ia-tag-notice {
+  background: rgba(245, 158, 11, 0.14);
+  color: #D97706;
+}
+
+.ia-dashboard.dark .ia-card-mini-tag.ia-tag-notice {
+  background: rgba(245, 158, 11, 0.25);
+  color: #FBBF24;
+}
+
+.ia-empty-state {
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--ia-text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.ia-subtitle {
+  font-size: 0.95rem;
+  color: var(--ia-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   KPI Cards Grid (6 Columns)
+   ========================================================================== */
+.ia-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1400px) {
+  .ia-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .ia-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .ia-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ia-kpi-card {
+  background: var(--ia-card-bg);
+  border: 1px solid var(--ia-border);
+  border-radius: 14px;
+  padding: 18px 18px 16px;
+  box-shadow: var(--ia-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.ia-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ia-shadow-md);
+  border-color: var(--ia-teal-primary);
+}
+
+.ia-kpi-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ia-kpi-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ia-kpi-icon-box.teal {
+  background: var(--ia-teal-light);
+  color: var(--ia-teal-primary);
+}
+
+.ia-kpi-icon-box.emerald {
+  background: var(--ia-emerald-light);
+  color: var(--ia-emerald);
+}
+
+.ia-kpi-icon-box.purple {
+  background: var(--ia-purple-light);
+  color: var(--ia-purple);
+}
+
+.ia-kpi-icon-box.red {
+  background: var(--ia-red-light);
+  color: var(--ia-red);
+}
+
+.ia-kpi-icon-box.amber {
+  background: var(--ia-amber-light);
+  color: var(--ia-amber);
+}
+
+.ia-kpi-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ia-text-secondary);
+  margin-bottom: 6px;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.ia-kpi-value {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--ia-text-primary);
+  line-height: 1.2;
+  margin-bottom: 0;
+  letter-spacing: -0.02em;
+}
+
+/* ==========================================================================
+   Card Shells
+   ========================================================================== */
+.ia-card {
+  background: var(--ia-card-bg);
+  border: 1px solid var(--ia-border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: var(--ia-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+.ia-card:hover {
+  box-shadow: var(--ia-shadow-md);
+}
+
+.ia-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ia-border-subtle);
+}
+
+.ia-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ia-card-title-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ia-card-title-icon.teal {
+  background: var(--ia-teal-light);
+  color: var(--ia-teal-primary);
+}
+
+.ia-card-title-icon.emerald {
+  background: var(--ia-emerald-light);
+  color: var(--ia-emerald);
+}
+
+.ia-card-title-icon.amber {
+  background: var(--ia-amber-light);
+  color: var(--ia-amber);
+}
+
+.ia-card-title-icon.blue {
+  background: var(--ia-blue-light);
+  color: var(--ia-blue);
+}
+
+.ia-card-title-icon.purple {
+  background: var(--ia-purple-light);
+  color: var(--ia-purple);
+}
+
+.ia-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ia-text-primary);
+  margin: 0;
+}
+
+.ia-card-select {
+  padding: 5px 12px;
+  background: var(--ia-card-bg);
+  border: 1px solid var(--ia-border);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ia-text-primary);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.ia-card-select:hover {
+  border-color: var(--ia-teal-primary);
+}
+
+.ia-dashboard.dark .ia-card-select option {
+  background: #0C262B;
+  color: #F1F7F6;
+}
+
+.ia-view-all-link {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--ia-teal-primary);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.ia-view-all-link:hover {
+  color: var(--ia-emerald);
+  transform: translateX(2px);
+}
+
+/* ==========================================================================
+   Row 2: Analytics & Charts (3 Columns)
+   ========================================================================== */
+.ia-charts-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1200px) {
+  .ia-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ia-chart-container {
+  width: 100%;
+  height: 250px;
+  position: relative;
+}
+
+/* Donut Chart with Center Text & Right Legend */
+.ia-donut-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 250px;
+}
+
+.ia-donut-chart-box {
+  width: 50%;
+  height: 100%;
+  position: relative;
+}
+
+.ia-donut-center-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.ia-donut-center-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--ia-text-primary);
+  line-height: 1;
+}
+
+.ia-donut-center-sub {
+  font-size: 0.725rem;
+  color: var(--ia-text-secondary);
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.ia-donut-legend {
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 240px;
+  padding-right: 4px;
+}
+
+.ia-donut-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  gap: 8px;
+}
+
+.ia-donut-legend-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ia-donut-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ia-donut-legend-name {
+  color: var(--ia-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ia-donut-legend-value {
+  font-weight: 700;
+  color: var(--ia-text-primary);
+  font-size: 0.775rem;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Row 3: Renewals & Agent Performance (2 Columns)
+   ========================================================================== */
+.ia-row-2col {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1100px) {
+  .ia-row-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Row 4: Bottom 3 Columns
+   ========================================================================== */
+.ia-row-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 1200px) {
+  .ia-row-3col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Tables & Data Rows
+   ========================================================================== */
+.ia-table-container {
+  overflow-x: auto;
+  margin: 0 -22px -20px -22px;
+}
+
+.ia-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.825rem;
+}
+
+.ia-table th {
+  padding: 10px 16px;
+  color: var(--ia-text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--ia-border);
+  background: var(--ia-table-header-bg);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.ia-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ia-border-subtle);
+  color: var(--ia-text-primary);
+  vertical-align: middle;
+}
+
+.ia-table tr:hover td {
+  background: var(--ia-table-hover-bg);
+}
+
+.ia-table-primary-text {
+  font-weight: 600;
+  color: var(--ia-text-primary);
+}
+
+.ia-table-secondary-text {
+  font-size: 0.75rem;
+  color: var(--ia-text-secondary);
+  display: block;
+  margin-top: 2px;
+}
+
+.ia-table-num {
+  font-weight: 600;
+  color: var(--ia-text-primary);
+  font-feature-settings: "tnum";
+}
+
+/* Agent / User Avatar Cell */
+.ia-agent-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ia-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #102A43;
+  background: #DCE7E3;
+  flex-shrink: 0;
+}
+
+.ia-avatar.teal {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+
+.ia-avatar.blue {
+  background: #E0F2FE;
+  color: #0369A1;
+}
+
+.ia-avatar.amber {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.ia-avatar.emerald {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.ia-avatar.purple {
+  background: #EDE9FE;
+  color: #5B21B6;
+}
+
+.ia-dashboard.dark .ia-avatar {
+  background: #163E44;
+  color: #F1F7F6;
+}
+
+/* ==========================================================================
+   Status Badges
+   ========================================================================== */
+.ia-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 0.725rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Active / Approved / Completed (Emerald) */
+.ia-badge.active,
+.ia-badge.approved,
+.ia-badge.completed {
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
+}
+
+.ia-dashboard.dark .ia-badge.active,
+.ia-dashboard.dark .ia-badge.approved,
+.ia-dashboard.dark .ia-badge.completed {
+  background: rgba(16, 185, 129, 0.25);
+  color: #34D399;
+}
+
+/* Pending / Due Soon / Under Review (Amber) */
+.ia-badge.due-soon,
+.ia-badge.pending,
+.ia-badge.under-review {
+  background: rgba(245, 158, 11, 0.14);
+  color: #B45309;
+}
+
+.ia-dashboard.dark .ia-badge.due-soon,
+.ia-dashboard.dark .ia-badge.pending,
+.ia-dashboard.dark .ia-badge.under-review {
+  background: rgba(245, 158, 11, 0.25);
+  color: #FBBF24;
+}
+
+/* Submitted / In Progress (Blue/Teal) */
+.ia-badge.submitted,
+.ia-badge.in-progress {
+  background: rgba(2, 132, 199, 0.14);
+  color: #0284C7;
+}
+
+.ia-dashboard.dark .ia-badge.submitted,
+.ia-dashboard.dark .ia-badge.in-progress {
+  background: rgba(2, 132, 199, 0.25);
+  color: #38BDF8;
+}
+
+/* Settled (Indigo/Purple) */
+.ia-badge.settled {
+  background: rgba(99, 102, 241, 0.14);
+  color: #4F46E5;
+}
+
+.ia-dashboard.dark .ia-badge.settled {
+  background: rgba(99, 102, 241, 0.25);
+  color: #818CF8;
+}
+
+/* Overdue / Rejected (Red) */
+.ia-badge.overdue,
+.ia-badge.rejected {
+  background: rgba(239, 68, 68, 0.14);
+  color: #DC2626;
+}
+
+.ia-dashboard.dark .ia-badge.overdue,
+.ia-dashboard.dark .ia-badge.rejected {
+  background: rgba(239, 68, 68, 0.25);
+  color: #F87171;
+}
+
+/* Task Type Icons */
+.ia-task-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--ia-teal-light);
+  color: var(--ia-teal-primary);
+  flex-shrink: 0;
+}
+
+.ia-task-type-badge.email {
+  background: var(--ia-purple-light);
+  color: var(--ia-purple);
+}
+
+.ia-task-type-badge.claim {
+  background: var(--ia-amber-light);
+  color: var(--ia-amber);
+}
+
+.ia-task-type-badge.document {
+  background: var(--ia-emerald-light);
+  color: var(--ia-emerald);
+}
+
+.ia-task-type-badge.meeting {
+  background: var(--ia-blue-light);
+  color: var(--ia-blue);
+}
+
+/* ==========================================================================
+   Sidebar Custom Overrides for Insurance Agency
+   (Scoped ONLY to .dashboard-sidebar.insurance-agency-sidebar)
+   ========================================================================== */
+.dashboard-sidebar.insurance-agency-sidebar {
+  background: linear-gradient(180deg, #073B3A 0%, #062C35 100%) !important;
+  border-right: 1px solid #0E4847 !important;
+}
+
+.dashboard-sidebar.insurance-agency-sidebar .sidebar-brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 24px !important;
+}
+
+.dashboard-sidebar.insurance-agency-sidebar .sidebar-nav {
+  padding: 12px 10px !important;
+}
+
+.dashboard-sidebar.insurance-agency-sidebar .nav-item {
+  color: #B5D1CA !important;
+  font-weight: 500 !important;
+  font-size: 0.9rem !important;
+  padding: 9px 14px !important;
+  border-radius: 8px !important;
+  margin-bottom: 3px !important;
+  border: none !important;
+  border-right: none !important;
+  transition: all 0.18s ease !important;
+}
+
+.dashboard-sidebar.insurance-agency-sidebar .nav-item:hover {
+  background-color: rgba(13, 148, 136, 0.16) !important;
+  color: #FFFFFF !important;
+}
+
+.dashboard-sidebar.insurance-agency-sidebar .nav-item.active {
+  background: linear-gradient(90deg, #0D9488 0%, #10B981 100%) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.35) !important;
+}
+
+.dashboard-sidebar.insurance-agency-sidebar .nav-item.active svg {
+  color: #FFFFFF !important;
+}
+
+
+/* ==========================================================================
+   Header Themed Tweaks when on Insurance Agency
+   ========================================================================== */
+.dashboard-wrapper.industry-insurance-agency .dashboard-header {
+  border-bottom: 1px solid var(--ia-border);
+}

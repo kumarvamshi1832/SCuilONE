@@ -1,0 +1,439 @@
+/* ─── LeadFormModal.css ─── */
+
+/* Modal Content Container */
+.lead-form-modal-content {
+  width: min(600px, calc(100vw - 32px));
+  max-width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: auto;
+  position: relative;
+}
+
+/* Header: Fixed at top of modal, does not scroll with form */
+.lead-form-modal-content .modal-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #eaeaea;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  color: #1a202c;
+  line-height: 1.3;
+}
+
+.lead-form-modal-content .btn-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #718096;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.lead-form-modal-content .btn-close:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #1a202c;
+}
+
+.lead-form-modal-content .btn-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Scrollable Body: scrolls vertically, zero horizontal scrolling */
+.lead-form-modal-content .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 24px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Form Groups & Field Alignment */
+.lead-form-modal-content .form-group {
+  margin-bottom: 18px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.lead-form-modal-content .form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #374151;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .required-star {
+  color: #e53e3e;
+}
+
+/* Paired fields 2-column grid */
+.lead-form-modal-content .form-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-bottom: 18px;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .form-row-2 .form-group {
+  margin-bottom: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Inputs, Selects, and Textareas */
+.lead-form-modal-content .form-group input:not([type="checkbox"]),
+.lead-form-modal-content .form-group select,
+.lead-form-modal-content .form-group textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 0.925rem;
+  line-height: 1.4;
+  background: #ffffff;
+  color: #1a202c;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lead-form-modal-content .form-group input:not([type="checkbox"]):focus,
+.lead-form-modal-content .form-group select:focus,
+.lead-form-modal-content .form-group textarea:focus {
+  outline: none;
+  border-color: #3182ce;
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
+}
+
+.lead-form-modal-content .form-group textarea {
+  resize: vertical;
+  min-height: 76px;
+  display: block;
+}
+
+.lead-form-modal-content .form-group input:disabled,
+.lead-form-modal-content .form-group select:disabled,
+.lead-form-modal-content .form-group textarea:disabled {
+  background-color: #f7fafc;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.lead-form-modal-content .input-error {
+  border-color: #e53e3e !important;
+}
+
+.lead-form-modal-content .input-error:focus {
+  box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.15) !important;
+}
+
+.lead-form-modal-content .field-error {
+  display: block;
+  font-size: 0.8rem;
+  color: #e53e3e;
+  margin-top: 4px;
+}
+
+/* Checkbox field */
+.lead-form-modal-content .checkbox-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+.lead-form-modal-content .checkbox-field-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #3182ce;
+  cursor: pointer;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Custom Form Fields Section */
+.lead-form-modal-content .custom-fields-section {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 22px;
+  padding-top: 18px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .custom-fields-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 14px 0;
+  color: #1f2937;
+}
+
+.lead-form-modal-content .custom-fields-description {
+  margin: 0 0 14px 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.lead-form-modal-content .custom-fields-status {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin: 8px 0;
+}
+
+.lead-form-modal-content .custom-fields-container {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* UserSearchDropdown in LeadFormModal */
+.lead-form-modal-content .user-search-dropdown {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .usd-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 12px;
+  min-height: 40px;
+}
+
+/* Alert Box */
+.lead-form-modal-content .alert-box.error {
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: #fcebea;
+  color: #cc0000;
+  border: 1px solid #f8b4b4;
+  font-size: 0.875rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Footer: Fixed at bottom of modal, fully visible while body scrolls */
+.lead-form-modal-content .modal-footer {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #eaeaea;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .btn-secondary,
+.lead-form-modal-content .btn-primary {
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  min-height: 38px;
+  box-sizing: border-box;
+}
+
+.lead-form-modal-content .btn-secondary {
+  background: #ffffff;
+  border: 1px solid #cbd5e0;
+  color: #4b5563;
+}
+
+.lead-form-modal-content .btn-secondary:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #1f2937;
+}
+
+.lead-form-modal-content .btn-primary {
+  background: #3182ce;
+  border: 1px solid #3182ce;
+  color: #ffffff;
+}
+
+.lead-form-modal-content .btn-primary:hover:not(:disabled) {
+  background: #2b6cb0;
+  border-color: #2b6cb0;
+}
+
+.lead-form-modal-content .btn-secondary:disabled,
+.lead-form-modal-content .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── Responsive for Small Screens (< 540px) ─── */
+@media (max-width: 540px) {
+  .lead-form-modal-content {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    margin: 12px;
+  }
+
+  .lead-form-modal-content .modal-header {
+    padding: 14px 18px;
+  }
+
+  .lead-form-modal-content .modal-body {
+    padding: 16px 18px;
+  }
+
+  .lead-form-modal-content .modal-footer {
+    padding: 14px 18px;
+  }
+
+  .lead-form-modal-content .form-row-2 {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ─── Dark Mode Support ─── */
+.dashboard-wrapper.dark .lead-form-modal-content {
+  background: #1f1f1f;
+  border: 1px solid #333333;
+  color: #e2e8f0;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .modal-header {
+  background: #1f1f1f;
+  border-bottom-color: #333333;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .modal-header h2 {
+  color: #f7fafc;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .btn-close {
+  color: #a0aec0;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .btn-close:hover:not(:disabled) {
+  background: #2d3748;
+  color: #ffffff;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .form-group label {
+  color: #cbd5e0;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .form-group input:not([type="checkbox"]),
+.dashboard-wrapper.dark .lead-form-modal-content .form-group select,
+.dashboard-wrapper.dark .lead-form-modal-content .form-group textarea {
+  background: #2a2a2a;
+  border-color: #4a5568;
+  color: #f7fafc;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .form-group input:not([type="checkbox"]):focus,
+.dashboard-wrapper.dark .lead-form-modal-content .form-group select:focus,
+.dashboard-wrapper.dark .lead-form-modal-content .form-group textarea:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .form-group input:disabled,
+.dashboard-wrapper.dark .lead-form-modal-content .form-group select:disabled,
+.dashboard-wrapper.dark .lead-form-modal-content .form-group textarea:disabled {
+  background: #1e1e1e;
+  border-color: #3d4451;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .checkbox-field-label {
+  color: #cbd5e0;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .custom-fields-section {
+  border-top-color: #333333;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .custom-fields-title {
+  color: #f7fafc;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .custom-fields-description,
+.dashboard-wrapper.dark .lead-form-modal-content .custom-fields-status {
+  color: #a0aec0;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .modal-footer {
+  background: #1a1a1a;
+  border-top-color: #333333;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .btn-secondary {
+  background: #2a2a2a;
+  border-color: #4a5568;
+  color: #e2e8f0;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .btn-secondary:hover:not(:disabled) {
+  background: #374151;
+  border-color: #718096;
+  color: #ffffff;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .alert-box.error {
+  background: #3b1c1c;
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
