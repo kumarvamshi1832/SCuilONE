@@ -1,5 +1,5 @@
 from uuid import UUID
-
+from app.services.notification_service import notify_assignment
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -73,21 +73,62 @@ def create_activity(
     _=Depends(require_permission("activity.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(current_user["user_id"])
 
-    validate_related_records(data, tenant_id, db)
+    activity_data = data.model_dump()
+
+    # Automatically assign a task to its linked lead's salesperson.
+    if (
+        activity_data["activity_type"] == "Task"
+        and activity_data["assigned_to"] is None
+        and activity_data["lead_id"] is not None
+    ):
+        linked_lead = db.query(Lead).filter(
+            Lead.id == activity_data["lead_id"],
+            Lead.tenant_id == tenant_id
+        ).first()
+
+        if linked_lead:
+            activity_data["assigned_to"] = linked_lead.assigned_to
+
+    # Validate the assignee and linked CRM records.
+    validated_data = ActivityCreate(**activity_data)
+    validate_related_records(validated_data, tenant_id, db)
 
     activity = Activity(
         tenant_id=tenant_id,
-        **data.model_dump()
+        created_by=user_id,
+        **activity_data
     )
 
-    db.add(activity)
-    db.commit()
-    db.refresh(activity)
+    try:
+        db.add(activity)
+        db.commit()
+        db.refresh(activity)
+    except Exception:
+        db.rollback()
+        raise
+
+    # Notify the assignee after the task has been saved.
+    if (
+        activity.activity_type == "Task"
+        and activity.assigned_to is not None
+    ):
+        notify_assignment(
+            db=db,
+            tenant_id=tenant_id,
+            recipient_user_id=activity.assigned_to,
+            actor_user_id=user_id,
+            title="New task assigned to you",
+            message=(
+                f'Task "{activity.title}" has been assigned to you.'
+            ),
+            related_module="activities",
+            related_record_id=activity.id,
+        )
 
     return activity
-
 
 @router.get(
     "/",
@@ -151,6 +192,7 @@ def get_activity(
     return activity
 
 
+
 @router.put(
     "/{activity_id}",
     response_model=ActivityResponse
@@ -162,7 +204,8 @@ def update_activity(
     _=Depends(require_permission("activity.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(current_user["user_id"])
 
     activity = db.query(Activity).filter(
         Activity.id == activity_id,
@@ -175,11 +218,18 @@ def update_activity(
             detail="Activity not found"
         )
 
+    previous_assigned_to = activity.assigned_to
+    creator_user_id = activity.created_by
     changes = data.model_dump(exclude_unset=True)
+    changed_fields = {}
 
     for field, value in changes.items():
         if value is not None:
-            setattr(activity, field, value)
+            old_value = getattr(activity, field)
+
+            if old_value != value:
+                changed_fields[field] = (old_value, value)
+                setattr(activity, field, value)
 
     updated_data = ActivityCreate(
         title=activity.title,
@@ -197,8 +247,73 @@ def update_activity(
 
     validate_related_records(updated_data, tenant_id, db)
 
-    db.commit()
-    db.refresh(activity)
+    if (
+        activity.activity_type == "Task"
+        and activity.assigned_to is None
+        and activity.lead_id is not None
+    ):
+        linked_lead = db.query(Lead).filter(
+            Lead.id == activity.lead_id,
+            Lead.tenant_id == tenant_id
+        ).first()
+
+        if linked_lead:
+            activity.assigned_to = linked_lead.assigned_to
+
+    try:
+        db.commit()
+        db.refresh(activity)
+    except Exception:
+        db.rollback()
+        raise
+
+    if (
+        activity.activity_type == "Task"
+        and activity.assigned_to is not None
+        and activity.assigned_to != previous_assigned_to
+    ):
+        notify_assignment(
+            db=db,
+            tenant_id=tenant_id,
+            recipient_user_id=activity.assigned_to,
+            actor_user_id=user_id,
+            title="Task assigned to you",
+            message=(
+                f'Task "{activity.title}" has been assigned to you.'
+            ),
+            related_module="activities",
+            related_record_id=activity.id,
+        )
+
+    if (
+        activity.activity_type == "Task"
+        and creator_user_id is not None
+        and creator_user_id != user_id
+        and changed_fields
+    ):
+        if "status" in changed_fields:
+            old_status, new_status = changed_fields["status"]
+            message = (
+                f'The assigned salesperson updated your task '
+                f'"{activity.title}" from {old_status} to {new_status}.'
+            )
+        else:
+            message = (
+                f'The assigned salesperson updated your task '
+                f'"{activity.title}".'
+            )
+
+        notify_assignment(
+            db=db,
+            tenant_id=tenant_id,
+            recipient_user_id=creator_user_id,
+            actor_user_id=user_id,
+            title="Task updated",
+            message=message,
+            related_module="activities",
+            related_record_id=activity.id,
+            notification_type="task_update",
+        )
 
     return activity
 

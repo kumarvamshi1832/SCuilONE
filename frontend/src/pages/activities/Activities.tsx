@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import type { Activity } from "../../types/activity";
 import { User } from "../../types/user";
 import { Lead } from "../../types/lead";
@@ -44,7 +44,9 @@ export default function Activities() {
 
   /* ─── Route Context ─── */
   const location = useLocation();
-  const isTasksRoute = location.pathname.includes("tasks");
+const [searchParams] = useSearchParams();
+const isTasksRoute = location.pathname.includes("tasks");
+const overdueFilter = isTasksRoute && searchParams.get("overdue") === "true";
 
   // View Mode: Managers and Tenant Admins can toggle "all" vs "my"; ordinary users or /tasks route default to "my"
   const [viewMode, setViewMode] = useState<"all" | "my">(() => {
@@ -55,7 +57,9 @@ export default function Activities() {
   // Filters
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState(() => (isTasksRoute ? "Task" : ""));
-  const [statusFilter, setStatusFilter] = useState("");
+const [statusFilter, setStatusFilter] = useState(
+  () => searchParams.get("status") || ""
+);
   const [priorityFilter, setPriorityFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
 
@@ -253,6 +257,7 @@ export default function Activities() {
 
   const hasActiveFilters =
     search ||
+    overdueFilter ||
     typeFilter ||
     statusFilter ||
     priorityFilter ||
@@ -284,8 +289,20 @@ export default function Activities() {
     // 3. Type filter
     if (typeFilter && act.activity_type !== typeFilter) return false;
 
-    // 4. Status filter
-    if (statusFilter && act.status !== statusFilter) return false;
+    
+    // 4. Status and overdue filters
+if (statusFilter && act.status !== statusFilter) return false;
+
+if (overdueFilter) {
+  if (
+    !act.due_date ||
+    act.status === "Completed" ||
+    act.status === "Cancelled" ||
+    new Date(act.due_date).getTime() >= Date.now()
+  ) {
+    return false;
+  }
+}
 
     // 5. Priority filter
     if (priorityFilter && act.priority !== priorityFilter) return false;

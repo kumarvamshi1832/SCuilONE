@@ -1,6 +1,8 @@
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.core.password_policy import validate_password
+
 
 class UserCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=150)
@@ -21,17 +23,20 @@ class UserProfileUpdate(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
-    confirm_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=15, max_length=128)
+    confirm_password: str = Field(min_length=15, max_length=128)
 
     @model_validator(mode="after")
     def validate_passwords(self):
         if self.new_password != self.confirm_password:
-            raise ValueError("New password and confirmation do not match")
+            raise ValueError(
+                "New password and confirmation do not match"
+            )
 
         if self.current_password == self.new_password:
             raise ValueError(
                 "New password must be different from the current password"
             )
 
+        validate_password(self.new_password)
         return self

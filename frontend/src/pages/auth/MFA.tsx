@@ -25,7 +25,7 @@ export default function MFA() {
 
     if (otpFlow === "mfa") {
       const mfaEmail = sessionStorage.getItem("mfa_email");
-      const mfaTempToken = sessionStorage.getItem("mfa_temp_token");
+      const mfaTempToken = sessionStorage.getItem("mfa_token");
 
       if (!mfaEmail || !mfaTempToken) {
         navigate("/login");
@@ -67,40 +67,82 @@ export default function MFA() {
 
     try {
       if (flow === "mfa") {
-        const response = await verifyMFA({
-          email,
-          otp_code: otp,
-          temp_token: tempToken,
-        });
+  const response = await verifyMFA({
+    mfa_token: tempToken,
+    code: otp,
+  });
 
-        sessionStorage.removeItem("mfa_email");
-        sessionStorage.removeItem("mfa_temp_token");
-        sessionStorage.removeItem("otp_flow");
+  if (!response.access_token) {
+    throw new Error("Access token was not returned by the server.");
+  }
 
-        if (response.access_token) {
-          sessionStorage.setItem("access_token", response.access_token);
-        }
-        if (response.refresh_token) {
-          sessionStorage.setItem("refresh_token", response.refresh_token);
-        }
-        if (response.user) {
-          sessionStorage.setItem("user", JSON.stringify(response.user));
-        }
+  sessionStorage.setItem("access_token", response.access_token);
 
-        setMessage("MFA verified successfully!");
-        setTimeout(() => navigate("/dashboard"), 800);
-      } else {
-        await verifyOTP({
-          email,
-          otp,
-        });
+  if (response.refresh_token) {
+    sessionStorage.setItem("refresh_token", response.refresh_token);
+  } else {
+    sessionStorage.removeItem("refresh_token");
+  }
 
-        sessionStorage.removeItem("verification_email");
-        sessionStorage.removeItem("otp_flow");
+  if (response.user) {
+    sessionStorage.setItem(
+      "user",
+      JSON.stringify({
+        ...response.user,
+        role: response.role,
+        permissions: response.permissions || [],
+      })
+    );
+  }
 
-        setMessage("Email verified successfully!");
-        setTimeout(() => navigate("/login"), 800);
-      }
+  if (response.tenant) {
+    sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
+  }
+
+  sessionStorage.removeItem("mfa_email");
+  sessionStorage.removeItem("mfa_token");
+  sessionStorage.removeItem("mfa_user");
+  sessionStorage.removeItem("mfa_tenant");
+  sessionStorage.removeItem("mfa_role");
+  sessionStorage.removeItem("mfa_temp_token");
+  sessionStorage.removeItem("otp_flow");
+
+  setMessage("MFA verified successfully!");
+
+  if (response.onboarding_required) {
+    setTimeout(() => navigate("/complete-profile"), 500);
+    return;
+  }
+
+  const role = (response.role || "").toUpperCase();
+
+  if (role.includes("MANAGER")) {
+    navigate("/manager/dashboard", { replace: true });
+  } else if (role.includes("SALES")) {
+    navigate("/sales/dashboard", { replace: true });
+  } else if (role.includes("OPERATIONS")) {
+    navigate("/operations/dashboard", { replace: true });
+  } else if (role.includes("SUPPORT")) {
+    navigate("/support/dashboard", { replace: true });
+  } else if (role.includes("AUDITOR") || role.includes("READ_ONLY")) {
+    navigate("/auditor/dashboard", { replace: true });
+  } else {
+    const industrySlug = response.tenant?.industry
+      ? response.tenant.industry.toLowerCase().replace(/\s+/g, "-")
+      : "real-estate";
+
+    navigate(`/${industrySlug}/dashboard`, { replace: true });
+  }
+} else {
+  await verifyOTP({ email, otp });
+
+  sessionStorage.removeItem("verification_email");
+  sessionStorage.removeItem("otp_flow");
+
+  setMessage("Email verified successfully!");
+  setTimeout(() => navigate("/login"), 800);
+}
+ 
     } catch (err) {
       const apiError = err as { message?: string };
       setError(apiError.message || "Invalid verification code.");

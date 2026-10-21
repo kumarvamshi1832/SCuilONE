@@ -11,7 +11,7 @@ import AcceptInvitation from "../pages/auth/AcceptInvitation";
 import Workflows from "../pages/workflows/Workflows";
 import ProtectedRoute from "../components/layout/ProtectedRoute";
 import DashboardLayout from "../components/layout/DashboardLayout";
-
+import MFASetup from "../pages/auth/MFASetup";
 import RealEstateDashboard from "../pages/dashboard/RealEstateDashboard";
 import EducationConsultingDashboard from "../pages/dashboard/EducationConsultingDashboard";
 import ManagerDashboard from "../pages/dashboard/ManagerDashboard";
@@ -29,15 +29,17 @@ import MyProfile from "../pages/profile/MyProfile";
 import FormBuilder from "../pages/form-builder/FormBuilder";
 import Pipelines from "../pages/pipelines/Pipelines";
 
+
 /* Dedicated Activities page */
 import Activities from "../pages/activities/Activities";
 
 /* Keep these pages as placeholders */
 import {
   Tasks,
-  Reports,
   Settings,
 } from "../pages/dashboard/Placeholders";
+
+import Reports from "../pages/dashboard/Reports";
 
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";
@@ -133,6 +135,7 @@ export default function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/mfa" element={<MFA />} />
+        <Route path="/mfa-setup" element={<MFASetup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/verify-reset-otp" element={<VerifyResetOTP />} />
         <Route path="/reset-password" element={<ResetPassword />} />

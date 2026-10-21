@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Deal } from "../../types/deal";
 import { User } from "../../types/user";
 import { Lead } from "../../types/lead";
@@ -27,13 +28,15 @@ export default function Deals() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState("");
+const [stageFilter, setStageFilter] = useState(
+  () => searchParams.get("stage") || ""
+);
   const [assignedFilter, setAssignedFilter] = useState("");
 
   // Modals

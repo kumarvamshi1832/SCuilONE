@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import type { Lead } from "../../types/lead";
 import { User } from "../../types/user";
 import { getLeads } from "../../services/leadService";
@@ -32,6 +32,7 @@ export default function Leads() {
   const permissions = useMemo(() => getLeadPermissions(), []);
 
   const { industry } = useParams();
+  const [searchParams] = useSearchParams();
   const tenantStr = sessionStorage.getItem("tenant");
   let tenantIndustry = "real-estate";
   if (tenantStr) {
@@ -51,7 +52,10 @@ export default function Leads() {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+const [statusFilter, setStatusFilter] = useState(
+  () => searchParams.get("status") || ""
+);
+
   const [sourceFilter, setSourceFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
 
@@ -437,13 +441,13 @@ setLeads(leadsData);
                       <span className="lead-name-text">{lead.full_name}</span>
                     </div>
                   </td>
-                  <td className="text-dim">{lead.email || "â€”"}</td>
-                  <td className="text-dim">{lead.phone || "â€”"}</td>
+                  <td className="text-dim">{lead.email || "---"}</td>
+                  <td className="text-dim">{lead.phone || "---"}</td>
                   <td>
                     {lead.source ? (
                       <span className="lead-source-badge">{lead.source}</span>
                     ) : (
-                      <span className="text-dim">â€”</span>
+                      <span className="text-dim">---</span>
                     )}
                   </td>
                   <td>

@@ -13,30 +13,63 @@ import type {
   ResetPasswordRequest,
   TokenResponse,
   MessageResponse,
+  MFAEnrollmentStartRequest,
+  MFAEnrollmentStartResponse,
+  MFAEnrollmentVerifyRequest,
+  MFAEnrollmentVerifyResponse,
 } from "../types/auth";
 
-/* ─── Axios Client ─── */
+/* Axios Client */
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
 });
 
-// Auto-logout on 401 Unauthorized
+/* Attach Access Token */
+
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = sessionStorage.getItem("access_token");
+
+    if (token) {
+      config.headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+/* Handle Unauthorized Responses */
+
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
-      // Token is invalid or expired
+    const status = error.response?.status;
+    const requestUrl = String(error.config?.url ?? "");
+
+    const isAuthRequest =
+      requestUrl.includes("/api/v1/auth/login") ||
+      requestUrl.includes("/api/v1/auth/mfa/verify") ||
+      requestUrl.includes("/api/v1/auth/mfa/enroll/start") ||
+      requestUrl.includes("/api/v1/auth/mfa/enroll/verify");
+
+    if (status === 401 && !isAuthRequest) {
       sessionStorage.removeItem("access_token");
+      sessionStorage.removeItem("refresh_token");
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("tenant");
-      window.location.href = "/login";
+
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
+
     return Promise.reject(error);
   }
 );
 
-/* ─── Endpoints ─── */
+/* Endpoints */
 
 const AUTH_ENDPOINTS = {
   CHECK_EMAIL: "/api/v1/auth/check-email",
@@ -44,21 +77,25 @@ const AUTH_ENDPOINTS = {
   VERIFY_OTP: "/api/v1/auth/verify-otp",
   RESEND_OTP: "/api/v1/auth/resend-otp",
   LOGIN: "/api/v1/auth/login",
-  VERIFY_MFA: "/api/v1/auth/verify-mfa",
+  VERIFY_MFA: "/api/v1/auth/mfa/verify",
+  MFA_ENROLL_START: "/api/v1/auth/mfa/enroll/start",
+  MFA_ENROLL_VERIFY: "/api/v1/auth/mfa/enroll/verify",
   FORGOT_PASSWORD: "/api/v1/auth/forgot-password",
   VERIFY_RESET_OTP: "/api/v1/auth/verify-reset-otp",
   RESET_PASSWORD: "/api/v1/auth/reset-password",
   ME: "/api/v1/auth/me",
 } as const;
 
-/* ─── Error Handler ─── */
+/* Error Handler */
 
 function handleApiError(error: unknown): never {
   if (axios.isAxiosError(error)) {
     if (error.response) {
-      const data = error.response.data as Record<string, unknown> | undefined;
-      const status = error.response.status;
+      const data = error.response.data as
+        | Record<string, unknown>
+        | undefined;
 
+      const status = error.response.status;
       let message = "Something went wrong. Please try again.";
 
       if (data) {
@@ -67,15 +104,29 @@ function handleApiError(error: unknown): never {
         } else if (typeof data.detail === "string") {
           message = data.detail;
         } else if (Array.isArray(data.detail)) {
-          const first = data.detail[0] as { msg?: string } | undefined;
+          const first = data.detail[0] as
+            | { msg?: string }
+            | undefined;
+
           message = first?.msg ?? message;
         }
       }
 
-      if (status === 401) message = message || "Invalid credentials.";
-      if (status === 403) message = message || "Access denied.";
-      if (status === 404) message = message || "Resource not found.";
-      if (status >= 500) message = message || "Server error. Please try later.";
+      if (status === 401 && !data?.detail && !data?.message) {
+        message = "Invalid credentials or authentication failed.";
+      }
+
+      if (status === 403) {
+        message = "Access denied.";
+      }
+
+      if (status === 404) {
+        message = "Resource not found.";
+      }
+
+      if (status >= 500) {
+        message = "Server error. Please try later.";
+      }
 
       throw { message, status, detail: data };
     }
@@ -96,7 +147,7 @@ function handleApiError(error: unknown): never {
   };
 }
 
-/* ─── Service Functions ─── */
+/* Check Email */
 
 export async function checkEmail(
   data: CheckEmailRequest
@@ -106,11 +157,14 @@ export async function checkEmail(
       AUTH_ENDPOINTS.CHECK_EMAIL,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Register User */
 
 export async function registerUser(
   data: RegisterRequest
@@ -120,11 +174,14 @@ export async function registerUser(
       AUTH_ENDPOINTS.REGISTER,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Verify Registration OTP */
 
 export async function verifyOTP(
   data: VerifyOTPRequest
@@ -134,11 +191,14 @@ export async function verifyOTP(
       AUTH_ENDPOINTS.VERIFY_OTP,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Resend Registration OTP */
 
 export async function resendOTP(
   data: ResendOTPRequest
@@ -148,11 +208,14 @@ export async function resendOTP(
       AUTH_ENDPOINTS.RESEND_OTP,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Login */
 
 export async function loginUser(
   data: LoginRequest
@@ -162,11 +225,14 @@ export async function loginUser(
       AUTH_ENDPOINTS.LOGIN,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Verify MFA During Login */
 
 export async function verifyMFA(
   data: VerifyMFARequest
@@ -176,11 +242,48 @@ export async function verifyMFA(
       AUTH_ENDPOINTS.VERIFY_MFA,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Start MFA Enrollment */
+
+export async function startMFAEnrollment(
+  data: MFAEnrollmentStartRequest
+): Promise<MFAEnrollmentStartResponse> {
+  try {
+    const response = await apiClient.post<MFAEnrollmentStartResponse>(
+      AUTH_ENDPOINTS.MFA_ENROLL_START,
+      data
+    );
+
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+/* Verify MFA Enrollment */
+
+export async function verifyMFAEnrollment(
+  data: MFAEnrollmentVerifyRequest
+): Promise<MFAEnrollmentVerifyResponse> {
+  try {
+    const response = await apiClient.post<MFAEnrollmentVerifyResponse>(
+      AUTH_ENDPOINTS.MFA_ENROLL_VERIFY,
+      data
+    );
+
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+/* Forgot Password */
 
 export async function forgotPassword(
   data: ForgotPasswordRequest
@@ -190,11 +293,14 @@ export async function forgotPassword(
       AUTH_ENDPOINTS.FORGOT_PASSWORD,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Verify Password Reset OTP */
 
 export async function verifyResetOTP(
   data: VerifyResetOTPRequest
@@ -204,11 +310,14 @@ export async function verifyResetOTP(
       AUTH_ENDPOINTS.VERIFY_RESET_OTP,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);
   }
 }
+
+/* Reset Password */
 
 export async function resetPassword(
   data: ResetPasswordRequest
@@ -218,6 +327,7 @@ export async function resetPassword(
       AUTH_ENDPOINTS.RESET_PASSWORD,
       data
     );
+
     return response.data;
   } catch (error) {
     handleApiError(error);

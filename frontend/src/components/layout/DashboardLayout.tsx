@@ -1,9 +1,15 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
 import { getTenantDetails } from "../../services/dashboardService";
 import { getMyProfile } from "../../services/profileService";
 import { TenantDetails } from "../../types/dashboard";
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  type NotificationItem,
+} from "../../services/notificationService";
 import "./DashboardLayout.css";
 
 interface DashboardLayoutProps {
@@ -31,7 +37,7 @@ export default function DashboardLayout({
     try {
       const tenantData = JSON.parse(tenantStr);
 
-      if (tenantData?.industry) {
+      if (typeof tenantData?.industry === "string") {
         tenantIndustry = tenantData.industry
           .toLowerCase()
           .replace(/\s+/g, "-");
@@ -44,6 +50,12 @@ export default function DashboardLayout({
   const currentIndustry = industry || tenantIndustry;
   const basePath = `/${currentIndustry}`;
 
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isNotificationLoading, setIsNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
+
   const [tenant, setTenant] = useState<TenantDetails | null>(null);
   const [user, setUser] = useState<{
     name: string;
@@ -52,6 +64,38 @@ export default function DashboardLayout({
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+
+  const loadNotifications = useCallback(async () => {
+    if (!sessionStorage.getItem("user")) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
+    setIsNotificationLoading(true);
+    setNotificationError("");
+
+    try {
+      const response = await getNotifications(20, 0);
+      setNotifications(response.items);
+      setUnreadCount(response.unread_count);
+    } catch (error) {
+      console.error("Failed to load notifications:", error);
+      setNotificationError("Unable to load notifications.");
+    } finally {
+      setIsNotificationLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNotifications();
+
+    const intervalId = window.setInterval(() => {
+      void loadNotifications();
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [loadNotifications]);
 
   useEffect(() => {
     let isMounted = true;
@@ -79,7 +123,7 @@ export default function DashboardLayout({
       }
     };
 
-    loadProfile();
+    void loadProfile();
 
     return () => {
       isMounted = false;
@@ -142,7 +186,84 @@ export default function DashboardLayout({
 
   const handleLogout = () => {
     sessionStorage.clear();
+    setNotifications([]);
+    setUnreadCount(0);
+    setIsNotificationOpen(false);
     navigate("/login");
+  };
+
+  const handleMarkAllAsRead = async () => {
+    setNotificationError("");
+
+    try {
+      await markAllNotificationsAsRead();
+
+      setNotifications((previous) =>
+        previous.map((item) => ({
+          ...item,
+          is_read: true,
+        }))
+      );
+
+      setUnreadCount(0);
+    } catch (error) {
+      console.error("Failed to mark notifications as read:", error);
+      setNotificationError("Could not mark all notifications as read.");
+    }
+  };
+
+  const handleNotificationClick = async (item: NotificationItem) => {
+    setNotificationError("");
+
+    try {
+      if (!item.is_read) {
+        await markNotificationAsRead(item.id);
+
+        setNotifications((previous) =>
+          previous.map((notification) =>
+            notification.id === item.id
+              ? { ...notification, is_read: true }
+              : notification
+          )
+        );
+
+        setUnreadCount((count) => Math.max(0, count - 1));
+      }
+
+      setIsNotificationOpen(false);
+
+      if (item.related_module && item.related_record_id) {
+        const moduleName = item.related_module.toLowerCase();
+
+        const routeMap: Record<string, string> = {
+          lead: "leads",
+          leads: "leads",
+          contact: "contacts",
+          contacts: "contacts",
+          account: "accounts",
+          accounts: "accounts",
+          deal: "deals",
+          deals: "deals",
+          task: "tasks",
+          tasks: "tasks",
+          activity: "activities",
+          activities: "activities",
+        };
+
+        const route = routeMap[moduleName];
+
+        if (route) {
+          navigate(
+            `${basePath}/${route}?recordId=${encodeURIComponent(
+              item.related_record_id
+            )}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update notification:", error);
+      setNotificationError("Could not update this notification.");
+    }
   };
 
   const role = (user?.role || "").toUpperCase();
@@ -229,11 +350,8 @@ export default function DashboardLayout({
     const dealIcon =
       "M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6";
 
-    const activityIcon =
-      "M22 12h-4l-3 9L9 3l-3 9H2";
-
-    const reportIcon =
-      "M18 20V10 M12 20V4 M6 20v-4";
+    const activityIcon = "M22 12h-4l-3 9L9 3l-3 9H2";
+    const reportIcon = "M18 20V10 M12 20V4 M6 20v-4";
 
     const pipelineIcon =
       "M3 3h7v7H3z M14 3h7v7h-7z M8.5 14h7v7h-7z M6.5 10v2h5.5v2 M17.5 10v2h-5v2";
@@ -263,162 +381,59 @@ export default function DashboardLayout({
 
     if (currentIndustry === "education-consulting") {
       return [
-        {
-          label: "Dashboard",
-          path: `${basePath}/dashboard`,
-          icon: dashboardIcon,
-        },
-        {
-          label: "Leads",
-          path: `${basePath}/leads`,
-          icon: peopleIcon,
-        },
-        {
-          label: "Students",
-          path: `${basePath}/students`,
-          icon: peopleIcon,
-        },
+        { label: "Dashboard", path: `${basePath}/dashboard`, icon: dashboardIcon },
+        { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
+        { label: "Students", path: `${basePath}/students`, icon: peopleIcon },
         {
           label: "Applications",
           path: `${basePath}/applications`,
           icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z",
         },
-        {
-          label: "Universities",
-          path: `${basePath}/universities`,
-          icon: accountIcon,
-        },
-        {
-          label: "Programs",
-          path: `${basePath}/programs`,
-          icon: dealIcon,
-        },
-        {
-          label: "Counselors",
-          path: `${basePath}/counselors`,
-          icon: peopleIcon,
-        },
-        {
-          label: "Consultations",
-          path: `${basePath}/consultations`,
-          icon: activityIcon,
-        },
-        {
-          label: "Follow-ups",
-          path: `${basePath}/follow-ups`,
-          icon: activityIcon,
-        },
-        {
-          label: "Tasks",
-          path: `${basePath}/tasks`,
-          icon: activityIcon,
-        },
-        {
-          label: "Reports",
-          path: `${basePath}/reports`,
-          icon: reportIcon,
-        },
-        {
-          label: "Settings",
-          path: `${basePath}/settings`,
-          icon: settingsIcon,
-        },
+        { label: "Universities", path: `${basePath}/universities`, icon: accountIcon },
+        { label: "Programs", path: `${basePath}/programs`, icon: dealIcon },
+        { label: "Counselors", path: `${basePath}/counselors`, icon: peopleIcon },
+        { label: "Consultations", path: `${basePath}/consultations`, icon: activityIcon },
+        { label: "Follow-ups", path: `${basePath}/follow-ups`, icon: activityIcon },
+        { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
+        { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
+        { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
       ];
     }
 
     if (isManager) {
       return [
-        {
-          label: "Dashboard",
-          path: "/manager/dashboard",
-          icon: dashboardIcon,
-        },
-        {
-          label: "Leads",
-          path: `${basePath}/leads`,
-          icon: peopleIcon,
-        },
-        {
-          label: "Contacts",
-          path: `${basePath}/contacts`,
-          icon: peopleIcon,
-        },
-        {
-          label: "Accounts",
-          path: `${basePath}/accounts`,
-          icon: accountIcon,
-        },
-        {
-          label: "Deals",
-          path: `${basePath}/deals`,
-          icon: dealIcon,
-        },
+        { label: "Dashboard", path: "/manager/dashboard", icon: dashboardIcon },
+        { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
+        { label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon },
+        { label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon },
+        { label: "Deals", path: `${basePath}/deals`, icon: dealIcon },
         pipelineItem,
-        {
-          label: "Activities",
-          path: `${basePath}/activities`,
-          icon: activityIcon,
-        },
-        {
-          label: "Reports",
-          path: `${basePath}/reports`,
-          icon: reportIcon,
-        },
+        { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
+        { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
         workflowItem,
       ];
     }
 
     if (isSales) {
       const salesNav: NavItem[] = [
-        {
-          label: "Dashboard",
-          path: "/sales/dashboard",
-          icon: dashboardIcon,
-        },
+        { label: "Dashboard", path: "/sales/dashboard", icon: dashboardIcon },
       ];
 
       if (hasPermission("lead.view")) {
-        salesNav.push({
-          label: "Leads",
-          path: `${basePath}/leads`,
-          icon: peopleIcon,
-        });
+        salesNav.push({ label: "Leads", path: `${basePath}/leads`, icon: peopleIcon });
       }
-
       if (hasPermission("contact.view")) {
-        salesNav.push({
-          label: "Contacts",
-          path: `${basePath}/contacts`,
-          icon: peopleIcon,
-        });
+        salesNav.push({ label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon });
       }
-
       if (hasPermission("account.view")) {
-        salesNav.push({
-          label: "Accounts",
-          path: `${basePath}/accounts`,
-          icon: accountIcon,
-        });
+        salesNav.push({ label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon });
       }
-
       if (hasPermission("deal.view")) {
-        salesNav.push({
-          label: "Deals",
-          path: `${basePath}/deals`,
-          icon: dealIcon,
-        });
+        salesNav.push({ label: "Deals", path: `${basePath}/deals`, icon: dealIcon });
       }
-
-      if (hasPermission("pipeline.view")) {
-        salesNav.push(pipelineItem);
-      }
-
+      if (hasPermission("pipeline.view")) salesNav.push(pipelineItem);
       if (hasPermission("task.view")) {
-        salesNav.push({
-          label: "Tasks",
-          path: `${basePath}/tasks`,
-          icon: activityIcon,
-        });
+        salesNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
       }
 
       return salesNav;
@@ -426,55 +441,24 @@ export default function DashboardLayout({
 
     if (isOps) {
       const opsNav: NavItem[] = [
-        {
-          label: "Dashboard",
-          path: "/operations/dashboard",
-          icon: dashboardIcon,
-        },
+        { label: "Dashboard", path: "/operations/dashboard", icon: dashboardIcon },
       ];
 
       if (hasPermission("lead.view")) {
-        opsNav.push({
-          label: "Leads",
-          path: `${basePath}/leads`,
-          icon: peopleIcon,
-        });
+        opsNav.push({ label: "Leads", path: `${basePath}/leads`, icon: peopleIcon });
       }
-
       if (hasPermission("contact.view")) {
-        opsNav.push({
-          label: "Contacts",
-          path: `${basePath}/contacts`,
-          icon: peopleIcon,
-        });
+        opsNav.push({ label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon });
       }
-
       if (hasPermission("account.view")) {
-        opsNav.push({
-          label: "Accounts",
-          path: `${basePath}/accounts`,
-          icon: accountIcon,
-        });
+        opsNav.push({ label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon });
       }
-
       if (hasPermission("deal.view")) {
-        opsNav.push({
-          label: "Deals",
-          path: `${basePath}/deals`,
-          icon: dealIcon,
-        });
+        opsNav.push({ label: "Deals", path: `${basePath}/deals`, icon: dealIcon });
       }
-
-      if (hasPermission("pipeline.view")) {
-        opsNav.push(pipelineItem);
-      }
-
+      if (hasPermission("pipeline.view")) opsNav.push(pipelineItem);
       if (hasPermission("task.view")) {
-        opsNav.push({
-          label: "Tasks",
-          path: `${basePath}/tasks`,
-          icon: activityIcon,
-        });
+        opsNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
       }
 
       return opsNav;
@@ -484,89 +468,39 @@ export default function DashboardLayout({
       const customNav: NavItem[] = [
         {
           label: "Dashboard",
-          path: isSupport
-            ? "/support/dashboard"
-            : "/auditor/dashboard",
+          path: isSupport ? "/support/dashboard" : "/auditor/dashboard",
           icon: dashboardIcon,
         },
       ];
 
       if (hasPermission("lead.view")) {
-        customNav.push({
-          label: "Leads",
-          path: `${basePath}/leads`,
-          icon: peopleIcon,
-        });
+        customNav.push({ label: "Leads", path: `${basePath}/leads`, icon: peopleIcon });
       }
-
       if (hasPermission("contact.view")) {
-        customNav.push({
-          label: "Contacts",
-          path: `${basePath}/contacts`,
-          icon: peopleIcon,
-        });
+        customNav.push({ label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon });
       }
-
       if (hasPermission("account.view")) {
-        customNav.push({
-          label: "Accounts",
-          path: `${basePath}/accounts`,
-          icon: accountIcon,
-        });
+        customNav.push({ label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon });
       }
-
       if (hasPermission("deal.view")) {
-        customNav.push({
-          label: "Deals",
-          path: `${basePath}/deals`,
-          icon: dealIcon,
-        });
+        customNav.push({ label: "Deals", path: `${basePath}/deals`, icon: dealIcon });
       }
-
-      if (hasPermission("pipeline.view")) {
-        customNav.push(pipelineItem);
-      }
-
+      if (hasPermission("pipeline.view")) customNav.push(pipelineItem);
       if (hasPermission("task.view")) {
-        customNav.push({
-          label: "Tasks",
-          path: `${basePath}/tasks`,
-          icon: activityIcon,
-        });
+        customNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
       }
-
       if (hasPermission("activity.view")) {
-        customNav.push({
-          label: "Activities",
-          path: `${basePath}/activities`,
-          icon: activityIcon,
-        });
+        customNav.push({ label: "Activities", path: `${basePath}/activities`, icon: activityIcon });
       }
-
       if (isSupport && hasPermission("property.view")) {
-        customNav.push({
-          label: "Properties",
-          path: `${basePath}/properties`,
-          icon: accountIcon,
-        });
+        customNav.push({ label: "Properties", path: `${basePath}/properties`, icon: accountIcon });
       }
-
       if (hasPermission("user.view")) {
-        customNav.push({
-          label: "Users",
-          path: `${basePath}/users`,
-          icon: userIcon,
-        });
+        customNav.push({ label: "Users", path: `${basePath}/users`, icon: userIcon });
       }
-
       if (hasPermission("role.view")) {
-        customNav.push({
-          label: "Roles",
-          path: `${basePath}/roles`,
-          icon: roleIcon,
-        });
+        customNav.push({ label: "Roles", path: `${basePath}/roles`, icon: roleIcon });
       }
-
       if (hasPermission("permission.view")) {
         customNav.push({
           label: "Permissions",
@@ -574,83 +508,33 @@ export default function DashboardLayout({
           icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
         });
       }
-
       if (hasPermission("report.view")) {
-        customNav.push({
-          label: "Reports",
-          path: `${basePath}/reports`,
-          icon: reportIcon,
-        });
+        customNav.push({ label: "Reports", path: `${basePath}/reports`, icon: reportIcon });
       }
-
       if (isSupport && hasPermission("settings")) {
-        customNav.push({
-          label: "Settings",
-          path: `${basePath}/settings`,
-          icon: settingsIcon,
-        });
+        customNav.push({ label: "Settings", path: `${basePath}/settings`, icon: settingsIcon });
       }
 
       return customNav;
     }
 
     return [
-      {
-        label: "Dashboard",
-        path: `${basePath}/dashboard`,
-        icon: dashboardIcon,
-      },
-      {
-        label: "Leads",
-        path: `${basePath}/leads`,
-        icon: peopleIcon,
-      },
-      {
-        label: "Contacts",
-        path: `${basePath}/contacts`,
-        icon: peopleIcon,
-      },
-      {
-        label: "Accounts",
-        path: `${basePath}/accounts`,
-        icon: accountIcon,
-      },
-      {
-        label: "Deals",
-        path: `${basePath}/deals`,
-        icon: dealIcon,
-      },
+      { label: "Dashboard", path: `${basePath}/dashboard`, icon: dashboardIcon },
+      { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
+      { label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon },
+      { label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon },
+      { label: "Deals", path: `${basePath}/deals`, icon: dealIcon },
       pipelineItem,
-      {
-        label: "Activities",
-        path: `${basePath}/activities`,
-        icon: activityIcon,
-      },
-      {
-        label: "Reports",
-        path: `${basePath}/reports`,
-        icon: reportIcon,
-      },
-      {
-        label: "Users",
-        path: `${basePath}/users`,
-        icon: userIcon,
-      },
-      {
-        label: "Roles",
-        path: `${basePath}/roles`,
-        icon: roleIcon,
-      },
+      { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
+      { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
+      { label: "Users", path: `${basePath}/users`, icon: userIcon },
+      { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
       {
         label: "Permissions",
         path: `${basePath}/permissions`,
         icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
       },
-      {
-        label: "Settings",
-        path: `${basePath}/settings`,
-        icon: settingsIcon,
-      },
+      { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
       {
         label: "Form Builder",
         path: `${basePath}/form-builder`,
@@ -682,16 +566,11 @@ export default function DashboardLayout({
         />
       )}
 
-      <aside
-        className={`dashboard-sidebar ${isSidebarOpen ? "open" : ""}`}
-      >
+      <aside className={`dashboard-sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <div
             className="brand-logo-text"
-            style={{
-              display: "flex",
-              alignItems: "center",
-            }}
+            style={{ display: "flex", alignItems: "center" }}
           >
             {currentIndustry === "education-consulting" && (
               <svg
@@ -728,9 +607,7 @@ export default function DashboardLayout({
               textAlign: "left",
               width: "100%",
               paddingLeft:
-                currentIndustry === "education-consulting"
-                  ? "32px"
-                  : "0",
+                currentIndustry === "education-consulting" ? "32px" : "0",
             }}
           >
             {currentIndustry === "education-consulting"
@@ -760,7 +637,6 @@ export default function DashboardLayout({
               >
                 <path d={item.icon} />
               </svg>
-
               {item.label}
             </Link>
           ))}
@@ -788,10 +664,7 @@ export default function DashboardLayout({
             Help
           </Link>
 
-          <button
-            className="nav-item logout-btn"
-            onClick={handleLogout}
-          >
+          <button className="nav-item logout-btn" onClick={handleLogout}>
             <svg
               className="nav-icon"
               viewBox="0 0 24 24"
@@ -863,12 +736,7 @@ export default function DashboardLayout({
                 strokeLinejoin="round"
               >
                 <circle cx="11" cy="11" r="8" />
-                <line
-                  x1="21"
-                  y1="21"
-                  x2="16.65"
-                  y2="16.65"
-                />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
 
               <input
@@ -930,22 +798,109 @@ export default function DashboardLayout({
               )}
             </button>
 
-            <button
-              className="notification-btn"
-              aria-label="Notifications"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+            <div className="notification-wrapper">
+              <button
+                type="button"
+                className="notification-btn"
+                aria-label={`Notifications${
+                  unreadCount ? `, ${unreadCount} unread` : ""
+                }`}
+                aria-expanded={isNotificationOpen}
+                onClick={() => {
+                  const willOpen = !isNotificationOpen;
+                  setIsNotificationOpen(willOpen);
+
+                  if (willOpen) {
+                    void loadNotifications();
+                  }
+                }}
               >
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            </button>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+
+                {unreadCount > 0 && (
+                  <span className="notification-badge">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationOpen && (
+                <div className="notification-panel">
+                  <div className="notification-panel-header">
+                    <div>
+                      <h3>Notifications</h3>
+                      <span>{unreadCount} unread</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="notification-mark-all"
+                      disabled={unreadCount === 0}
+                      onClick={() => void handleMarkAllAsRead()}
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+
+                  {notificationError && (
+                    <p className="notification-error">{notificationError}</p>
+                  )}
+
+                  {isNotificationLoading ? (
+                    <div className="notification-empty">
+                      Loading notifications...
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="notification-empty">
+                      <span className="notification-empty-icon">♧</span>
+                      <strong>You're all caught up</strong>
+                      <p>New notifications will appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="notification-list">
+                      {notifications.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          className={`notification-item ${
+                            item.is_read ? "is-read" : "is-unread"
+                          }`}
+                          onClick={() =>
+                            void handleNotificationClick(item)
+                          }
+                        >
+                          <span className="notification-item-icon">
+                            {item.is_read ? "○" : "●"}
+                          </span>
+
+                          <span className="notification-item-content">
+                            <strong>{item.title}</strong>
+                            <span>{item.message}</span>
+                            <small>
+                              {new Date(item.created_at).toLocaleString()}
+                            </small>
+                          </span>
+
+                          {!item.is_read && (
+                            <span className="notification-unread-dot" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
@@ -968,10 +923,7 @@ export default function DashboardLayout({
               </div>
 
               <div className="user-info">
-                <span className="user-name">
-                  {user?.name || "User"}
-                </span>
-
+                <span className="user-name">{user?.name || "User"}</span>
                 <span className="user-role">
                   {user?.role || "Tenant Admin"}
                 </span>

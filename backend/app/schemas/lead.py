@@ -12,6 +12,8 @@ class LeadCreate(BaseModel):
     status: str = "New"
     assigned_to: UUID | None = None
     notes: str | None = None
+    override_capacity: bool = False
+    override_reason: str | None = None
 
 
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.auth import router as auth_router
-from app.routes.test import router as test_router
+# from app.routes.test import router as test_router
 from app.routes.users import router as user_router
 from app.routes.leads import router as lead_router
 from app.routes.contacts import router as contact_router
@@ -11,8 +11,23 @@ from app.routes import deals
 from app.routes.activities import router as activities_router
 from app.routes.pipelines import router as pipelines_router
 from app.routes.form_templates import router as form_templates_router
+from app.routes.workflows import router as workflows_router
+from app.routes.notifications import router as notifications_router
+from app.routes.dashboard import router as dashboard_router
+from app.routes.reports import router as reports_router
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from app.core.rate_limiter import limiter
 
 app = FastAPI()
+
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 origins = [
     "http://localhost:5173",
@@ -35,7 +50,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
-app.include_router(test_router)
+# app.include_router(test_router)
 app.include_router(user_router)
 app.include_router(lead_router)
 app.include_router(contact_router)
@@ -44,6 +59,10 @@ app.include_router(deals.router)
 app.include_router(activities_router)
 app.include_router(pipelines_router)
 app.include_router(form_templates_router)
+app.include_router(workflows_router)
+app.include_router(notifications_router)
+app.include_router(dashboard_router)
+app.include_router(reports_router)
 
 @app.get("/")
 def home():
