@@ -45,19 +45,40 @@ export default function Activities() {
   /* ─── Route Context ─── */
   const location = useLocation();
   const isTasksRoute = location.pathname.includes("tasks");
+  const isExplicitMyTasks = location.pathname.includes("my-tasks");
 
-  // View Mode: Managers and Tenant Admins can toggle "all" vs "my"; ordinary users or /tasks route default to "my"
+  // View Mode: Managers and Tenant Admins can toggle "all" vs "my"; ordinary users or explicit /my-tasks route default to "my"
   const [viewMode, setViewMode] = useState<"all" | "my">(() => {
-    if (isTasksRoute) return "my";
+    if (isExplicitMyTasks) return "my";
     return userContext.canViewAllActivities ? "all" : "my";
   });
 
   // Filters
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState(() => (isTasksRoute ? "Task" : ""));
+  const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
+
+  // Sync state when navigating between routes
+  useEffect(() => {
+    const isTasks = location.pathname.includes("tasks");
+    const isExplicitMy = location.pathname.includes("my-tasks");
+
+    if (isTasks) {
+      if (isExplicitMy || !userContext.canViewAllActivities) {
+        setViewMode("my");
+      } else {
+        setViewMode("all");
+      }
+    } else {
+      if (!userContext.canViewAllActivities) {
+        setViewMode("my");
+      } else {
+        setViewMode("all");
+      }
+    }
+  }, [location.pathname, userContext.canViewAllActivities]);
 
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -213,33 +234,42 @@ export default function Activities() {
     setTimeout(() => setNotification(null), 3500);
   };
 
+  const areIdsEqual = (a?: string | null, b?: string | null): boolean => {
+    if (!a || !b) return false;
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+  };
+
   const getUserDisplay = (userId?: string | null): { name: string; role: string } => {
     if (!userId) return { name: "—", role: "" };
-    const user = users.find((u) => u.id === userId);
+    const user = users.find((u) => areIdsEqual(u.id, userId));
     return user ? { name: user.full_name, role: user.role } : { name: "—", role: "" };
   };
 
   const getAccountName = (accountId: string | null) => {
     if (!accountId) return "";
-    const account = accounts.find((a) => a.id === accountId);
+    const account = accounts.find((a) => areIdsEqual(a.id, accountId));
     return account ? account.name : "";
   };
 
-  const getLeadName = (leadId: string | null) => {
+  const getLeadName = (leadId: string | null, actTitle?: string) => {
     if (!leadId) return "";
-    const lead = leads.find((l) => l.id === leadId);
-    return lead ? lead.full_name : "";
+    const lead = leads.find((l) => areIdsEqual(l.id, leadId));
+    if (lead) return lead.full_name;
+    if (actTitle && actTitle.toLowerCase().startsWith("follow up with ")) {
+      return actTitle.slice(15).trim();
+    }
+    return "";
   };
 
   const getContactName = (contactId: string | null) => {
     if (!contactId) return "";
-    const contact = contacts.find((c) => c.id === contactId);
+    const contact = contacts.find((c) => areIdsEqual(c.id, contactId));
     return contact ? contact.full_name : "";
   };
 
   const getDealName = (dealId: string | null) => {
     if (!dealId) return "";
-    const deal = deals.find((d) => d.id === dealId);
+    const deal = deals.find((d) => areIdsEqual(d.id, dealId));
     return deal ? deal.name : "";
   };
 
@@ -252,11 +282,11 @@ export default function Activities() {
   };
 
   const hasActiveFilters =
-    search ||
-    typeFilter ||
-    statusFilter ||
-    priorityFilter ||
-    (userContext.canViewAllActivities && viewMode === "all" && assignedFilter);
+    Boolean(search) ||
+    Boolean(typeFilter) ||
+    Boolean(statusFilter) ||
+    Boolean(priorityFilter) ||
+    Boolean(userContext.canViewAllActivities && viewMode === "all" && assignedFilter);
 
   /* ─── Filtering (client-side) ─── */
 
@@ -272,7 +302,7 @@ export default function Activities() {
       const titleMatch = (act.title || "").toLowerCase().includes(q);
       const descMatch = (act.description || "").toLowerCase().includes(q);
       const acctMatch = getAccountName(act.account_id).toLowerCase().includes(q);
-      const leadMatch = getLeadName(act.lead_id).toLowerCase().includes(q);
+      const leadMatch = getLeadName(act.lead_id, act.title).toLowerCase().includes(q);
       const contMatch = getContactName(act.contact_id).toLowerCase().includes(q);
       const dealMatch = getDealName(act.deal_id).toLowerCase().includes(q);
 
@@ -281,14 +311,20 @@ export default function Activities() {
       }
     }
 
-    // 3. Type filter
-    if (typeFilter && act.activity_type !== typeFilter) return false;
+    // 3. Type filter (case-insensitive)
+    if (typeFilter && (act.activity_type || "").toLowerCase() !== typeFilter.toLowerCase()) {
+      return false;
+    }
 
-    // 4. Status filter
-    if (statusFilter && act.status !== statusFilter) return false;
+    // 4. Status filter (case-insensitive)
+    if (statusFilter && (act.status || "").toLowerCase() !== statusFilter.toLowerCase()) {
+      return false;
+    }
 
-    // 5. Priority filter
-    if (priorityFilter && act.priority !== priorityFilter) return false;
+    // 5. Priority filter (case-insensitive)
+    if (priorityFilter && (act.priority || "").toLowerCase() !== priorityFilter.toLowerCase()) {
+      return false;
+    }
 
     // 6. Assigned filter (only applicable for users with team-wide visibility in "all" mode)
     if (userContext.canViewAllActivities && viewMode === "all" && assignedFilter) {
@@ -354,10 +390,22 @@ export default function Activities() {
       {/* Page Header */}
       <div className="page-header">
         <div>
-          <h1>{isTasksRoute || viewMode === "my" ? "My Tasks" : "Activities"}</h1>
+          <h1>
+            {isTasksRoute
+              ? viewMode === "my" || !userContext.canViewAllActivities
+                ? "My Tasks"
+                : "Tasks"
+              : viewMode === "my"
+              ? "My Tasks"
+              : "Activities"}
+          </h1>
           <p className="text-muted" style={{ margin: "4px 0 0" }}>
-            {isTasksRoute || viewMode === "my"
-              ? "Manage and complete your assigned tasks and follow-ups."
+            {isTasksRoute
+              ? viewMode === "my" || !userContext.canViewAllActivities
+                ? "Manage and complete your assigned tasks, calls, and meetings."
+                : "Track and manage tasks, calls, and meetings assigned across your team."
+              : viewMode === "my"
+              ? "Manage and complete your assigned activities and tasks."
               : "Track tasks, calls, and meetings across your CRM records."}
           </p>
         </div>
@@ -371,7 +419,7 @@ export default function Activities() {
                 className={`view-segment-btn ${viewMode === "all" ? "active" : ""}`}
                 onClick={() => setViewMode("all")}
               >
-                All Activities
+                {isTasksRoute ? "All Tasks" : "All Activities"}
               </button>
               <button
                 type="button"
@@ -395,7 +443,7 @@ export default function Activities() {
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
-              Create Activity
+              {isTasksRoute ? "Create Task" : "Create Activity"}
             </button>
           )}
         </div>
@@ -420,6 +468,7 @@ export default function Activities() {
           className="filter-select"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
+          aria-label="Filter by activity type"
         >
           <option value="">All Types</option>
           <option value="Task">Task</option>
@@ -490,9 +539,15 @@ export default function Activities() {
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
             <p style={{ color: "#718096", marginBottom: "16px", fontSize: "1rem" }}>
               {hasActiveFilters
-                ? "No activities found matching your filters."
+                ? isTasksRoute
+                  ? "No tasks or activities found matching your filters."
+                  : "No activities found matching your filters."
                 : !userContext.canViewAllActivities || viewMode === "my"
-                ? "No activities currently assigned to you."
+                ? isTasksRoute
+                  ? "No tasks or activities currently assigned to you."
+                  : "No activities currently assigned to you."
+                : isTasksRoute
+                ? "No tasks or activities found."
                 : "No activities found."}
             </p>
             {hasActiveFilters ? (
@@ -508,7 +563,7 @@ export default function Activities() {
                 }}
                 style={{ margin: "0 auto" }}
               >
-                Create First Activity
+                {isTasksRoute ? "Create First Task" : "Create First Activity"}
               </button>
             ) : null}
           </div>
@@ -516,7 +571,7 @@ export default function Activities() {
           <table className="leads-table">
             <thead>
               <tr>
-                <th>Activity</th>
+                <th>{isTasksRoute ? "Task / Activity" : "Activity"}</th>
                 <th>Type</th>
                 <th>Related To</th>
                 <th>Priority</th>
@@ -531,7 +586,7 @@ export default function Activities() {
               {filteredActivities.map((act) => {
                 const assignedUser = getUserDisplay(act.assigned_to);
                 const acctName = getAccountName(act.account_id);
-                const leadName = getLeadName(act.lead_id);
+                const leadName = getLeadName(act.lead_id, act.title);
                 const contName = getContactName(act.contact_id);
                 const dealName = getDealName(act.deal_id);
 
@@ -576,7 +631,7 @@ export default function Activities() {
                             title={`View lead: ${leadName}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const leadObj = leads.find((l) => l.id === act.lead_id);
+                              const leadObj = leads.find((l) => areIdsEqual(l.id, act.lead_id));
                               if (leadObj) {
                                 setViewLeadState(leadObj);
                               }
@@ -699,7 +754,7 @@ export default function Activities() {
           }}
         >
           {(() => {
-            const activeActivity = activities.find((a) => a.id === openActionId);
+            const activeActivity = activities.find((a) => areIdsEqual(a.id, openActionId));
             if (!activeActivity) return null;
 
             return (
@@ -725,7 +780,7 @@ export default function Activities() {
                     type="button"
                     className="dropdown-item activity-dropdown-item"
                     onClick={() => {
-                      const leadObj = leads.find((l) => l.id === activeActivity.lead_id);
+                      const leadObj = leads.find((l) => areIdsEqual(l.id, activeActivity.lead_id));
                       if (leadObj) {
                         setViewLeadState(leadObj);
                       }
@@ -758,7 +813,7 @@ export default function Activities() {
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
-                    <span>Edit Activity</span>
+                    <span>{isTasksRoute ? "Edit Task" : "Edit Activity"}</span>
                   </button>
                 )}
 
@@ -776,7 +831,7 @@ export default function Activities() {
                       <polyline points="3 6 5 6 21 6"></polyline>
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     </svg>
-                    <span>Delete Activity</span>
+                    <span>{isTasksRoute ? "Delete Task" : "Delete Activity"}</span>
                   </button>
                 )}
               </>
@@ -789,17 +844,18 @@ export default function Activities() {
       {isFormOpen && (
         <ActivityFormModal
           activity={editActivity}
+          defaultType={isTasksRoute ? "Task" : undefined}
           onClose={() => {
             setIsFormOpen(false);
             setEditActivity(null);
           }}
           onSuccess={(saved) => {
             if (editActivity) {
-              setActivities((prev) => prev.map((a) => (a.id === saved.id ? saved : a)));
-              showToast("Activity updated successfully.");
+              setActivities((prev) => prev.map((a) => (areIdsEqual(a.id, saved.id) ? saved : a)));
+              showToast(isTasksRoute ? "Task updated successfully." : "Activity updated successfully.");
             } else {
               setActivities((prev) => [saved, ...prev]);
-              showToast("Activity created successfully.");
+              showToast(isTasksRoute ? "Task created successfully." : "Activity created successfully.");
             }
           }}
         />
@@ -843,8 +899,8 @@ export default function Activities() {
           activity={deleteActivityState}
           onClose={() => setDeleteActivityState(null)}
           onSuccess={() => {
-            setActivities((prev) => prev.filter((a) => a.id !== deleteActivityState.id));
-            showToast("Activity deleted successfully.");
+            setActivities((prev) => prev.filter((a) => !areIdsEqual(a.id, deleteActivityState.id)));
+            showToast(isTasksRoute ? "Task deleted successfully." : "Activity deleted successfully.");
           }}
         />
       )}
