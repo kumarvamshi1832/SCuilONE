@@ -65,3 +65,18 @@ def create_password_reset_token(email: str):
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM
     )
+
+
+def create_mfa_token(data: dict, purpose: str):
+    if purpose not in {"mfa_enrollment", "mfa_challenge"}:
+        raise ValueError("Invalid MFA token purpose")
+
+    payload = data.copy()
+    payload["purpose"] = purpose
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    return jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )

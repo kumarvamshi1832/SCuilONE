@@ -31,9 +31,17 @@ export interface LoginRequest {
 }
 
 export interface VerifyMFARequest {
-  email: string;
-  otp_code: string;
-  temp_token: string;
+  mfa_token: string;
+  code: string;
+}
+
+export interface MFAEnrollmentStartRequest {
+  mfa_token: string;
+}
+
+export interface MFAEnrollmentVerifyRequest {
+  mfa_token: string;
+  code: string;
 }
 
 export interface ForgotPasswordRequest {
@@ -43,11 +51,6 @@ export interface ForgotPasswordRequest {
 export interface VerifyResetOTPRequest {
   email: string;
   otp: string;
-}
-
-export interface VerifyResetOTPResponse {
-  message: string;
-  reset_token: string;
 }
 
 export interface ResetPasswordRequest {
@@ -78,22 +81,55 @@ export interface CheckEmailResponse {
   message: string;
 }
 
+export interface VerifyResetOTPResponse {
+  message: string;
+  reset_token: string;
+}
+
+export interface MFAEnrollmentStartResponse {
+  message: string;
+  secret: string;
+  otpauth_url: string;
+  issuer: string;
+  account: string;
+}
+
 export interface TokenResponse {
   access_token?: string;
-  refresh_token?: string;
+  refresh_token?: string | null;
+  refresh_token_expires_at?: string | null;
   token_type: string;
   expires_in?: number;
-  user?: User;
+
+  user?: User & {
+    status?: string;
+    must_change_password?: boolean;
+    profile_completed?: boolean;
+  };
+
   tenant?: {
     id: string;
     name: string;
     industry?: string;
   };
+
   role?: string;
   permissions?: string[];
-  requires_mfa: boolean;
-  temp_token?: string;
+
+  requires_mfa?: boolean;
+  mfa_required?: boolean;
+  mfa_setup_required?: boolean;
+  mfa_token?: string;
+
+  next_step?: "mfa_enrollment" | "mfa_verification";
+
+  onboarding_required?: boolean;
   message: string;
+}
+
+export interface MFAEnrollmentVerifyResponse extends TokenResponse {
+  recovery_codes: string[];
+  recovery_codes_message: string;
 }
 
 export interface MessageResponse {

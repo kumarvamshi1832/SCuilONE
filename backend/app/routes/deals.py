@@ -1,5 +1,6 @@
-from uuid import UUID
-
+import logging
+from uuid import UUID, uuid4
+from app.services.notification_service import notify_assignment
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,10 @@ from app.models.user import User
 from app.models.pipeline import Pipeline, PipelineStage
 
 from app.schemas.deal import DealCreate, DealUpdate, DealResponse
+from app.services.workflow_engine import dispatch_workflows
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/deals",
@@ -29,6 +33,36 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+
+def run_deal_workflows(
+    db: Session,
+    tenant_id: UUID,
+    deal: Deal,
+    trigger_event: str,
+    event_id: str,
+    changed_fields: set = None
+):
+    try:
+        dispatch_workflows(
+            db=db,
+            tenant_id=tenant_id,
+            module_name="deals",
+            trigger_event=trigger_event,
+            record=deal,
+            event_id=event_id,
+            changed_fields=changed_fields
+        )
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Workflow dispatch failed for deal %s, event %s",
+            deal.id,
+            trigger_event
+        )
 
 
 def validate_assigned_user(
@@ -179,6 +213,7 @@ def validate_pipeline_stage(
     return pipeline_stage
 
 
+
 @router.post(
     "/",
     response_model=DealResponse,
@@ -191,6 +226,7 @@ def create_deal(
     db: Session = Depends(get_db)
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     if (data.lead_id or data.contact_id) and not data.account_id:
         raise HTTPException(
@@ -200,9 +236,10 @@ def create_deal(
 
     lead = None
     contact = None
+    account = None
 
     if data.account_id:
-        validate_account(data.account_id, tenant_id, db)
+        account = validate_account(data.account_id, tenant_id, db)
 
     if data.lead_id:
         lead = validate_lead(data.lead_id, tenant_id, db)
@@ -216,8 +253,20 @@ def create_deal(
     if data.account_id and contact:
         validate_contact_account(contact, data.account_id)
 
-    if data.assigned_to:
-        validate_assigned_user(data.assigned_to, tenant_id, db)
+    # Preserve an explicitly selected assignee.
+    # Otherwise inherit from Lead, then Contact, then Account.
+    assigned_to = data.assigned_to
+
+    if assigned_to is None:
+        if lead is not None and lead.assigned_to is not None:
+            assigned_to = lead.assigned_to
+        elif contact is not None and contact.assigned_to is not None:
+            assigned_to = contact.assigned_to
+        elif account is not None and account.assigned_to is not None:
+            assigned_to = account.assigned_to
+
+    if assigned_to is not None:
+        validate_assigned_user(assigned_to, tenant_id, db)
 
     pipeline_stage = validate_pipeline_stage(
         data.pipeline_id,
@@ -228,11 +277,12 @@ def create_deal(
 
     deal = Deal(
         tenant_id=tenant_id,
+        created_by=user_id,
         name=data.name,
         lead_id=data.lead_id,
         contact_id=data.contact_id,
         account_id=data.account_id,
-        assigned_to=data.assigned_to,
+        assigned_to=assigned_to,
         amount=data.amount,
         stage=pipeline_stage.name if pipeline_stage else data.stage,
         pipeline_id=data.pipeline_id,
@@ -249,6 +299,37 @@ def create_deal(
         db.rollback()
         raise
 
+    # Notify the assigned salesperson after the Deal is saved.
+    if deal.assigned_to is not None:
+        try:
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=deal.assigned_to,
+                actor_user_id=user_id,
+                title="New deal assigned to you",
+                message=(
+                    f'Deal "{deal.name}" has been assigned to you.'
+                ),
+                related_module="deals",
+                related_record_id=deal.id,
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to notify deal assignee. Deal ID: %s",
+                deal.id
+            )
+
+    run_deal_workflows(
+        db=db,
+        tenant_id=tenant_id,
+        deal=deal,
+        trigger_event="record_created",
+        event_id=str(deal.id)
+    )
+
+    db.refresh(deal)
     return deal
 
 
@@ -324,6 +405,7 @@ def update_deal(
     db: Session = Depends(get_db)
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     deal = db.query(Deal).filter(
         Deal.id == deal_id,
@@ -336,28 +418,27 @@ def update_deal(
             detail="Deal not found"
         )
 
+    creator_user_id = deal.created_by
+    previous_assigned_to = deal.assigned_to
+
     update_data = data.model_dump(exclude_unset=True)
 
     new_account_id = update_data.get(
         "account_id",
         deal.account_id
     )
-
     new_lead_id = update_data.get(
         "lead_id",
         deal.lead_id
     )
-
     new_contact_id = update_data.get(
         "contact_id",
         deal.contact_id
     )
-
     new_pipeline_id = update_data.get(
         "pipeline_id",
         deal.pipeline_id
     )
-
     new_pipeline_stage_id = update_data.get(
         "pipeline_stage_id",
         deal.pipeline_stage_id
@@ -373,21 +454,42 @@ def update_deal(
     contact = None
 
     if new_account_id:
-        validate_account(new_account_id, tenant_id, db)
+        validate_account(
+            new_account_id,
+            tenant_id,
+            db
+        )
 
     if new_lead_id:
-        lead = validate_lead(new_lead_id, tenant_id, db)
+        lead = validate_lead(
+            new_lead_id,
+            tenant_id,
+            db
+        )
 
     if new_contact_id:
-        contact = validate_contact(new_contact_id, tenant_id, db)
+        contact = validate_contact(
+            new_contact_id,
+            tenant_id,
+            db
+        )
 
     if new_account_id and lead:
-        validate_lead_account(lead, new_account_id)
+        validate_lead_account(
+            lead,
+            new_account_id
+        )
 
     if new_account_id and contact:
-        validate_contact_account(contact, new_account_id)
+        validate_contact_account(
+            contact,
+            new_account_id
+        )
 
-    if "assigned_to" in update_data and update_data["assigned_to"] is not None:
+    if (
+        "assigned_to" in update_data
+        and update_data["assigned_to"] is not None
+    ):
         validate_assigned_user(
             update_data["assigned_to"],
             tenant_id,
@@ -409,25 +511,160 @@ def update_deal(
 
         if pipeline_stage:
             update_data["stage"] = pipeline_stage.name
-        elif new_pipeline_id is None and new_pipeline_stage_id is None:
-            update_data["stage"] = update_data.get("stage", deal.stage)
 
-    elif "stage" in update_data and deal.pipeline_id is not None:
+        elif (
+            new_pipeline_id is None
+            and new_pipeline_stage_id is None
+        ):
+            update_data["stage"] = update_data.get(
+                "stage",
+                deal.stage
+            )
+
+    elif (
+        "stage" in update_data
+        and deal.pipeline_id is not None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Update pipeline_stage_id to change the stage of a pipeline-linked deal"
+            detail=(
+                "Update pipeline_stage_id to change the stage "
+                "of a pipeline-linked deal"
+            )
         )
 
-    for field, value in update_data.items():
-        setattr(deal, field, value)
+    changed_fields = set()
+
+    for field, new_value in update_data.items():
+        old_value = getattr(deal, field, None)
+
+        if old_value != new_value:
+            changed_fields.add(field)
+
+    if not changed_fields:
+        return deal
 
     try:
+        for field in changed_fields:
+            setattr(
+                deal,
+                field,
+                update_data[field]
+            )
+
         db.commit()
         db.refresh(deal)
+
     except Exception:
         db.rollback()
         raise
 
+    try:
+        current_assigned_to = deal.assigned_to
+
+        if (
+            current_assigned_to is not None
+            and current_assigned_to != previous_assigned_to
+            and current_assigned_to != user_id
+        ):
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=current_assigned_to,
+                actor_user_id=user_id,
+                title="Deal assigned to you",
+                message=f'Deal "{deal.name}" has been assigned to you.',
+                related_module="deals",
+                related_record_id=deal.id,
+                notification_type="assignment"
+            )
+
+        if (
+            creator_user_id is not None
+            and user_id == creator_user_id
+            and current_assigned_to is not None
+            and current_assigned_to != creator_user_id
+        ):
+            changed_fields_text = ", ".join(
+                sorted(changed_fields)
+            )
+
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=current_assigned_to,
+                actor_user_id=user_id,
+                title="Assigned deal updated",
+                message=(
+                    f'The deal "{deal.name}" you are assigned to '
+                    f'was updated by its creator. '
+                    f"Changed fields: {changed_fields_text}."
+                ),
+                related_module="deals",
+                related_record_id=deal.id,
+                notification_type="deal_update"
+            )
+
+        elif (
+            creator_user_id is not None
+            and user_id != creator_user_id
+        ):
+            if "stage" in changed_fields:
+                message = (
+                    f'The deal "{deal.name}" was moved from '
+                    f'"{update_data.get("stage", deal.stage)}" '
+                    f"by another user."
+                )
+            else:
+                changed_fields_text = ", ".join(
+                    sorted(changed_fields)
+                )
+
+                message = (
+                    f'The deal "{deal.name}" was updated by '
+                    f"another user. Changed fields: "
+                    f"{changed_fields_text}."
+                )
+
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=creator_user_id,
+                actor_user_id=user_id,
+                title="Deal updated",
+                message=message,
+                related_module="deals",
+                related_record_id=deal.id,
+                notification_type="deal_update"
+            )
+
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to create deal update notifications for deal %s",
+            deal.id
+        )
+
+    event_base = f"{deal.id}:{uuid4()}"
+
+    run_deal_workflows(
+        db=db,
+        tenant_id=tenant_id,
+        deal=deal,
+        trigger_event="record_updated",
+        event_id=f"{event_base}:record_updated"
+    )
+
+    run_deal_workflows(
+        db=db,
+        tenant_id=tenant_id,
+        deal=deal,
+        trigger_event="field_changed",
+        event_id=f"{event_base}:field_changed",
+        changed_fields=changed_fields
+    )
+
+    db.refresh(deal)
     return deal
 
 

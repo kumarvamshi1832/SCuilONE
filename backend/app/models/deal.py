@@ -25,6 +25,12 @@ class Deal(Base):
         nullable=False
     )
 
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
     name: Mapped[str] = mapped_column(
         String(200),
         nullable=False

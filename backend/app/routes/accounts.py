@@ -1,5 +1,6 @@
-from uuid import UUID
-
+import logging
+from uuid import UUID, uuid4
+from app.services.notification_service import notify_assignment
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,10 @@ from app.schemas.account import (
     AccountDetailsResponse
 )
 
+from app.services.workflow_engine import dispatch_workflows
+
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/accounts",
@@ -55,6 +60,37 @@ def validate_assigned_user(
         )
 
 
+
+def run_account_workflows(
+    db: Session,
+    tenant_id: UUID,
+    account: Account,
+    trigger_event: str,
+    event_id: str,
+    changed_fields: set = None
+):
+    try:
+        dispatch_workflows(
+            db=db,
+            tenant_id=tenant_id,
+            module_name="accounts",
+            trigger_event=trigger_event,
+            record=account,
+            event_id=event_id,
+            changed_fields=changed_fields
+        )
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Workflow dispatch failed for account %s, event %s",
+            account.id,
+            trigger_event
+        )
+
+
+
 @router.post(
     "/",
     response_model=AccountResponse,
@@ -67,12 +103,7 @@ def create_account(
     db: Session = Depends(get_db)
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
-
-    validate_assigned_user(
-        data.assigned_to,
-        tenant_id,
-        db
-    )
+    user_id = UUID(str(current_user["user_id"]))
 
     lead = None
 
@@ -94,8 +125,21 @@ def create_account(
                 detail="This Lead is already linked to an Account"
             )
 
+    # Use the selected Lead's salesperson when no assignee was selected.
+    assigned_to = data.assigned_to
+
+    if assigned_to is None and lead is not None:
+        assigned_to = lead.assigned_to
+
+    validate_assigned_user(
+        assigned_to,
+        tenant_id,
+        db
+    )
+
     account = Account(
         tenant_id=tenant_id,
+        created_by=user_id,
         name=data.name,
         email=data.email,
         phone=data.phone,
@@ -108,19 +152,56 @@ def create_account(
         postal_code=data.postal_code,
         status=data.status,
         source=data.source,
-        assigned_to=data.assigned_to,
+        assigned_to=assigned_to,
         notes=data.notes
     )
 
-    db.add(account)
-    db.flush()
+    try:
+        db.add(account)
+        db.flush()
 
-    if lead is not None:
-        lead.account_id = account.id
+        if lead is not None:
+            lead.account_id = account.id
 
-    db.commit()
+        db.commit()
+        db.refresh(account)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    # Notify the assigned salesperson after the Account is saved.
+    if account.assigned_to is not None:
+        try:
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=account.assigned_to,
+                actor_user_id=user_id,
+                title="New account assigned to you",
+                message=(
+                    f'Account "{account.name}" '
+                    f'has been assigned to you.'
+                ),
+                related_module="accounts",
+                related_record_id=account.id,
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to notify account assignee. Account ID: %s",
+                account.id
+            )
+
+    run_account_workflows(
+        db=db,
+        tenant_id=tenant_id,
+        account=account,
+        trigger_event="record_created",
+        event_id=str(account.id)
+    )
+
     db.refresh(account)
-
     return account
 
 
@@ -210,8 +291,8 @@ def get_my_accounts(
     _=Depends(require_permission("account.view")),
     db: Session = Depends(get_db)
 ):
-    user_id = UUID(current_user["user_id"])
-    tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(str(current_user["user_id"]))
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     return db.query(Account).filter(
         Account.tenant_id == tenant_id,
@@ -298,6 +379,8 @@ def get_account(
     }
 
 
+
+
 @router.put(
     "/{account_id}",
     response_model=AccountResponse
@@ -310,6 +393,7 @@ def update_account(
     db: Session = Depends(get_db)
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     account = db.query(Account).filter(
         Account.id == account_id,
@@ -322,6 +406,9 @@ def update_account(
             detail="Account not found"
         )
 
+    creator_user_id = account.created_by
+    previous_assigned_to = account.assigned_to
+
     if data.assigned_to is not None:
         validate_assigned_user(
             data.assigned_to,
@@ -330,13 +417,148 @@ def update_account(
         )
 
     update_data = data.model_dump(exclude_unset=True)
+    changed_values = {}
 
-    for field, value in update_data.items():
-        setattr(account, field, value)
+    for field, new_value in update_data.items():
+        old_value = getattr(account, field, None)
 
-    db.commit()
+        if old_value != new_value:
+            changed_values[field] = (old_value, new_value)
+
+    if not changed_values:
+        return account
+
+    changed_fields = set(changed_values.keys())
+
+    try:
+        for field, (_, new_value) in changed_values.items():
+            setattr(account, field, new_value)
+
+        db.commit()
+        db.refresh(account)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    # Notify the new assignee when assigned or reassigned.
+    if (
+        account.assigned_to is not None
+        and account.assigned_to != previous_assigned_to
+        and account.assigned_to != user_id
+    ):
+        try:
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=account.assigned_to,
+                actor_user_id=user_id,
+                title="Account assigned to you",
+                message=(
+                    f'Account "{account.name}" '
+                    f'has been assigned to you.'
+                ),
+                related_module="accounts",
+                related_record_id=account.id,
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to notify account assignee. Account ID: %s",
+                account.id
+            )
+
+    # Notify the assigned salesperson when the creator updates the account.
+    if (
+        creator_user_id is not None
+        and creator_user_id == user_id
+        and account.assigned_to is not None
+        and account.assigned_to != user_id
+    ):
+        changed_field_names = ", ".join(sorted(changed_fields))
+
+        try:
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=account.assigned_to,
+                actor_user_id=user_id,
+                title="Assigned account updated",
+                message=(
+                    f'The account creator updated your assigned '
+                    f'account "{account.name}". '
+                    f"Changed fields: {changed_field_names}."
+                ),
+                related_module="accounts",
+                related_record_id=account.id,
+                notification_type="account_update",
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to notify account assignee about creator update. "
+                "Account ID: %s",
+                account.id
+            )
+
+    # Notify the creator when another user updates the account.
+    elif (
+        creator_user_id is not None
+        and creator_user_id != user_id
+    ):
+        if "assigned_to" in changed_values:
+            message = (
+                f'Account "{account.name}" was reassigned.'
+            )
+        else:
+            message = (
+                f'Account "{account.name}" was updated.'
+            )
+
+        try:
+            notify_assignment(
+                db=db,
+                tenant_id=tenant_id,
+                recipient_user_id=creator_user_id,
+                actor_user_id=user_id,
+                title="Account updated",
+                message=message,
+                related_module="accounts",
+                related_record_id=account.id,
+                notification_type="account_update",
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to notify account creator. Account ID: %s",
+                account.id
+            )
+
+    # Preserve the existing workflow dispatch.
+    event_base = (
+        f"{account.id}:{account.updated_at.isoformat()}"
+        if getattr(account, "updated_at", None)
+        else f"{account.id}:{uuid4()}"
+    )
+
+    run_account_workflows(
+        db=db,
+        tenant_id=tenant_id,
+        account=account,
+        trigger_event="record_updated",
+        event_id=f"{event_base}:record_updated"
+    )
+
+    run_account_workflows(
+        db=db,
+        tenant_id=tenant_id,
+        account=account,
+        trigger_event="field_changed",
+        event_id=f"{event_base}:field_changed",
+        changed_fields=changed_fields
+    )
+
     db.refresh(account)
-
     return account
 
 

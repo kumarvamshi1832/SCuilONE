@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime
 
@@ -21,6 +22,12 @@ class Lead(Base):
         UUID(as_uuid=True),
         ForeignKey("tenants.id"),
         nullable=False
+    )
+
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True
     )
 
     full_name: Mapped[str] = mapped_column(
