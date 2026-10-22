@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { normalizeIndustry } from "../../utils/industryUtils";
 import "./RealEstateDashboard.css";
 
 export default function OperationsDashboard() {
@@ -12,10 +13,10 @@ export default function OperationsDashboard() {
   if (tenantStr) {
     try {
       const t = JSON.parse(tenantStr);
-      if (t?.industry) tenantIndustry = t.industry.toLowerCase().replace(/\s+/g, '-');
+      if (t?.industry) tenantIndustry = normalizeIndustry(t.industry);
     } catch(e) {}
   }
-  const currentIndustry = industry || tenantIndustry;
+  const currentIndustry = normalizeIndustry(industry || tenantIndustry);
   const basePath = `/${currentIndustry}`;
 
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function OperationsDashboard() {
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {user?.name || "User"}!</h1>
         <p className="text-muted">Here is your operations overview and today's activities.</p>
       </div>
 

@@ -4,6 +4,7 @@ import {
   verifyOTP,
   verifyMFA,
 } from "../../services/authService";
+import { normalizeIndustry } from "../../utils/industryUtils";
 
 type OtpFlow = "email" | "mfa";
 
@@ -83,12 +84,36 @@ export default function MFA() {
         if (response.refresh_token) {
           sessionStorage.setItem("refresh_token", response.refresh_token);
         }
+        if (response.tenant) {
+          sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
+        }
         if (response.user) {
-          sessionStorage.setItem("user", JSON.stringify(response.user));
+          const userObj = {
+            ...(response.user || {}),
+            role: response.role,
+            permissions: response.permissions || []
+          };
+          sessionStorage.setItem("user", JSON.stringify(userObj));
+        }
+
+        const userRole = (response.role || "").toUpperCase();
+        let targetRoute = "/";
+        if (userRole === "MANAGER" || userRole.includes("MANAGER")) {
+          targetRoute = "/manager/dashboard";
+        } else if (userRole === "SALES_USER" || userRole === "SALES USER" || userRole.includes("SALES")) {
+          targetRoute = "/sales/dashboard";
+        } else if (userRole === "OPERATIONS_USER" || userRole === "OPERATIONS USER" || userRole.includes("OPERATIONS")) {
+          targetRoute = "/operations/dashboard";
+        } else if (userRole === "SUPPORT_USER" || userRole === "SUPPORT USER" || userRole.includes("SUPPORT")) {
+          targetRoute = "/support/dashboard";
+        } else if (userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR")) {
+          targetRoute = "/auditor/dashboard";
+        } else if (response.tenant?.industry) {
+          targetRoute = `/${normalizeIndustry(response.tenant.industry)}/dashboard`;
         }
 
         setMessage("MFA verified successfully!");
-        setTimeout(() => navigate("/dashboard"), 800);
+        setTimeout(() => navigate(targetRoute), 800);
       } else {
         await verifyOTP({
           email,

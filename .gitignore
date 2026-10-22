@@ -1,31 +1,32 @@
-﻿# Python
-venv/
-backend/venv/
-__pycache__/
-*.py[cod]
-
-# IDE
-.vscode/
-.idea/
-
-# Test/cache
-.pytest_cache/
-.mypy_cache/
-
-# Environment files
-.env
-.env.*
-!.env.example
-
 # Node dependencies
 node_modules/
 
-
 # Backend virtual environment
+backend/venv/
 backend/vev/
+venv/
 
-# Frontend build output
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyc
+
+# Local environment files
+.env
+.env.*
+backend/.env
+!.env.example
+
+# Frontend build output & cache
 frontend/dist/
-
-# TypeScript build cache
 frontend/tsconfig.tsbuildinfo
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temp / Patches
+merge-backup.patch

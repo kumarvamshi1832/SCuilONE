@@ -10,8 +10,10 @@ class LeadCreate(BaseModel):
     phone: str | None = None
     source: str | None = None
     status: str = "New"
+    account_id: UUID | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
+
 
 
 class LeadUpdate(BaseModel):
@@ -20,8 +22,12 @@ class LeadUpdate(BaseModel):
     phone: str | None = None
     source: str | None = None
     status: str | None = None
+    account_id: UUID | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
+    override_capacity: bool = False
+    override_reason: str | None = None
+
 
 
 class LeadResponse(BaseModel):

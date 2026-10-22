@@ -27,9 +27,9 @@ export const getTenantDetails = async (): Promise<TenantDetails> => {
       return JSON.parse(tenantStr);
     } catch (e) {}
   }
-  return { id: "", name: "Unknown", industry: "real-estate" };
+  return { id: "", name: "Unknown", industry: "" };
 };
 
 export const getRecentActivities = async (): Promise<Activity[]> => {
-  return []; // No real backend API exists for activities
+  return [];
 };

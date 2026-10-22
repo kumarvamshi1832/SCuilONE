@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.connection import SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.contact import Contact
 from app.models.user import User
@@ -73,11 +73,11 @@ def validate_account(
 )
 def create_contact(
     data: ContactCreate,
-    current_user: dict = Depends(get_current_user),
-    permission=Depends(require_permission("contact.create")),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("contact.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     validate_assigned_user(
         data.assigned_to,
@@ -117,14 +117,34 @@ def create_contact(
     response_model=list[ContactResponse]
 )
 def get_contacts(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("contact.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     contacts = db.query(Contact).filter(
         Contact.tenant_id == tenant_id
+    ).all()
+
+    return contacts
+
+
+@router.get(
+    "/my-contacts",
+    response_model=list[ContactResponse]
+)
+def get_my_contacts(
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("contact.view")),
+    db: Session = Depends(get_db)
+):
+    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(current_user["tenant_id"])
+
+    contacts = db.query(Contact).filter(
+        Contact.tenant_id == tenant_id,
+        Contact.assigned_to == user_id
     ).all()
 
     return contacts
@@ -136,11 +156,11 @@ def get_contacts(
 )
 def get_contact(
     contact_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("contact.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     contact = db.query(Contact).filter(
         Contact.id == contact_id,
@@ -163,11 +183,11 @@ def get_contact(
 def update_contact(
     contact_id: UUID,
     data: ContactUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("contact.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     if data.assigned_to is not None:
         validate_assigned_user(
@@ -236,11 +256,11 @@ def update_contact(
 )
 def delete_contact(
     contact_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("contact.delete")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(current_user["tenant_id"])
 
     contact = db.query(Contact).filter(
         Contact.id == contact_id,

@@ -2,19 +2,17 @@ import { FormEvent, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../../services/authService";
 import { useTheme } from "../../context/ThemeContext";
-
+import { normalizeIndustry } from "../../utils/industryUtils";
 import backdropDark from "../../assets/login-full-backdrop.jpg";
 import backdropLight from "../../assets/login-full-backdrop-light.jpg";
-
 import "./Login.css";
 
 export default function Login() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
-  const [email, setEmail] = useState(() => {
-    return localStorage.getItem("scuilone_remember_email") || "";
-  });
+  // Email field initializes empty per requirements
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(() => {
     return localStorage.getItem("scuilone_remember_me") === "true";
@@ -38,21 +36,16 @@ export default function Login() {
     setError("");
 
     if (!email.trim()) {
-      setError("Email is required.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("Please enter a valid email address.");
+      setError("Please enter your email address.");
       return;
     }
     if (!password) {
-      setError("Password is required.");
+      setError("Please enter your password.");
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
       const response = await loginUser({
         email: email.trim().toLowerCase(),
         password,
@@ -66,6 +59,9 @@ export default function Login() {
         sessionStorage.setItem("otp_flow", "mfa");
         navigate("/mfa");
       } else {
+        // Clear previous session data to ensure account switching is clean
+        sessionStorage.clear();
+
         if (response.access_token) {
           sessionStorage.setItem("access_token", response.access_token);
         }
@@ -116,19 +112,28 @@ export default function Login() {
         ) {
           navigate("/auditor/dashboard");
         } else {
-          const industrySlug = response.tenant?.industry
-            ? response.tenant.industry.toLowerCase().replace(/\s+/g, "-")
-            : "real-estate";
-
+          const industrySlug = normalizeIndustry(response.tenant?.industry);
           navigate(`/${industrySlug}/dashboard`);
         }
       }
     } catch (err) {
-      const apiError = err as { message?: string };
-      setError(
-        apiError.message ||
-          "Invalid email or password. Please check your credentials and try again."
-      );
+      const apiError = err as { message?: string; status?: number };
+      if (apiError.status === 401) {
+        setError("Invalid email or password. Please check your credentials and try again.");
+      } else if (apiError.status === 403) {
+        setError(apiError.message || "Your account is inactive. Contact your administrator.");
+      } else if (apiError.status && apiError.status >= 500) {
+        setError("Server error. Please try again later.");
+      } else if (
+        apiError.status === 0 ||
+        (apiError.message &&
+          (apiError.message.includes("Unable to reach") ||
+            apiError.message.includes("Network Error")))
+      ) {
+        setError("Unable to reach the server. Please check your internet connection.");
+      } else {
+        setError(apiError.message || "Invalid email or password. Please check your credentials and try again.");
+      }
     } finally {
       setLoading(false);
     }

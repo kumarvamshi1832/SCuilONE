@@ -63,6 +63,7 @@ export interface User {
   id?: string;
   name?: string;
   email?: string;
+  photo_url?: string | null;
   phone?: string;
   designation?: string;
   department?: string;

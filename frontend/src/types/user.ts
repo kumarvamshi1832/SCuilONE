@@ -9,8 +9,6 @@ export type Role =
   | "Read-only / Auditor"
   | string;
 
-
-
 export interface User {
   id: string;
   full_name: string;
@@ -18,5 +16,6 @@ export interface User {
   phone?: string;
   role: string;
   status: string;
+  photo_url?: string | null;
   created_at?: string;
 }

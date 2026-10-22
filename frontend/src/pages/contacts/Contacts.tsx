@@ -80,9 +80,34 @@ export default function Contacts() {
     fetchData();
   }, [fetchData]);
 
+  // Recalculate dropdown position from trigger button
+  const calcDropdownPos = useCallback((contactId: string) => {
+    const btn = triggerRefs.current[contactId];
+    if (!btn) return null;
+    const rect = btn.getBoundingClientRect();
+    const dropdownHeight = 150;
+    const dropdownWidth = 192;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < dropdownHeight + 8;
+    let left = rect.right - dropdownWidth;
+    if (left < 8) left = 8;
+    if (left + dropdownWidth > window.innerWidth - 8) {
+      left = window.innerWidth - dropdownWidth - 8;
+    }
+    return {
+      top: openUp ? rect.top : rect.bottom + 4,
+      left,
+      openUp,
+    };
+  }, []);
+
   // Close actions dropdown on outside click
   useEffect(() => {
+    if (!openActionId) return;
+
     const handleClickOutside = (e: MouseEvent) => {
+      const triggerBtn = triggerRefs.current[openActionId];
+      if (triggerBtn && triggerBtn.contains(e.target as Node)) return;
       if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
         setOpenActionId(null);
         setDropdownPos(null);
@@ -94,35 +119,38 @@ export default function Contacts() {
         setDropdownPos(null);
       }
     };
-    if (openActionId) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
-    }
+    const handleScrollOrResize = () => {
+      const pos = calcDropdownPos(openActionId);
+      if (pos) {
+        setDropdownPos(pos);
+      } else {
+        setOpenActionId(null);
+        setDropdownPos(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
     };
-  }, [openActionId]);
+  }, [openActionId, calcDropdownPos]);
 
-  // Calculate dropdown position from the trigger button
+  // Toggle actions dropdown for a contact row
   const toggleActions = (contactId: string) => {
     if (openActionId === contactId) {
       setOpenActionId(null);
       setDropdownPos(null);
       return;
     }
-    const btn = triggerRefs.current[contactId];
-    if (btn) {
-      const rect = btn.getBoundingClientRect();
-      const dropdownHeight = 140; // approximate height of the 3-item menu
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const openUp = spaceBelow < dropdownHeight + 8;
-      setDropdownPos({
-        top: openUp ? rect.top : rect.bottom + 4,
-        left: rect.right - 148, // 140 min-width + 8 padding
-        openUp,
-      });
-    }
+    const pos = calcDropdownPos(contactId);
+    if (pos) setDropdownPos(pos);
     setOpenActionId(contactId);
   };
 
@@ -460,61 +488,60 @@ export default function Contacts() {
       )}
       </div>
 
-      {/* Global dropdown menu via Portal or absolute positioning */}
-      {openActionId && dropdownPos && (
-        <div 
-          ref={actionsRef}
-          className={`actions-dropdown ${dropdownPos.openUp ? 'open-up' : ''}`}
-          style={{
-            position: 'fixed',
-            top: `${dropdownPos.top}px`,
-            left: `${dropdownPos.left}px`,
-            zIndex: 1000
-          }}
-        >
-          {(() => {
-            const activeContact = contacts.find(c => c.id === openActionId);
-            if (!activeContact) return null;
-            return (
+      {/* Actions Dropdown — rendered outside the table to avoid overflow clipping */}
+      {openActionId && dropdownPos && (() => {
+        const activeContact = contacts.find(c => c.id === openActionId);
+        if (!activeContact) return null;
+        return (
+          <div
+            ref={actionsRef}
+            className="actions-dropdown actions-dropdown-fixed"
+            style={{
+              position: "fixed",
+              top: dropdownPos.openUp ? undefined : dropdownPos.top,
+              bottom: dropdownPos.openUp ? window.innerHeight - dropdownPos.top + 4 : undefined,
+              left: dropdownPos.left,
+              zIndex: 9999,
+            }}
+          >
+            {permissions.view && (
+              <button onClick={() => handleView(activeContact)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                View Details
+              </button>
+            )}
+            {permissions.update && (
+              <button onClick={() => handleEdit(activeContact)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Edit Contact
+              </button>
+            )}
+            {permissions.delete && (
               <>
-                {permissions.view && (
-                  <button className="dropdown-item" onClick={() => handleView(activeContact)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                      <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                    View Details
-                  </button>
-                )}
-                {permissions.update && (
-                  <button className="dropdown-item" onClick={() => handleEdit(activeContact)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    Edit Contact
-                  </button>
-                )}
-                {permissions.delete && (
-                  <button className="dropdown-item text-danger" onClick={() => handleDeleteClick(activeContact)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Delete Contact
-                  </button>
-                )}
-                {/* Fallback if no permissions */}
-                {!permissions.view && !permissions.update && !permissions.delete && (
-                  <div className="dropdown-item text-muted" style={{ pointerEvents: 'none' }}>
-                    No actions available
-                  </div>
-                )}
+                <div className="actions-dropdown-separator" />
+                <button className="delete-action" onClick={() => handleDeleteClick(activeContact)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  Delete Contact
+                </button>
               </>
-            );
-          })()}
-        </div>
-      )}
+            )}
+            {!permissions.view && !permissions.update && !permissions.delete && (
+              <div style={{ padding: '10px 16px', color: '#718096', fontSize: '0.875rem' }}>
+                No actions available
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Modals */}
       {isFormOpen && (

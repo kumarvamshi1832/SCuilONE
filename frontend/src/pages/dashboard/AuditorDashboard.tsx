@@ -59,7 +59,7 @@ export default function AuditorDashboard() {
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {user?.name || "User"}!</h1>
         <p className="text-muted">View CRM data and reports with read-only access.</p>
       </div>
 

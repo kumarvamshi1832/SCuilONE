@@ -12,6 +12,8 @@ class DealCreate(BaseModel):
     assigned_to: UUID | None = None
     amount: float | None = None
     stage: str = "New"
+    pipeline_id: UUID | None = None
+    pipeline_stage_id: UUID | None = None
     expected_close_date: date | None = None
     description: str | None = None
 
@@ -24,6 +26,8 @@ class DealUpdate(BaseModel):
     assigned_to: UUID | None = None
     amount: float | None = None
     stage: str | None = None
+    pipeline_id: UUID | None = None
+    pipeline_stage_id: UUID | None = None
     expected_close_date: date | None = None
     description: str | None = None
 
@@ -38,6 +42,8 @@ class DealResponse(BaseModel):
     assigned_to: UUID | None
     amount: float | None
     stage: str
+    pipeline_id: UUID | None
+    pipeline_stage_id: UUID | None
     expected_close_date: date | None
     description: str | None
     created_at: datetime

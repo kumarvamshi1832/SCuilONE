@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getMyProfile } from "../../services/profileService";
 import RealEstateOverview from "../../components/dashboard/RealEstateOverview";
 import RecentUsers from "../../components/dashboard/RecentUsers";
 import { getDashboardSummary, getRecentActivities } from "../../services/dashboardService";
@@ -13,14 +14,14 @@ export default function RealEstateDashboard() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
-
-  const [user, setUser] = useState<{ name: string, role: string } | null>(null);
+  
+  const [user, setUser] = useState<{name: string, role: string} | null>(null);
 
   useEffect(() => {
     getDashboardSummary().then(setSummary);
     getRecentActivities().then(setActivities);
     getUsers().then(setUsers);
-
+    
     const storedUser = sessionStorage.getItem("user");
     if (storedUser) {
       try {
@@ -37,10 +38,18 @@ export default function RealEstateDashboard() {
     }
   }, []);
 
+  const [profileName, setProfileName] = useState("");
+
+useEffect(() => {
+  getMyProfile()
+    .then((profile) => setProfileName(profile.full_name || "User"))
+    .catch((error) => console.error("Failed to load profile:", error));
+}, []);
+
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
-        <h1>Welcome back, {user?.name}!</h1>
+        <h1>Welcome back, {profileName || user?.name || "User"}!</h1>
         <p className="text-muted">Here's an overview of your company activity.</p>
       </div>
 
@@ -49,7 +58,7 @@ export default function RealEstateDashboard() {
       <div className="dashboard-grid">
         <div className="grid-main">
           <RecentUsers users={users} />
-
+          
           <div className="dashboard-section-card mt-4">
             <div className="section-header">
               <h3>Real Estate Activity</h3>
@@ -73,7 +82,7 @@ export default function RealEstateDashboard() {
             </div>
           </div>
         </div>
-
+        
         <div className="grid-side">
           <div className="dashboard-section-card">
             <div className="section-header">
@@ -99,7 +108,7 @@ export default function RealEstateDashboard() {
           </div>
         </div>
       </div>
-
+      
       {isLeadFormOpen && (
         <LeadFormModal
           onClose={() => setIsLeadFormOpen(false)}

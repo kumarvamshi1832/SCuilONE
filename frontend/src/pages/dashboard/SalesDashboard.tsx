@@ -10,6 +10,7 @@ import LeadFormModal from "../../components/leads/LeadFormModal";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import ActivityViewModal from "../../components/activities/ActivityViewModal";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { normalizeIndustry } from "../../utils/industryUtils";
 import "./RealEstateDashboard.css";
 
 export default function SalesDashboard() {
@@ -30,10 +31,10 @@ export default function SalesDashboard() {
   if (tenantStr) {
     try {
       const t = JSON.parse(tenantStr);
-      if (t?.industry) tenantIndustry = t.industry.toLowerCase().replace(/\s+/g, '-');
+      if (t?.industry) tenantIndustry = normalizeIndustry(t.industry);
     } catch(e) {}
   }
-  const currentIndustry = industry || tenantIndustry;
+  const currentIndustry = normalizeIndustry(industry || tenantIndustry);
   const basePath = `/${currentIndustry}`;
 
   useEffect(() => {

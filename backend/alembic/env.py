@@ -18,6 +18,12 @@ from app.models.lead import Lead
 from app.models.contact import Contact
 from app.models.account import Account
 from app.models.deal import Deal
+from app.models.activity import Activity
+from app.models.pipeline import Pipeline
+from app.models.pipeline import PipelineStage
+from app.models.user_invitation import UserInvitation
+from app.models.form_template import FormTemplate, FormField, CustomFormSubmission
+from app.models.lead_assignment_audit import LeadAssignmentAudit
 
 config = context.config
 

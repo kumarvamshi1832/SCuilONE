@@ -76,7 +76,7 @@ export default function EducationConsultingDashboard() {
     <div className="education-dashboard">
       <div className="edu-welcome-section">
         <div className="edu-welcome-content">
-          <h1>Welcome back, {user?.name}! 👋</h1>
+          <h1>Welcome back, {user?.name || "User"}! 👋</h1>
           <p className="text-muted">Here's what's happening with your Education Consulting CRM today.</p>
         </div>
         <div className="edu-welcome-image">

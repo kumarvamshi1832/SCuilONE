@@ -19,21 +19,35 @@ import type {
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
-// Auto-logout on 401 Unauthorized
+// Auto-logout on 401 Unauthorized for authenticated session requests
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Token is invalid or expired
-      sessionStorage.removeItem("access_token");
-      sessionStorage.removeItem("user");
-      sessionStorage.removeItem("tenant");
-      window.location.href = "/login";
+      const requestUrl = error.config?.url || "";
+      const isAuthEndpoint =
+        requestUrl.includes("/api/v1/auth/login") ||
+        requestUrl.includes("/api/v1/auth/register") ||
+        requestUrl.includes("/api/v1/auth/check-email") ||
+        requestUrl.includes("/api/v1/auth/verify-otp") ||
+        requestUrl.includes("/api/v1/auth/resend-otp") ||
+        requestUrl.includes("/api/v1/auth/verify-mfa") ||
+        requestUrl.includes("/api/v1/auth/forgot-password") ||
+        requestUrl.includes("/api/v1/auth/verify-reset-otp") ||
+        requestUrl.includes("/api/v1/auth/reset-password");
+
+      const isLoginPage = window.location.pathname === "/login";
+
+      // Only perform auto-logout redirect if this was NOT an authentication attempt
+      // and the user is not currently on the login page
+      if (!isAuthEndpoint && !isLoginPage) {
+        sessionStorage.removeItem("access_token");
+        sessionStorage.removeItem("user");
+        sessionStorage.removeItem("tenant");
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
@@ -75,10 +89,15 @@ function handleApiError(error: unknown): never {
         }
       }
 
-      if (status === 401) message = message || "Invalid credentials.";
-      if (status === 403) message = message || "Access denied.";
-      if (status === 404) message = message || "Resource not found.";
-      if (status >= 500) message = message || "Server error. Please try later.";
+      if (status === 401) {
+        message = message || "Invalid email or password. Please check your credentials and try again.";
+      } else if (status === 403) {
+        message = message || "Access denied. Contact your administrator.";
+      } else if (status === 404) {
+        message = message || "Resource not found.";
+      } else if (status >= 500) {
+        message = "Server error. Please try again later.";
+      }
 
       throw { message, status, detail: data };
     }
@@ -87,6 +106,7 @@ function handleApiError(error: unknown): never {
       throw {
         message:
           "Unable to reach the server. Please check your internet connection.",
+        status: 0,
       };
     }
   }
@@ -95,7 +115,8 @@ function handleApiError(error: unknown): never {
     message:
       error instanceof Error
         ? error.message
-        : "An unexpected error occurred.",
+        : "An unexpected error occurred. Please try again.",
+    status: -1,
   };
 }
 

@@ -48,6 +48,7 @@ export const updateLead = async (id: string, data: UpdateLeadRequest): Promise<L
 export const deleteLead = async (id: string): Promise<void> => {
   await apiClient.delete(LEADS_ENDPOINTS.DETAIL(id), getHeaders());
 };
+
 export interface LeadAssignmentHistoryItem {
   id: string;
   lead_id: string | null;

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
 from app.database.connection import SessionLocal
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 
 from app.models.deal import Deal
@@ -11,6 +12,7 @@ from app.models.lead import Lead
 from app.models.contact import Contact
 from app.models.account import Account
 from app.models.user import User
+from app.models.pipeline import Pipeline, PipelineStage
 
 from app.schemas.deal import DealCreate, DealUpdate, DealResponse
 
@@ -125,18 +127,70 @@ def validate_contact_account(
         )
 
 
+def validate_pipeline_stage(
+    pipeline_id: UUID | None,
+    pipeline_stage_id: UUID | None,
+    tenant_id: UUID,
+    db: Session
+):
+    if pipeline_id is None and pipeline_stage_id is None:
+        return None
+
+    if pipeline_id is None or pipeline_stage_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both pipeline_id and pipeline_stage_id are required"
+        )
+
+    pipeline = db.query(Pipeline).filter(
+        Pipeline.id == pipeline_id,
+        Pipeline.tenant_id == tenant_id
+    ).first()
+
+    if not pipeline:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pipeline not found or does not belong to this tenant"
+        )
+
+    if not pipeline.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selected pipeline is inactive"
+        )
+
+    pipeline_stage = db.query(PipelineStage).filter(
+        PipelineStage.id == pipeline_stage_id,
+        PipelineStage.pipeline_id == pipeline_id
+    ).first()
+
+    if not pipeline_stage:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stage does not belong to the selected pipeline"
+        )
+
+    if not pipeline_stage.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selected pipeline stage is inactive"
+        )
+
+    return pipeline_stage
+
+
 @router.post(
     "/",
     response_model=DealResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("deal.create"))]
+    status_code=status.HTTP_201_CREATED
 )
 def create_deal(
     data: DealCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     if (data.lead_id or data.contact_id) and not data.account_id:
         raise HTTPException(
@@ -148,44 +202,29 @@ def create_deal(
     contact = None
 
     if data.account_id:
-        validate_account(
-            data.account_id,
-            tenant_id,
-            db
-        )
+        validate_account(data.account_id, tenant_id, db)
 
     if data.lead_id:
-        lead = validate_lead(
-            data.lead_id,
-            tenant_id,
-            db
-        )
+        lead = validate_lead(data.lead_id, tenant_id, db)
 
     if data.contact_id:
-        contact = validate_contact(
-            data.contact_id,
-            tenant_id,
-            db
-        )
+        contact = validate_contact(data.contact_id, tenant_id, db)
 
     if data.account_id and lead:
-        validate_lead_account(
-            lead,
-            data.account_id
-        )
+        validate_lead_account(lead, data.account_id)
 
     if data.account_id and contact:
-        validate_contact_account(
-            contact,
-            data.account_id
-        )
+        validate_contact_account(contact, data.account_id)
 
     if data.assigned_to:
-        validate_assigned_user(
-            data.assigned_to,
-            tenant_id,
-            db
-        )
+        validate_assigned_user(data.assigned_to, tenant_id, db)
+
+    pipeline_stage = validate_pipeline_stage(
+        data.pipeline_id,
+        data.pipeline_stage_id,
+        tenant_id,
+        db
+    )
 
     deal = Deal(
         tenant_id=tenant_id,
@@ -195,47 +234,69 @@ def create_deal(
         account_id=data.account_id,
         assigned_to=data.assigned_to,
         amount=data.amount,
-        stage=data.stage,
+        stage=pipeline_stage.name if pipeline_stage else data.stage,
+        pipeline_id=data.pipeline_id,
+        pipeline_stage_id=data.pipeline_stage_id,
         expected_close_date=data.expected_close_date,
         description=data.description
     )
 
-    db.add(deal)
-    db.commit()
-    db.refresh(deal)
+    try:
+        db.add(deal)
+        db.commit()
+        db.refresh(deal)
+    except Exception:
+        db.rollback()
+        raise
 
     return deal
 
 
 @router.get(
     "/",
-    response_model=list[DealResponse],
-    dependencies=[Depends(require_permission("deal.view"))]
+    response_model=list[DealResponse]
 )
 def get_deals(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
-    deals = db.query(Deal).filter(
+    return db.query(Deal).filter(
         Deal.tenant_id == tenant_id
     ).all()
 
-    return deals
+
+@router.get(
+    "/my-deals",
+    response_model=list[DealResponse]
+)
+def get_my_deals(
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.view")),
+    db: Session = Depends(get_db)
+):
+    user_id = UUID(str(current_user["user_id"]))
+    tenant_id = UUID(str(current_user["tenant_id"]))
+
+    return db.query(Deal).filter(
+        Deal.tenant_id == tenant_id,
+        Deal.assigned_to == user_id
+    ).all()
 
 
 @router.get(
     "/{deal_id}",
-    response_model=DealResponse,
-    dependencies=[Depends(require_permission("deal.view"))]
+    response_model=DealResponse
 )
 def get_deal(
     deal_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     deal = db.query(Deal).filter(
         Deal.id == deal_id,
@@ -253,16 +314,16 @@ def get_deal(
 
 @router.put(
     "/{deal_id}",
-    response_model=DealResponse,
-    dependencies=[Depends(require_permission("deal.update"))]
+    response_model=DealResponse
 )
 def update_deal(
     deal_id: UUID,
     data: DealUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     deal = db.query(Deal).filter(
         Deal.id == deal_id,
@@ -275,9 +336,7 @@ def update_deal(
             detail="Deal not found"
         )
 
-    update_data = data.model_dump(
-        exclude_unset=True
-    )
+    update_data = data.model_dump(exclude_unset=True)
 
     new_account_id = update_data.get(
         "account_id",
@@ -294,6 +353,16 @@ def update_deal(
         deal.contact_id
     )
 
+    new_pipeline_id = update_data.get(
+        "pipeline_id",
+        deal.pipeline_id
+    )
+
+    new_pipeline_stage_id = update_data.get(
+        "pipeline_stage_id",
+        deal.pipeline_stage_id
+    )
+
     if (new_lead_id or new_contact_id) and not new_account_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -304,37 +373,19 @@ def update_deal(
     contact = None
 
     if new_account_id:
-        validate_account(
-            new_account_id,
-            tenant_id,
-            db
-        )
+        validate_account(new_account_id, tenant_id, db)
 
     if new_lead_id:
-        lead = validate_lead(
-            new_lead_id,
-            tenant_id,
-            db
-        )
+        lead = validate_lead(new_lead_id, tenant_id, db)
 
     if new_contact_id:
-        contact = validate_contact(
-            new_contact_id,
-            tenant_id,
-            db
-        )
+        contact = validate_contact(new_contact_id, tenant_id, db)
 
     if new_account_id and lead:
-        validate_lead_account(
-            lead,
-            new_account_id
-        )
+        validate_lead_account(lead, new_account_id)
 
     if new_account_id and contact:
-        validate_contact_account(
-            contact,
-            new_account_id
-        )
+        validate_contact_account(contact, new_account_id)
 
     if "assigned_to" in update_data and update_data["assigned_to"] is not None:
         validate_assigned_user(
@@ -343,26 +394,54 @@ def update_deal(
             db
         )
 
+    pipeline_fields_updated = (
+        "pipeline_id" in update_data
+        or "pipeline_stage_id" in update_data
+    )
+
+    if pipeline_fields_updated:
+        pipeline_stage = validate_pipeline_stage(
+            new_pipeline_id,
+            new_pipeline_stage_id,
+            tenant_id,
+            db
+        )
+
+        if pipeline_stage:
+            update_data["stage"] = pipeline_stage.name
+        elif new_pipeline_id is None and new_pipeline_stage_id is None:
+            update_data["stage"] = update_data.get("stage", deal.stage)
+
+    elif "stage" in update_data and deal.pipeline_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Update pipeline_stage_id to change the stage of a pipeline-linked deal"
+        )
+
     for field, value in update_data.items():
         setattr(deal, field, value)
 
-    db.commit()
-    db.refresh(deal)
+    try:
+        db.commit()
+        db.refresh(deal)
+    except Exception:
+        db.rollback()
+        raise
 
     return deal
 
 
 @router.delete(
     "/{deal_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_permission("deal.delete"))]
+    status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_deal(
     deal_id: UUID,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.delete")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     deal = db.query(Deal).filter(
         Deal.id == deal_id,
