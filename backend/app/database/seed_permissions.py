@@ -83,6 +83,13 @@ permissions = [
     ("user.create", "Create users"),
     ("user.update", "Update users"),
     ("user.delete", "Deactivate users"),
+
+    ("workflow.view", "View workflows"),
+    ("workflow.create", "Create workflows"),
+    ("workflow.update", "Update workflows"),
+    ("workflow.delete", "Delete workflows"),
+    ("workflow.activate", "Activate and deactivate workflows"),
+    ("workflow.execution.view", "View workflow execution history"),
 ]
 
 

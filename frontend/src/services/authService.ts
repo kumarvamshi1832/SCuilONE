@@ -7,6 +7,10 @@ import type {
   ResendOTPRequest,
   LoginRequest,
   VerifyMFARequest,
+  MFAEnrollmentStartRequest,
+  MFAEnrollmentStartResponse,
+  MFAEnrollmentVerifyRequest,
+  MFAEnrollmentVerifyResponse,
   ForgotPasswordRequest,
   VerifyResetOTPRequest,
   VerifyResetOTPResponse,
@@ -34,6 +38,7 @@ apiClient.interceptors.response.use(
         requestUrl.includes("/api/v1/auth/verify-otp") ||
         requestUrl.includes("/api/v1/auth/resend-otp") ||
         requestUrl.includes("/api/v1/auth/verify-mfa") ||
+        requestUrl.includes("/api/v1/auth/mfa") ||
         requestUrl.includes("/api/v1/auth/forgot-password") ||
         requestUrl.includes("/api/v1/auth/verify-reset-otp") ||
         requestUrl.includes("/api/v1/auth/reset-password");
@@ -61,7 +66,9 @@ const AUTH_ENDPOINTS = {
   VERIFY_OTP: "/api/v1/auth/verify-otp",
   RESEND_OTP: "/api/v1/auth/resend-otp",
   LOGIN: "/api/v1/auth/login",
-  VERIFY_MFA: "/api/v1/auth/verify-mfa",
+  VERIFY_MFA: "/api/v1/auth/mfa/verify",
+  MFA_ENROLL_START: "/api/v1/auth/mfa/enroll/start",
+  MFA_ENROLL_VERIFY: "/api/v1/auth/mfa/enroll/verify",
   FORGOT_PASSWORD: "/api/v1/auth/forgot-password",
   VERIFY_RESET_OTP: "/api/v1/auth/verify-reset-otp",
   RESET_PASSWORD: "/api/v1/auth/reset-password",
@@ -196,8 +203,43 @@ export async function verifyMFA(
   data: VerifyMFARequest
 ): Promise<TokenResponse> {
   try {
+    const payload: { mfa_token: string; code: string; email?: string } = {
+      mfa_token: data.mfa_token || data.temp_token || "",
+      code: data.code || data.otp_code || "",
+    };
+    if (data.email) {
+      payload.email = data.email;
+    }
     const response = await apiClient.post<TokenResponse>(
       AUTH_ENDPOINTS.VERIFY_MFA,
+      payload
+    );
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+export async function startMFAEnrollment(
+  data: MFAEnrollmentStartRequest
+): Promise<MFAEnrollmentStartResponse> {
+  try {
+    const response = await apiClient.post<MFAEnrollmentStartResponse>(
+      AUTH_ENDPOINTS.MFA_ENROLL_START,
+      data
+    );
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+export async function verifyMFAEnrollment(
+  data: MFAEnrollmentVerifyRequest
+): Promise<MFAEnrollmentVerifyResponse> {
+  try {
+    const response = await apiClient.post<MFAEnrollmentVerifyResponse>(
+      AUTH_ENDPOINTS.MFA_ENROLL_VERIFY,
       data
     );
     return response.data;

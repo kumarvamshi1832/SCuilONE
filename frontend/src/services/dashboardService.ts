@@ -1,24 +1,78 @@
 import { DashboardSummary, TenantDetails, Activity } from "../types/dashboard";
-import { getLeads } from "./leadService";
+import { apiClient } from "./authService";
+
+const DEFAULT_SUMMARY: DashboardSummary = {
+  totalProperties: -1,
+  activeListings: -1,
+  totalLeads: 0,
+  openDeals: 0,
+  siteVisits: -1,
+  bookings: -1,
+  qualifiedLeads: 0,
+  totalContacts: 0,
+  totalAccounts: 0,
+  totalDeals: 0,
+  wonRevenue: 0,
+  pendingTasks: 0,
+  completedTasks: 0,
+  overdueTasks: 0,
+  leadStatusBreakdown: [],
+  dealStageBreakdown: [],
+};
 
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
-  let totalLeads = 0;
   try {
-    const leads = await getLeads();
-    totalLeads = leads.length;
-  } catch (e) {
-    // If permission denied or other error, it remains 0 or we can handle it
-  }
+    const token = sessionStorage.getItem("access_token");
+    const response = await apiClient.get<{
+      summary?: {
+        total_leads?: number;
+        qualified_leads?: number;
+        total_contacts?: number;
+        total_accounts?: number;
+        total_deals?: number;
+        open_deals?: number;
+        won_revenue?: number;
+        pending_tasks?: number;
+        completed_tasks?: number;
+        overdue_tasks?: number;
+      };
+      lead_status_breakdown?: { status: string; count: number }[];
+      deal_stage_breakdown?: { stage: string; count: number }[];
+    }>("/api/v1/dashboard/summary", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
 
-  return {
-    totalProperties: -1, // Use -1 or similar to indicate N/A in the UI
-    activeListings: -1,
-    totalLeads,
-    openDeals: -1,
-    siteVisits: -1,
-    bookings: -1,
-  };
+    const data = response.data;
+    if (data && data.summary) {
+      return {
+        totalProperties: -1,
+        activeListings: -1,
+        totalLeads: Number(data.summary.total_leads ?? 0),
+        openDeals: Number(data.summary.open_deals ?? 0),
+        siteVisits: -1,
+        bookings: -1,
+        qualifiedLeads: Number(data.summary.qualified_leads ?? 0),
+        totalContacts: Number(data.summary.total_contacts ?? 0),
+        totalAccounts: Number(data.summary.total_accounts ?? 0),
+        totalDeals: Number(data.summary.total_deals ?? 0),
+        wonRevenue: Number(data.summary.won_revenue ?? 0),
+        pendingTasks: Number(data.summary.pending_tasks ?? 0),
+        completedTasks: Number(data.summary.completed_tasks ?? 0),
+        overdueTasks: Number(data.summary.overdue_tasks ?? 0),
+        leadStatusBreakdown: Array.isArray(data.lead_status_breakdown)
+          ? data.lead_status_breakdown
+          : [],
+        dealStageBreakdown: Array.isArray(data.deal_stage_breakdown)
+          ? data.deal_stage_breakdown
+          : [],
+      };
+    }
+    return DEFAULT_SUMMARY;
+  } catch (error) {
+    return DEFAULT_SUMMARY;
+  }
 };
+
 
 export const getTenantDetails = async (): Promise<TenantDetails> => {
   const tenantStr = sessionStorage.getItem("tenant");

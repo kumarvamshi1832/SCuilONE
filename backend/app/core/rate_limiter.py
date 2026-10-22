@@ -1,0 +1,17 @@
+
+import os
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+
+storage_uri = os.getenv(
+    "RATE_LIMIT_STORAGE_URI",
+    "memory://",
+)
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=storage_uri,
+    headers_enabled=True,
+)

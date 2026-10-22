@@ -24,6 +24,13 @@ class Activity(Base):
         index=True
     )
 
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+
     title: Mapped[str] = mapped_column(
         String(200),
         nullable=False

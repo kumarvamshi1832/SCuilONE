@@ -9,6 +9,8 @@ from app.database.connection import SessionLocal
 from app.models.user import User
 
 
+
+
 security = HTTPBearer()
 
 
@@ -25,6 +27,19 @@ def get_current_user(
     db: Session = Depends(get_db)
 ):
     payload = decode_access_token(credentials.credentials)
+    token_purpose = payload.get("purpose", "access")
+
+    if token_purpose in {"mfa_enrollment", "mfa_challenge"}:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Complete MFA verification before accessing this resource",
+        )
+
+    if payload.get("mfa_verified") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA verification required. Please log in again.",
+        )
 
     user_id = payload.get("user_id")
     tenant_id = payload.get("tenant_id")

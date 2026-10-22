@@ -1,5 +1,4 @@
 
-
 export interface DashboardSummary {
   totalProperties: number;
   activeListings: number;
@@ -7,6 +6,25 @@ export interface DashboardSummary {
   openDeals: number;
   siteVisits: number;
   bookings: number;
+
+  qualifiedLeads: number;
+  totalContacts: number;
+  totalAccounts: number;
+  totalDeals: number;
+  wonRevenue: number;
+  pendingTasks: number;
+  completedTasks: number;
+  overdueTasks: number;
+
+  leadStatusBreakdown: {
+    status: string;
+    count: number;
+  }[];
+
+  dealStageBreakdown: {
+    stage: string;
+    count: number;
+  }[];
 }
 
 export interface TenantDetails {

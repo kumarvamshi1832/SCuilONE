@@ -16,6 +16,7 @@ import { getUsers } from "../../services/userService";
 import type { Lead } from "../../types/lead";
 import type { User } from "../../types/user";
 import "./Workflows.css";
+import WorkflowAutomation from "./WorkflowAutomation";
 
 const MAX_ACTIVE_LEADS = 5;
 const ACTIVE_STATUSES = ["New", "Contacted", "Qualified"];
@@ -791,6 +792,7 @@ export default function Workflows() {
           </p>
         </>
       )}
+       <WorkflowAutomation />
     </div>
   );
 }

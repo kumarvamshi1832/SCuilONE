@@ -8,6 +8,7 @@ import { DashboardSummary, Activity } from "../../types/dashboard";
 import { User } from "../../types/user";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import "./RealEstateDashboard.css";
+import DashboardCharts from "../../components/dashboard/DashboardCharts";
 
 export default function RealEstateDashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -54,6 +55,7 @@ useEffect(() => {
       </div>
 
       <RealEstateOverview summary={summary} />
+      {summary && <DashboardCharts summary={summary} />}
 
       <div className="dashboard-grid">
         <div className="grid-main">
