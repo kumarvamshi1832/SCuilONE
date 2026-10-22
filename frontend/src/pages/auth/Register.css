@@ -31,9 +31,6 @@ html, body, #root {
   --text-muted: #64748B;
   --welcome-tag: #38BDF8;
 
-  --nav-tagline: #CBD5E1;
-  --nav-tagline-border: rgba(255, 255, 255, 0.25);
-
   /* Transparent Dark Glass: Buildings subtly visible through the card */
   --card-surface: rgba(5, 20, 40, 0.36);
   --card-backdrop-blur: blur(20px);
@@ -72,9 +69,6 @@ html, body, #root {
   --text-sub: #334155;
   --text-muted: #64748B;
   --welcome-tag: #0284C7;
-
-  --nav-tagline: #0F172A;
-  --nav-tagline-border: rgba(15, 23, 42, 0.25);
 
   /* Translucent White Glass: Daylight corporate city visible through the card */
   --card-surface: rgba(255, 255, 255, 0.76);
@@ -156,17 +150,6 @@ html, body, #root {
 .register-page-root.light .brand-sub-label {
   color: #0284C7;
   font-weight: 800;
-}
-
-.register-page-root.light .navbar-center-tagline {
-  color: #0F172A;
-  font-weight: 700;
-  opacity: 0.95;
-}
-
-.register-page-root.light .nav-tagline-separator {
-  color: rgba(15, 23, 42, 0.35);
-  font-weight: 600;
 }
 
 .register-page-root.light .card-welcome-tag {
@@ -254,7 +237,6 @@ html, body, #root {
 .card-title-main,
 .card-welcome-tag,
 .register-prompt-container,
-.navbar-center-tagline,
 .input-field-label,
 .category-section-title {
   transition: background-color 0.35s ease, background 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, backdrop-filter 0.35s ease;
@@ -307,10 +289,8 @@ html, body, #root {
 }
 
 .brand-badge-container {
-  flex: 1 1 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -354,29 +334,7 @@ html, body, #root {
   margin-top: 1px;
 }
 
-.navbar-center-tagline {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 1.8px;
-  color: var(--nav-tagline);
-  opacity: 0.85;
-}
-
-.nav-tagline-separator {
-  color: var(--nav-tagline-border);
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.4;
-  margin: 0 2px;
-}
-
 .navbar-theme-action {
-  flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1117,9 +1075,6 @@ html, body, #root {
 @media (max-width: 1024px) {
   .register-top-navbar {
     padding: 16px 24px;
-  }
-  .navbar-center-tagline {
-    display: none;
   }
   .register-content-split {
     padding: 0 24px 20px 24px;

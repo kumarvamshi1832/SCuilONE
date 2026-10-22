@@ -134,15 +134,6 @@ export default function Register() {
             </div>
           </div>
 
-          {/* Center Tagline Navigation */}
-          <div className="navbar-center-tagline" aria-label="Company Core Pillars">
-            <span>PEOPLE</span>
-            <span className="nav-tagline-separator">|</span>
-            <span>PROCESS</span>
-            <span className="nav-tagline-separator">|</span>
-            <span>GROWTH</span>
-          </div>
-
           {/* Right Theme Switcher Pill */}
           <div className="navbar-theme-action">
             <button
