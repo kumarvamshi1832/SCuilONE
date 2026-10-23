@@ -1,5 +1,6 @@
+
 from uuid import UUID
-from app.services.notification_service import notify_assignment
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,9 @@ from app.schemas.activity import (
     ActivityResponse
 )
 
+from app.services.notification_service import notify_assignment
+from app.services.audit_service import log_audit
+
 
 router = APIRouter(
     prefix="/api/v1/activities",
@@ -33,6 +37,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def activity_audit_data(activity: Activity):
+    return {
+        "title": activity.title,
+        "description": activity.description,
+        "activity_type": activity.activity_type,
+        "status": activity.status,
+        "priority": activity.priority,
+        "due_date": activity.due_date,
+        "assigned_to": activity.assigned_to,
+        "lead_id": activity.lead_id,
+        "contact_id": activity.contact_id,
+        "account_id": activity.account_id,
+        "deal_id": activity.deal_id,
+        "created_by": activity.created_by,
+    }
 
 
 def validate_related_records(data, tenant_id, db: Session):
@@ -73,12 +94,11 @@ def create_activity(
     _=Depends(require_permission("activity.create")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
-    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     activity_data = data.model_dump()
 
-    # Automatically assign a task to its linked lead's salesperson.
     if (
         activity_data["activity_type"] == "Task"
         and activity_data["assigned_to"] is None
@@ -92,7 +112,6 @@ def create_activity(
         if linked_lead:
             activity_data["assigned_to"] = linked_lead.assigned_to
 
-    # Validate the assignee and linked CRM records.
     validated_data = ActivityCreate(**activity_data)
     validate_related_records(validated_data, tenant_id, db)
 
@@ -104,13 +123,26 @@ def create_activity(
 
     try:
         db.add(activity)
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="activities",
+            record_id=activity.id,
+            description=f"Created activity {activity.title}",
+            after_data=activity_audit_data(activity),
+        )
+
         db.commit()
         db.refresh(activity)
+
     except Exception:
         db.rollback()
         raise
 
-    # Notify the assignee after the task has been saved.
     if (
         activity.activity_type == "Task"
         and activity.assigned_to is not None
@@ -130,6 +162,7 @@ def create_activity(
 
     return activity
 
+
 @router.get(
     "/",
     response_model=list[ActivityResponse]
@@ -139,7 +172,7 @@ def get_activities(
     _=Depends(require_permission("activity.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     return db.query(Activity).filter(
         Activity.tenant_id == tenant_id
@@ -155,15 +188,13 @@ def get_my_tasks(
     _=Depends(require_permission("activity.view")),
     db: Session = Depends(get_db)
 ):
-    user_id = UUID(current_user["user_id"])
-    tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(str(current_user["user_id"]))
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
-    tasks = db.query(Activity).filter(
+    return db.query(Activity).filter(
         Activity.tenant_id == tenant_id,
         Activity.assigned_to == user_id
     ).order_by(Activity.created_at.desc()).all()
-
-    return tasks
 
 
 @router.get(
@@ -176,7 +207,7 @@ def get_activity(
     _=Depends(require_permission("activity.view")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
 
     activity = db.query(Activity).filter(
         Activity.id == activity_id,
@@ -192,7 +223,6 @@ def get_activity(
     return activity
 
 
-
 @router.put(
     "/{activity_id}",
     response_model=ActivityResponse
@@ -204,8 +234,8 @@ def update_activity(
     _=Depends(require_permission("activity.update")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = UUID(current_user["tenant_id"])
-    user_id = UUID(current_user["user_id"])
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     activity = db.query(Activity).filter(
         Activity.id == activity_id,
@@ -220,6 +250,7 @@ def update_activity(
 
     previous_assigned_to = activity.assigned_to
     creator_user_id = activity.created_by
+
     changes = data.model_dump(exclude_unset=True)
     changed_fields = {}
 
@@ -261,8 +292,34 @@ def update_activity(
             activity.assigned_to = linked_lead.assigned_to
 
     try:
+        if changed_fields:
+            before_data = {
+                field: old_value
+                for field, (old_value, _) in changed_fields.items()
+            }
+
+            db.flush()
+
+            after_data = {
+                field: new_value
+                for field, (_, new_value) in changed_fields.items()
+            }
+
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="update",
+                module="activities",
+                record_id=activity.id,
+                description=f"Updated activity {activity.title}",
+                before_data=before_data,
+                after_data=after_data,
+            )
+
         db.commit()
         db.refresh(activity)
+
     except Exception:
         db.rollback()
         raise
@@ -328,7 +385,8 @@ def delete_activity(
     _=Depends(require_permission("activity.delete")),
     db: Session = Depends(get_db)
 ):
-    tenant_id = current_user["tenant_id"]
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     activity = db.query(Activity).filter(
         Activity.id == activity_id,
@@ -341,7 +399,23 @@ def delete_activity(
             detail="Activity not found"
         )
 
-    db.delete(activity)
-    db.commit()
+    try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="delete",
+            module="activities",
+            record_id=activity.id,
+            description=f"Deleted activity {activity.title}",
+            before_data=activity_audit_data(activity),
+        )
 
-    return
+        db.delete(activity)
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    return None

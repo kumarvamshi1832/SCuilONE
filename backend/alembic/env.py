@@ -30,6 +30,7 @@ from app.models.refresh_session import RefreshSession
 from app.models.refresh_session import RefreshSession
 from app.models.user_mfa import UserMFA
 from app.models.document import Document
+from app.models.audit_log import AuditLog
 
 config = context.config
 

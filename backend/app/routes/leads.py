@@ -25,6 +25,7 @@ from app.models.user_role import UserRole
 from app.models.role_permission import RolePermission
 from app.models.permission import Permission
 from app.services.workflow_engine import dispatch_workflows
+from app.services.audit_service import log_audit
 
 
 logger = logging.getLogger(__name__)
@@ -211,6 +212,25 @@ def create_lead(
             )
 
             db.add(audit)
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="leads",
+            record_id=lead.id,
+            description=f"Created lead {lead.full_name}",
+            after_data={
+                "full_name": lead.full_name,
+                "email": lead.email,
+                "phone": lead.phone,
+                "source": lead.source,
+                "status": lead.status,
+                "assigned_to": lead.assigned_to,
+                "created_by": lead.created_by,
+            },
+        )
 
         db.commit()
         db.refresh(lead)
@@ -511,6 +531,11 @@ def update_lead(
         if old_value != new_value:
             changed_fields.add(field)
 
+    before_data = {
+        field: getattr(lead, field, None)
+        for field in changed_fields
+    }
+
     assignment_changed = (
         data.assigned_to is not None
         and data.assigned_to != previous_assigned_to
@@ -640,6 +665,22 @@ def update_lead(
             assign_waiting_leads(
                 db=db,
                 tenant_id=tenant_id,
+            )
+
+        if changed_fields:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="update",
+                module="leads",
+                record_id=lead.id,
+                description=f"Updated lead {lead.full_name}",
+                before_data=before_data,
+                after_data={
+                    field: getattr(lead, field, None)
+                    for field in changed_fields
+                },
             )
 
         db.commit()
@@ -819,6 +860,24 @@ def delete_lead(
         )
 
     try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=UUID(str(current_user["user_id"])),
+            action="delete",
+            module="leads",
+            record_id=lead.id,
+            description=f"Deleted lead {lead.full_name}",
+            before_data={
+                "full_name": lead.full_name,
+                "email": lead.email,
+                "phone": lead.phone,
+                "source": lead.source,
+                "status": lead.status,
+                "assigned_to": lead.assigned_to,
+                "created_by": lead.created_by,
+            },
+        )
         db.delete(lead)
         db.commit()
 

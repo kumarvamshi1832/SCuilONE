@@ -1,3 +1,4 @@
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,9 +7,8 @@ from sqlalchemy.orm import Session
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
-
 from app.models.pipeline import Pipeline, PipelineStage
-
+from app.services.audit_service import log_audit
 from app.schemas.pipeline import (
     PipelineCreate,
     PipelineUpdate,
@@ -46,6 +46,26 @@ def get_tenant_pipeline(pipeline_id: UUID, tenant_id: UUID, db: Session):
         )
 
     return pipeline
+
+
+def pipeline_audit_data(pipeline: Pipeline):
+    return {
+        "name": pipeline.name,
+        "description": pipeline.description,
+        "is_default": pipeline.is_default,
+        "is_active": pipeline.is_active,
+    }
+
+
+def pipeline_stage_audit_data(stage: PipelineStage):
+    return {
+        "pipeline_id": stage.pipeline_id,
+        "name": stage.name,
+        "position": stage.position,
+        "is_closed_won": stage.is_closed_won,
+        "is_closed_lost": stage.is_closed_lost,
+        "is_active": stage.is_active,
+    }
 
 
 def validate_default_pipeline(
@@ -179,6 +199,19 @@ def create_pipeline(
             )
             db.add(stage)
 
+        db.flush()
+
+        log_audit(
+    db=db,
+    tenant_id=tenant_id,
+    user_id=current_user.get("user_id"),
+    action="create",
+    module="pipelines",
+    record_id=pipeline.id,
+    description=f"Created pipeline '{pipeline.name}'",
+    after_data=pipeline_audit_data(pipeline),
+)
+
         db.commit()
         db.refresh(pipeline)
 
@@ -267,6 +300,7 @@ def update_pipeline(
         db,
     )
 
+    before_data = pipeline_audit_data(pipeline)
     changes = data.model_dump(exclude_unset=True)
 
     if "name" in changes and changes["name"] is not None:
@@ -289,9 +323,35 @@ def update_pipeline(
     for field, value in changes.items():
         setattr(pipeline, field, value)
 
+    after_data = pipeline_audit_data(pipeline)
+
+    changed_before = {
+        field: before_data[field]
+        for field in changes
+        if before_data.get(field) != after_data.get(field)
+    }
+    changed_after = {
+        field: after_data[field]
+        for field in changed_before
+    }
+
     try:
+        if changed_before:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=current_user.get("user_id"),
+                action="update",
+                module="pipelines",
+                record_id=pipeline.id,
+                description=f"Updated pipeline '{pipeline.name}'",
+                before_data=changed_before,
+                after_data=changed_after,
+            )
+
         db.commit()
         db.refresh(pipeline)
+
     except Exception:
         db.rollback()
         raise
@@ -322,6 +382,17 @@ def delete_pipeline(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Set another pipeline as default before deleting this pipeline",
         )
+
+    log_audit(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=current_user.get("user_id"),
+        action="delete",
+        module="pipelines",
+        record_id=pipeline.id,
+        description=f"Deleted pipeline '{pipeline.name}'",
+        before_data=pipeline_audit_data(pipeline),
+    )
 
     db.delete(pipeline)
     db.commit()
@@ -367,8 +438,22 @@ def create_pipeline_stage(
 
     try:
         db.add(stage)
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=current_user.get("user_id"),
+            action="create",
+            module="pipeline_stages",
+            record_id=stage.id,
+            description=f"Created pipeline stage '{stage.name}'",
+            after_data=pipeline_stage_audit_data(stage),
+        )
+
         db.commit()
         db.refresh(stage)
+
     except Exception:
         db.rollback()
         raise
@@ -398,6 +483,7 @@ def update_pipeline_stage(
         db,
     )
 
+    before_data = pipeline_stage_audit_data(stage)
     changes = data.model_dump(exclude_unset=True)
 
     effective_won = changes.get(
@@ -434,9 +520,35 @@ def update_pipeline_stage(
     for field, value in changes.items():
         setattr(stage, field, value)
 
+    after_data = pipeline_stage_audit_data(stage)
+
+    changed_before = {
+        field: before_data[field]
+        for field in changes
+        if before_data.get(field) != after_data.get(field)
+    }
+    changed_after = {
+        field: after_data[field]
+        for field in changed_before
+    }
+
     try:
+        if changed_before:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=current_user.get("user_id"),
+                action="update",
+                module="pipeline_stages",
+                record_id=stage.id,
+                description=f"Updated pipeline stage '{stage.name}'",
+                before_data=changed_before,
+                after_data=changed_after,
+            )
+
         db.commit()
         db.refresh(stage)
+
     except Exception:
         db.rollback()
         raise
@@ -463,6 +575,17 @@ def delete_pipeline_stage(
         pipeline_id,
         stage_id,
         db,
+    )
+
+    log_audit(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=current_user.get("user_id"),
+        action="delete",
+        module="pipeline_stages",
+        record_id=stage.id,
+        description=f"Deleted pipeline stage '{stage.name}'",
+        before_data=pipeline_stage_audit_data(stage),
     )
 
     db.delete(stage)

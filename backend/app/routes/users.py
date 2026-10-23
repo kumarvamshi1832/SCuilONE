@@ -1,36 +1,31 @@
-import io
-
-from fastapi import UploadFile, File
-from PIL import Image, UnidentifiedImageError
-
-from app.core.cloudinary_config import cloudinary
 
 import hashlib
+import io
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import cloudinary.uploader
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
-from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
+from app.database.connection import SessionLocal
 from app.core.security import hash_password, verify_password
-
 from app.models.user import User
 from app.models.role import Role
 from app.models.user_role import UserRole
 from app.models.user_invitation import UserInvitation
-
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
     UserProfileUpdate,
     ChangePasswordRequest,
 )
-
 from app.services.email_service import send_user_invitation_email
+from app.services.audit_service import log_audit
 
 
 router = APIRouter(
@@ -47,6 +42,38 @@ def get_db():
         db.close()
 
 
+def user_audit_data(user: User, role_name=None):
+    return {
+        "full_name": user.full_name,
+        "email": user.email,
+        "phone": user.phone,
+        "job_title": user.job_title,
+        "role": role_name,
+        "status": user.status,
+        "profile_completed": user.profile_completed,
+        "must_change_password": user.must_change_password,
+        "has_profile_photo": bool(user.photo_url),
+    }
+
+
+def get_user_role(db: Session, user_id: UUID):
+    user_role = db.query(UserRole).filter(
+        UserRole.user_id == user_id
+    ).first()
+
+    if not user_role:
+        return None, None
+
+    role = db.query(Role).filter(
+        Role.id == user_role.role_id
+    ).first()
+
+    if not role:
+        return user_role, None
+
+    return user_role, role
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user(
     data: UserCreate,
@@ -55,6 +82,7 @@ async def create_user(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(current_user["tenant_id"])
+    actor_id = UUID(current_user["user_id"])
     email = str(data.email).lower().strip()
 
     existing_user = db.query(User).filter(
@@ -106,8 +134,7 @@ async def create_user(
         invitation = UserInvitation(
             user_id=new_user.id,
             token_hash=token_hash,
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(hours=24),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
             used=False,
         )
 
@@ -144,11 +171,24 @@ async def create_user(
 
         raise HTTPException(
             status_code=502,
-            detail=(
-                "Invitation email could not be sent. "
-                "Please try again."
-            ),
+            detail="Invitation email could not be sent. Please try again.",
         )
+
+    try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=actor_id,
+            action="create",
+            module="users",
+            record_id=new_user.id,
+            description=f"Created user '{new_user.full_name}'",
+            after_data=user_audit_data(new_user, role.name),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "message": "User created and invitation sent successfully",
@@ -178,26 +218,14 @@ def get_users(
     result = []
 
     for user in users:
-        user_role = db.query(UserRole).filter(
-            UserRole.user_id == user.id
-        ).first()
-
-        role_name = None
-
-        if user_role:
-            role = db.query(Role).filter(
-                Role.id == user_role.role_id
-            ).first()
-
-            if role:
-                role_name = role.name
+        _, role = get_user_role(db, user.id)
 
         result.append({
             "id": str(user.id),
             "full_name": user.full_name,
             "email": user.email,
             "tenant_id": str(user.tenant_id),
-            "role": role_name,
+            "role": role.name if role else None,
             "status": user.status,
             "profile_completed": user.profile_completed,
             "photo_url": user.photo_url,
@@ -219,11 +247,6 @@ def get_roles(
     ]
 
 
-# --------------------------------------------------
-# MY PROFILE ROUTES
-# Keep these BEFORE routes containing {user_id}
-# --------------------------------------------------
-
 @router.get("/me")
 def get_my_profile(
     current_user: dict = Depends(require_active_user),
@@ -238,24 +261,9 @@ def get_my_profile(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
-    user_role = db.query(UserRole).filter(
-        UserRole.user_id == user.id
-    ).first()
-
-    role_name = None
-
-    if user_role:
-        role = db.query(Role).filter(
-            Role.id == user_role.role_id
-        ).first()
-
-        if role:
-            role_name = role.name
+    _, role = get_user_role(db, user.id)
 
     return {
         "id": str(user.id),
@@ -265,7 +273,7 @@ def get_my_profile(
         "job_title": user.job_title,
         "photo_url": user.photo_url,
         "tenant_id": str(user.tenant_id),
-        "role": role_name,
+        "role": role.name if role else None,
         "status": user.status,
         "profile_completed": user.profile_completed,
         "created_at": user.created_at,
@@ -288,10 +296,11 @@ def update_my_profile(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
+
+    _, role = get_user_role(db, user.id)
+    role_name = role.name if role else None
+    before_data = user_audit_data(user, role_name)
 
     full_name = data.full_name.strip()
 
@@ -303,11 +312,25 @@ def update_my_profile(
 
     user.full_name = full_name
     user.phone = data.phone.strip() if data.phone else None
-    user.job_title = (
-        data.job_title.strip() if data.job_title else None
-    )
+    user.job_title = data.job_title.strip() if data.job_title else None
 
     try:
+        db.flush()
+        after_data = user_audit_data(user, role_name)
+
+        if before_data != after_data:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="update",
+                module="users",
+                record_id=user.id,
+                description=f"Updated own profile for '{user.full_name}'",
+                before_data=before_data,
+                after_data=after_data,
+            )
+
         db.commit()
         db.refresh(user)
     except Exception:
@@ -340,10 +363,7 @@ async def upload_my_profile_photo(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
     allowed_types = {
         "image/jpeg",
@@ -361,10 +381,7 @@ async def upload_my_profile_photo(
     contents = await file.read(max_size + 1)
 
     if not contents:
-        raise HTTPException(
-            status_code=400,
-            detail="Please select an image",
-        )
+        raise HTTPException(status_code=400, detail="Please select an image")
 
     if len(contents) > max_size:
         raise HTTPException(
@@ -375,7 +392,6 @@ async def upload_my_profile_photo(
     try:
         image = Image.open(io.BytesIO(contents))
         image.verify()
-
         image = Image.open(io.BytesIO(contents))
 
         if image.format not in {"JPEG", "PNG", "WEBP"}:
@@ -390,9 +406,11 @@ async def upload_my_profile_photo(
             detail="The uploaded file is not a valid image",
         )
 
-    try:
-        import cloudinary.uploader
+    before_data = {
+        "has_profile_photo": bool(user.photo_url),
+    }
 
+    try:
         result = cloudinary.uploader.upload(
             io.BytesIO(contents),
             resource_type="image",
@@ -409,6 +427,19 @@ async def upload_my_profile_photo(
             raise RuntimeError("Cloudinary did not return a secure URL")
 
         user.photo_url = photo_url
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="update",
+            module="users",
+            record_id=user.id,
+            description=f"Updated profile photo for '{user.full_name}'",
+            before_data=before_data,
+            after_data={"has_profile_photo": True},
+        )
+
         db.commit()
         db.refresh(user)
 
@@ -445,24 +476,35 @@ def change_my_password(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
-    if not verify_password(
-        data.current_password,
-        user.password,
-    ):
+    if not verify_password(data.current_password, user.password):
         raise HTTPException(
             status_code=400,
             detail="Current password is incorrect",
         )
 
+    before_data = {
+        "must_change_password": user.must_change_password,
+    }
+
     user.password = hash_password(data.new_password)
     user.must_change_password = False
 
     try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="password_change",
+            module="users",
+            record_id=user.id,
+            description=f"Changed password for '{user.full_name}'",
+            before_data=before_data,
+            after_data={
+                "must_change_password": user.must_change_password,
+            },
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -472,10 +514,6 @@ def change_my_password(
         "message": "Password changed successfully. Please log in again."
     }
 
-
-# --------------------------------------------------
-# ADMIN USER ROUTES
-# --------------------------------------------------
 
 @router.get("/{user_id}")
 def get_user(
@@ -492,31 +530,16 @@ def get_user(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
-    user_role = db.query(UserRole).filter(
-        UserRole.user_id == user.id
-    ).first()
-
-    role_name = None
-
-    if user_role:
-        role = db.query(Role).filter(
-            Role.id == user_role.role_id
-        ).first()
-
-        if role:
-            role_name = role.name
+    _, role = get_user_role(db, user.id)
 
     return {
         "id": str(user.id),
         "full_name": user.full_name,
         "email": user.email,
         "tenant_id": str(user.tenant_id),
-        "role": role_name,
+        "role": role.name if role else None,
         "status": user.status,
         "profile_completed": user.profile_completed,
     }
@@ -531,6 +554,7 @@ def update_user(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(current_user["tenant_id"])
+    actor_id = UUID(current_user["user_id"])
 
     if data.status not in {"Active", "Inactive"}:
         raise HTTPException(
@@ -544,47 +568,58 @@ def update_user(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
 
     role = db.query(Role).filter(
         Role.name == data.role
     ).first()
 
     if not role:
-        raise HTTPException(
-            status_code=400,
-            detail="Role not found",
-        )
+        raise HTTPException(status_code=400, detail="Role not found")
 
     user_role = db.query(UserRole).filter(
         UserRole.user_id == user.id
     ).first()
 
+    old_role = None
+    if user_role:
+        old_role_obj = db.query(Role).filter(
+            Role.id == user_role.role_id
+        ).first()
+        old_role = old_role_obj.name if old_role_obj else None
+
+    before_data = user_audit_data(user, old_role)
+
     try:
         if user_role:
             user_role.role_id = role.id
         else:
-            db.add(
-                UserRole(
-                    user_id=user.id,
-                    role_id=role.id,
-                )
-            )
+            db.add(UserRole(user_id=user.id, role_id=role.id))
 
         if data.status == "Active":
             if user.must_change_password or not user.profile_completed:
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        "User must finish onboarding "
-                        "before activation"
-                    ),
+                    detail="User must finish onboarding before activation",
                 )
 
         user.status = data.status
+        db.flush()
+
+        after_data = user_audit_data(user, role.name)
+
+        if before_data != after_data:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=actor_id,
+                action="update",
+                module="users",
+                record_id=user.id,
+                description=f"Updated user '{user.full_name}'",
+                before_data=before_data,
+                after_data=after_data,
+            )
 
         db.commit()
         db.refresh(user)
@@ -611,6 +646,7 @@ def delete_user(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(current_user["tenant_id"])
+    actor_id = UUID(current_user["user_id"])
 
     user = db.query(User).filter(
         User.id == user_id,
@@ -618,10 +654,11 @@ def delete_user(
     ).first()
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=404, detail="User not found")
+
+    _, role = get_user_role(db, user.id)
+    role_name = role.name if role else None
+    before_data = user_audit_data(user, role_name)
 
     user.status = "Inactive"
 
@@ -634,6 +671,20 @@ def delete_user(
     )
 
     try:
+        after_data = user_audit_data(user, role_name)
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=actor_id,
+            action="deactivate",
+            module="users",
+            record_id=user.id,
+            description=f"Deactivated user '{user.full_name}'",
+            before_data=before_data,
+            after_data=after_data,
+        )
+
         db.commit()
     except Exception:
         db.rollback()

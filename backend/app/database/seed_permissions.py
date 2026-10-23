@@ -54,6 +54,8 @@ permissions = [
     ("document.view", "View documents"),
     ("document.create", "Upload documents"),
     ("document.delete", "Delete documents"),
+
+    ("audit.view","View tenant audit logs")
 ]
 
 

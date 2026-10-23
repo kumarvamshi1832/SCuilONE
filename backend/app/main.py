@@ -19,6 +19,7 @@ from app.routes.documents import router as documents_router
 from app.routes.search import router as search_router
 from app.routes.import_export import router as import_export_router
 from app.routes.import_export_extended import router as import_export_extended_router
+from app.routes.audit_logs import router as audit_logs_router
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -71,6 +72,7 @@ app.include_router(documents_router)
 app.include_router(search_router)
 app.include_router(import_export_router)
 app.include_router(import_export_extended_router)
+app.include_router(audit_logs_router)
 
 @app.get("/")
 def home():

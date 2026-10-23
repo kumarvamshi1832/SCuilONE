@@ -17,6 +17,7 @@ role_permissions = {
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
         "document.view","document.create","document.delete",
+        "audit.view",
     ],
 
     "Tenant Admin": [
@@ -31,6 +32,7 @@ role_permissions = {
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
         "document.view","document.create","document.delete",
+        "audit.view",
     ],
 
     "Manager": [
@@ -45,6 +47,7 @@ role_permissions = {
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
         "document.view","document.create","document.delete",
+        "audit.view",
     ],
 
     "Sales User": [
@@ -93,6 +96,7 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view",
+        "audit.view",
     ],
 }
 

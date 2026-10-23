@@ -1,6 +1,7 @@
+
 import logging
 from uuid import UUID, uuid4
-from app.services.notification_service import notify_assignment
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,9 @@ from app.models.user import User
 from app.models.pipeline import Pipeline, PipelineStage
 
 from app.schemas.deal import DealCreate, DealUpdate, DealResponse
+from app.services.notification_service import notify_assignment
 from app.services.workflow_engine import dispatch_workflows
+from app.services.audit_service import log_audit
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
 
 
 def run_deal_workflows(
@@ -213,6 +215,22 @@ def validate_pipeline_stage(
     return pipeline_stage
 
 
+def deal_audit_data(deal: Deal):
+    return {
+        "name": deal.name,
+        "lead_id": deal.lead_id,
+        "contact_id": deal.contact_id,
+        "account_id": deal.account_id,
+        "assigned_to": deal.assigned_to,
+        "amount": deal.amount,
+        "stage": deal.stage,
+        "pipeline_id": deal.pipeline_id,
+        "pipeline_stage_id": deal.pipeline_stage_id,
+        "expected_close_date": deal.expected_close_date,
+        "description": deal.description,
+        "created_by": deal.created_by,
+    }
+
 
 @router.post(
     "/",
@@ -253,8 +271,6 @@ def create_deal(
     if data.account_id and contact:
         validate_contact_account(contact, data.account_id)
 
-    # Preserve an explicitly selected assignee.
-    # Otherwise inherit from Lead, then Contact, then Account.
     assigned_to = data.assigned_to
 
     if assigned_to is None:
@@ -293,13 +309,26 @@ def create_deal(
 
     try:
         db.add(deal)
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="deals",
+            record_id=deal.id,
+            description=f"Created deal {deal.name}",
+            after_data=deal_audit_data(deal),
+        )
+
         db.commit()
         db.refresh(deal)
+
     except Exception:
         db.rollback()
         raise
 
-    # Notify the assigned salesperson after the Deal is saved.
     if deal.assigned_to is not None:
         try:
             notify_assignment(
@@ -308,9 +337,7 @@ def create_deal(
                 recipient_user_id=deal.assigned_to,
                 actor_user_id=user_id,
                 title="New deal assigned to you",
-                message=(
-                    f'Deal "{deal.name}" has been assigned to you.'
-                ),
+                message=f'Deal "{deal.name}" has been assigned to you.',
                 related_module="deals",
                 related_record_id=deal.id,
             )
@@ -454,37 +481,19 @@ def update_deal(
     contact = None
 
     if new_account_id:
-        validate_account(
-            new_account_id,
-            tenant_id,
-            db
-        )
+        validate_account(new_account_id, tenant_id, db)
 
     if new_lead_id:
-        lead = validate_lead(
-            new_lead_id,
-            tenant_id,
-            db
-        )
+        lead = validate_lead(new_lead_id, tenant_id, db)
 
     if new_contact_id:
-        contact = validate_contact(
-            new_contact_id,
-            tenant_id,
-            db
-        )
+        contact = validate_contact(new_contact_id, tenant_id, db)
 
     if new_account_id and lead:
-        validate_lead_account(
-            lead,
-            new_account_id
-        )
+        validate_lead_account(lead, new_account_id)
 
     if new_account_id and contact:
-        validate_contact_account(
-            contact,
-            new_account_id
-        )
+        validate_contact_account(contact, new_account_id)
 
     if (
         "assigned_to" in update_data
@@ -544,13 +553,31 @@ def update_deal(
     if not changed_fields:
         return deal
 
+    before_data = {
+        field: getattr(deal, field, None)
+        for field in changed_fields
+    }
+
     try:
         for field in changed_fields:
-            setattr(
-                deal,
-                field,
-                update_data[field]
-            )
+            setattr(deal, field, update_data[field])
+
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="update",
+            module="deals",
+            record_id=deal.id,
+            description=f"Updated deal {deal.name}",
+            before_data=before_data,
+            after_data={
+                field: getattr(deal, field, None)
+                for field in changed_fields
+            },
+        )
 
         db.commit()
         db.refresh(deal)
@@ -585,9 +612,7 @@ def update_deal(
             and current_assigned_to is not None
             and current_assigned_to != creator_user_id
         ):
-            changed_fields_text = ", ".join(
-                sorted(changed_fields)
-            )
+            changed_fields_text = ", ".join(sorted(changed_fields))
 
             notify_assignment(
                 db=db,
@@ -611,14 +636,11 @@ def update_deal(
         ):
             if "stage" in changed_fields:
                 message = (
-                    f'The deal "{deal.name}" was moved from '
-                    f'"{update_data.get("stage", deal.stage)}" '
-                    f"by another user."
+                    f'The deal "{deal.name}" stage was changed '
+                    f"to {deal.stage} by another user."
                 )
             else:
-                changed_fields_text = ", ".join(
-                    sorted(changed_fields)
-                )
+                changed_fields_text = ", ".join(sorted(changed_fields))
 
                 message = (
                     f'The deal "{deal.name}" was updated by '
@@ -691,7 +713,23 @@ def delete_deal(
             detail="Deal not found"
         )
 
-    db.delete(deal)
-    db.commit()
+    try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=UUID(str(current_user["user_id"])),
+            action="delete",
+            module="deals",
+            record_id=deal.id,
+            description=f"Deleted deal {deal.name}",
+            before_data=deal_audit_data(deal),
+        )
+
+        db.delete(deal)
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
 
     return None
