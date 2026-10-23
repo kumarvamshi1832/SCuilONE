@@ -15,6 +15,10 @@ from app.routes.workflows import router as workflows_router
 from app.routes.notifications import router as notifications_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.reports import router as reports_router
+from app.routes.documents import router as documents_router
+from app.routes.search import router as search_router
+from app.routes.import_export import router as import_export_router
+from app.routes.import_export_extended import router as import_export_extended_router
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -63,6 +67,10 @@ app.include_router(workflows_router)
 app.include_router(notifications_router)
 app.include_router(dashboard_router)
 app.include_router(reports_router)
+app.include_router(documents_router)
+app.include_router(search_router)
+app.include_router(import_export_router)
+app.include_router(import_export_extended_router)
 
 @app.get("/")
 def home():

@@ -11,6 +11,7 @@ import {
   type NotificationItem,
 } from "../../services/notificationService";
 import "./DashboardLayout.css";
+import { getIndustryConfig, normalizeIndustrySlug } from "../../config/industryConfig";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -47,8 +48,9 @@ export default function DashboardLayout({
     }
   }
 
-  const currentIndustry = industry || tenantIndustry;
-  const basePath = `/${currentIndustry}`;
+  const currentIndustry = normalizeIndustrySlug(industry || tenantIndustry);
+const industryConfig = getIndustryConfig(currentIndustry);
+const basePath = `/${currentIndustry}`;
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -368,7 +370,7 @@ export default function DashboardLayout({
       "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 2 2 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0l.06.06a2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z";
 
     const pipelineItem: NavItem = {
-      label: "Pipelines",
+      label: industryConfig.pipelineLabel,
       path: `${basePath}/pipelines`,
       icon: pipelineIcon,
     };
@@ -379,34 +381,13 @@ export default function DashboardLayout({
       icon: workflowIcon,
     };
 
-    if (currentIndustry === "education-consulting") {
-      return [
-        { label: "Dashboard", path: `${basePath}/dashboard`, icon: dashboardIcon },
-        { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
-        { label: "Students", path: `${basePath}/students`, icon: peopleIcon },
-        {
-          label: "Applications",
-          path: `${basePath}/applications`,
-          icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z",
-        },
-        { label: "Universities", path: `${basePath}/universities`, icon: accountIcon },
-        { label: "Programs", path: `${basePath}/programs`, icon: dealIcon },
-        { label: "Counselors", path: `${basePath}/counselors`, icon: peopleIcon },
-        { label: "Consultations", path: `${basePath}/consultations`, icon: activityIcon },
-        { label: "Follow-ups", path: `${basePath}/follow-ups`, icon: activityIcon },
-        { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
-        { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
-        { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
-      ];
-    }
-
     if (isManager) {
       return [
         { label: "Dashboard", path: "/manager/dashboard", icon: dashboardIcon },
-        { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
-        { label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon },
-        { label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon },
-        { label: "Deals", path: `${basePath}/deals`, icon: dealIcon },
+        { label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon },
+        { label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon },
+        { label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon },
+        { label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon },
         pipelineItem,
         { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
         { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
@@ -420,16 +401,16 @@ export default function DashboardLayout({
       ];
 
       if (hasPermission("lead.view")) {
-        salesNav.push({ label: "Leads", path: `${basePath}/leads`, icon: peopleIcon });
+        salesNav.push({ label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon });
       }
       if (hasPermission("contact.view")) {
-        salesNav.push({ label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon });
+        salesNav.push({ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon });
       }
       if (hasPermission("account.view")) {
-        salesNav.push({ label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon });
+        salesNav.push({ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon });
       }
       if (hasPermission("deal.view")) {
-        salesNav.push({ label: "Deals", path: `${basePath}/deals`, icon: dealIcon });
+        salesNav.push({ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon });
       }
       if (hasPermission("pipeline.view")) salesNav.push(pipelineItem);
       if (hasPermission("task.view")) {
@@ -445,16 +426,16 @@ export default function DashboardLayout({
       ];
 
       if (hasPermission("lead.view")) {
-        opsNav.push({ label: "Leads", path: `${basePath}/leads`, icon: peopleIcon });
+        opsNav.push({ label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon });
       }
       if (hasPermission("contact.view")) {
-        opsNav.push({ label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon });
+        opsNav.push({ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon });
       }
       if (hasPermission("account.view")) {
-        opsNav.push({ label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon });
+        opsNav.push({ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon });
       }
       if (hasPermission("deal.view")) {
-        opsNav.push({ label: "Deals", path: `${basePath}/deals`, icon: dealIcon });
+        opsNav.push({ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon });
       }
       if (hasPermission("pipeline.view")) opsNav.push(pipelineItem);
       if (hasPermission("task.view")) {
@@ -474,16 +455,16 @@ export default function DashboardLayout({
       ];
 
       if (hasPermission("lead.view")) {
-        customNav.push({ label: "Leads", path: `${basePath}/leads`, icon: peopleIcon });
+        customNav.push({ label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon });
       }
       if (hasPermission("contact.view")) {
-        customNav.push({ label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon });
+        customNav.push({ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon });
       }
       if (hasPermission("account.view")) {
-        customNav.push({ label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon });
+        customNav.push({ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon });
       }
       if (hasPermission("deal.view")) {
-        customNav.push({ label: "Deals", path: `${basePath}/deals`, icon: dealIcon });
+        customNav.push({ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon });
       }
       if (hasPermission("pipeline.view")) customNav.push(pipelineItem);
       if (hasPermission("task.view")) {
@@ -491,9 +472,6 @@ export default function DashboardLayout({
       }
       if (hasPermission("activity.view")) {
         customNav.push({ label: "Activities", path: `${basePath}/activities`, icon: activityIcon });
-      }
-      if (isSupport && hasPermission("property.view")) {
-        customNav.push({ label: "Properties", path: `${basePath}/properties`, icon: accountIcon });
       }
       if (hasPermission("user.view")) {
         customNav.push({ label: "Users", path: `${basePath}/users`, icon: userIcon });
@@ -520,12 +498,13 @@ export default function DashboardLayout({
 
     return [
       { label: "Dashboard", path: `${basePath}/dashboard`, icon: dashboardIcon },
-      { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
-      { label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon },
-      { label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon },
-      { label: "Deals", path: `${basePath}/deals`, icon: dealIcon },
+      { label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon },
+{ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon },
+{ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon },
+{ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon },
       pipelineItem,
       { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
+      { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
       { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
       { label: "Users", path: `${basePath}/users`, icon: userIcon },
       { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },

@@ -29,6 +29,7 @@ from app.models.notification import Notification
 from app.models.refresh_session import RefreshSession
 from app.models.refresh_session import RefreshSession
 from app.models.user_mfa import UserMFA
+from app.models.document import Document
 
 config = context.config
 

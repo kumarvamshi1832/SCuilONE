@@ -19,7 +19,7 @@ import SalesDashboard from "../pages/dashboard/SalesDashboard";
 import OperationsDashboard from "../pages/dashboard/OperationsDashboard";
 import SupportDashboard from "../pages/dashboard/SupportDashboard";
 import AuditorDashboard from "../pages/dashboard/AuditorDashboard";
-
+import IndustryDashboard from "../pages/dashboard/IndustryDashboard";
 import Users from "../pages/users/Users";
 import Leads from "../pages/leads/Leads";
 import Contacts from "../pages/contacts/Contacts";
@@ -55,7 +55,7 @@ function DashboardResolver() {
       return <EducationConsultingDashboard />;
 
     default:
-      return <RealEstateDashboard />;
+      return <IndustryDashboard />;
   }
 }
 
