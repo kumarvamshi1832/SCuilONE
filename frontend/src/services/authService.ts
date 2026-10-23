@@ -25,6 +25,38 @@ const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
 });
 
+// Attach Authorization header from sessionStorage to all authenticated API requests
+apiClient.interceptors.request.use(
+  (config) => {
+    const requestUrl = config.url || "";
+    const isAuthEndpoint =
+      requestUrl.includes("/api/v1/auth/login") ||
+      requestUrl.includes("/api/v1/auth/register") ||
+      requestUrl.includes("/api/v1/auth/check-email") ||
+      requestUrl.includes("/api/v1/auth/verify-otp") ||
+      requestUrl.includes("/api/v1/auth/resend-otp") ||
+      requestUrl.includes("/api/v1/auth/verify-mfa") ||
+      requestUrl.includes("/api/v1/auth/mfa") ||
+      requestUrl.includes("/api/v1/auth/forgot-password") ||
+      requestUrl.includes("/api/v1/auth/verify-reset-otp") ||
+      requestUrl.includes("/api/v1/auth/reset-password");
+
+    if (!isAuthEndpoint) {
+      const token = sessionStorage.getItem("access_token");
+      if (token) {
+        if (!config.headers) {
+          config.headers = new axios.AxiosHeaders();
+        }
+        if (!config.headers.Authorization) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Auto-logout on 401 Unauthorized for authenticated session requests
 apiClient.interceptors.response.use(
   (response) => response,
@@ -43,11 +75,28 @@ apiClient.interceptors.response.use(
         requestUrl.includes("/api/v1/auth/verify-reset-otp") ||
         requestUrl.includes("/api/v1/auth/reset-password");
 
-      const isLoginPage = window.location.pathname === "/login";
+      const publicPaths = [
+        "/login",
+        "/register",
+        "/mfa",
+        "/mfa-setup",
+        "/forgot-password",
+        "/verify-reset-otp",
+        "/reset-password",
+        "/accept-invitation",
+        "/complete-profile",
+      ];
+      const isPublicPage = publicPaths.some(
+        (path) =>
+          window.location.pathname === path ||
+          window.location.pathname.startsWith(`${path}/`)
+      );
 
-      // Only perform auto-logout redirect if this was NOT an authentication attempt
-      // and the user is not currently on the login page
-      if (!isAuthEndpoint && !isLoginPage) {
+      const hasSession = Boolean(sessionStorage.getItem("access_token"));
+
+      // Only perform auto-logout redirect if this was an authenticated session request
+      // and the user is not currently on a public/auth page
+      if (!isAuthEndpoint && !isPublicPage && hasSession) {
         sessionStorage.removeItem("access_token");
         sessionStorage.removeItem("user");
         sessionStorage.removeItem("tenant");

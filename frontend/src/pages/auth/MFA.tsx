@@ -5,6 +5,7 @@ import {
   verifyMFA,
 } from "../../services/authService";
 import { normalizeIndustry } from "../../utils/industryUtils";
+import MFASetup from "./MFASetup";
 
 type OtpFlow = "email" | "mfa";
 
@@ -20,13 +21,22 @@ export default function MFA() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-
   useEffect(() => {
     const otpFlow = sessionStorage.getItem("otp_flow") as OtpFlow | null;
 
     if (otpFlow === "mfa") {
+      const isSetupRequired =
+        sessionStorage.getItem("mfa_setup_required") === "true";
+
+      if (isSetupRequired) {
+        navigate("/mfa-setup", { replace: true });
+        return;
+      }
+
       const mfaEmail = sessionStorage.getItem("mfa_email");
-      const mfaTempToken = sessionStorage.getItem("mfa_temp_token");
+      const mfaTempToken =
+        sessionStorage.getItem("mfa_temp_token") ||
+        sessionStorage.getItem("mfa_token");
 
       if (!mfaEmail || !mfaTempToken) {
         navigate("/login");
@@ -144,6 +154,13 @@ export default function MFA() {
     flow === "mfa"
       ? "Enter the 6-digit code to complete login."
       : "Enter the 6-digit code sent to your email.";
+
+  if (
+    sessionStorage.getItem("otp_flow") === "mfa" &&
+    sessionStorage.getItem("mfa_setup_required") === "true"
+  ) {
+    return <MFASetup />;
+  }
 
   return (
     <div style={pageStyle}>

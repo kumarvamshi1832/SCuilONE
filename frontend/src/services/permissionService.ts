@@ -8,7 +8,16 @@ export interface PermissionDetail {
   description: string;
 }
 
+const getHeaders = () => {
+  const token = sessionStorage.getItem("access_token");
+  return {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+  };
+};
+
 export const getPermissions = async (): Promise<PermissionDetail[]> => {
-  const response = await apiClient.get<PermissionDetail[]>("/api/v1/permissions");
+  const response = await apiClient.get<PermissionDetail[]>("/api/v1/permissions", getHeaders());
   return response.data;
 };

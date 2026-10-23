@@ -51,13 +51,27 @@ export default function Login() {
         password,
       });
 
-      if (response.requires_mfa) {
+      if (response.requires_mfa || response.mfa_required) {
+        const mfaToken = response.mfa_token || response.temp_token || "";
+        const isSetupRequired = Boolean(
+          response.mfa_setup_required ||
+          response.next_step === "mfa_enrollment"
+        );
+
         sessionStorage.setItem("mfa_email", email.trim().toLowerCase());
-        if (response.temp_token) {
-          sessionStorage.setItem("mfa_temp_token", response.temp_token);
+        if (mfaToken) {
+          sessionStorage.setItem("mfa_token", mfaToken);
+          sessionStorage.setItem("mfa_temp_token", mfaToken);
         }
         sessionStorage.setItem("otp_flow", "mfa");
-        navigate("/mfa");
+
+        if (isSetupRequired) {
+          sessionStorage.setItem("mfa_setup_required", "true");
+          navigate("/mfa-setup");
+        } else {
+          sessionStorage.removeItem("mfa_setup_required");
+          navigate("/mfa");
+        }
       } else {
         // Clear previous session data to ensure account switching is clean
         sessionStorage.clear();

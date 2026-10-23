@@ -186,6 +186,7 @@
 }
 .dashboard-wrapper.dark .form-group label { color: #a0aec0; }
 .form-group input, .form-group select {
+  box-sizing: border-box;
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #cbd5e0;

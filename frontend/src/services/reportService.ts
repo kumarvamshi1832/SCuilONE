@@ -7,6 +7,15 @@ export interface ReportFilters {
   end_date?: string;
 }
 
+const getHeaders = () => {
+  const token = sessionStorage.getItem("access_token");
+  return {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+  };
+};
+
 export const getReportsSummary = async (
   filters: ReportFilters = {}
 ): Promise<ReportsSummary> => {
@@ -22,7 +31,10 @@ export const getReportsSummary = async (
 
   const response = await apiClient.get<ReportsSummary>(
     "/api/v1/reports/summary",
-    { params }
+    {
+      ...getHeaders(),
+      params,
+    }
   );
 
   return response.data;

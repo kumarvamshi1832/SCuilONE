@@ -38,7 +38,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.database.connection import SessionLocal
+from app.database.connection import SessionLocal, settings
 from app.models.otp import OTPVerification
 from app.models.password_reset import PasswordResetOTP
 from app.models.pending_registration import PendingRegistration
@@ -285,37 +285,55 @@ def start_mfa_enrollment(
             detail="MFA is already enabled",
         )
 
-    secret = generate_totp_secret()
-    encrypted_secret = encrypt_totp_secret(secret)
-
-    if not mfa:
-        mfa = UserMFA(
-            user_id=user.id,
-            secret_encrypted=encrypted_secret,
-            enabled=False,
-            recovery_code_hashes=[],
-        )
-        db.add(mfa)
+    # Reuse existing pending secret if already generated for this user and not explicitly resetting,
+    # to prevent page reloads / component remounts from desynchronizing with scanned QR code
+    if not data.reset and mfa and not mfa.enabled and mfa.secret_encrypted:
+        try:
+            secret = decrypt_totp_secret(mfa.secret_encrypted)
+        except Exception:
+            secret = generate_totp_secret()
+            mfa.secret_encrypted = encrypt_totp_secret(secret)
+            db.commit()
     else:
-        mfa.secret_encrypted = encrypted_secret
-        mfa.recovery_code_hashes = []
+        secret = generate_totp_secret()
+        encrypted_secret = encrypt_totp_secret(secret)
 
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Unable to start MFA enrollment",
-        )
+        if not mfa:
+            mfa = UserMFA(
+                user_id=user.id,
+                secret_encrypted=encrypted_secret,
+                enabled=False,
+                recovery_code_hashes=[],
+            )
+            db.add(mfa)
+        else:
+            mfa.secret_encrypted = encrypted_secret
+            mfa.recovery_code_hashes = []
 
-    return {
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to start MFA enrollment",
+            )
+
+    response_payload = {
         "message": "Scan the authenticator setup QR code and verify it",
         "secret": secret,
         "otpauth_url": generate_totp_uri(secret, user.email),
         "issuer": "SCuilONE",
         "account": user.email,
     }
+
+    if settings.ENVIRONMENT.lower() == "development":
+        try:
+            response_payload["dev_code"] = pyotp.TOTP(secret).now()
+        except Exception:
+            pass
+
+    return response_payload
 
 
 

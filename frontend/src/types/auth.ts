@@ -40,6 +40,7 @@ export interface VerifyMFARequest {
 
 export interface MFAEnrollmentStartRequest {
   mfa_token: string;
+  reset?: boolean;
 }
 
 export interface MFAEnrollmentVerifyRequest {
@@ -95,6 +96,7 @@ export interface MFAEnrollmentStartResponse {
   otpauth_url: string;
   issuer: string;
   account: string;
+  dev_code?: string;
 }
 
 export interface TokenResponse {

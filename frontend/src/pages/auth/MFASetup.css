@@ -1,0 +1,484 @@
+/* ==========================================================================
+   SCuilONE CRM - MFA Setup UI Polish
+   Compact, Centered Layout with Perfect Vertical Rhythm & Theme Support
+   ========================================================================== */
+
+.mfa-setup-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  position: relative;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: background 0.3s ease;
+}
+
+/* Light Theme Variables */
+.mfa-setup-page.light {
+  --mfa-page-bg: linear-gradient(135deg, #f0f4ff 0%, #e8ecf8 50%, #f4f7fb 100%);
+  --mfa-card-bg: #ffffff;
+  --mfa-card-backdrop: none;
+  --mfa-card-border: #e2e8f0;
+  --mfa-card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --mfa-text-main: #0f172a;
+  --mfa-text-sub: #64748b;
+  --mfa-badge-bg: #eff6ff;
+  --mfa-badge-color: #1d4ed8;
+  --mfa-badge-border: #dbeafe;
+  --mfa-box-bg: #f8fafc;
+  --mfa-box-border: #e2e8f0;
+  --mfa-box-text: #0f172a;
+  --mfa-input-bg: #ffffff;
+  --mfa-input-border: #cbd5e1;
+  --mfa-input-text: #0f172a;
+  --mfa-input-focus: #0284c7;
+  --mfa-input-focus-shadow: rgba(2, 132, 199, 0.15);
+  --mfa-toggle-btn: #475467;
+  --mfa-toggle-border: #e2e8f0;
+  --mfa-toggle-bg: #ffffff;
+}
+
+/* Dark Theme Variables */
+.mfa-setup-page.dark {
+  --mfa-page-bg: radial-gradient(circle at 50% 0%, #0c1b33 0%, #040915 100%);
+  --mfa-card-bg: rgba(13, 24, 46, 0.78);
+  --mfa-card-backdrop: blur(18px);
+  --mfa-card-border: rgba(56, 189, 248, 0.25);
+  --mfa-card-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6), 0 0 30px rgba(6, 182, 212, 0.12);
+  --mfa-text-main: #ffffff;
+  --mfa-text-sub: #94a3b8;
+  --mfa-badge-bg: rgba(56, 189, 248, 0.15);
+  --mfa-badge-color: #38bdf8;
+  --mfa-badge-border: rgba(56, 189, 248, 0.3);
+  --mfa-box-bg: rgba(15, 23, 42, 0.6);
+  --mfa-box-border: rgba(255, 255, 255, 0.12);
+  --mfa-box-text: #f1f5f9;
+  --mfa-input-bg: rgba(15, 23, 42, 0.6);
+  --mfa-input-border: rgba(255, 255, 255, 0.18);
+  --mfa-input-text: #ffffff;
+  --mfa-input-focus: #38bdf8;
+  --mfa-input-focus-shadow: rgba(56, 189, 248, 0.25);
+  --mfa-toggle-btn: #f1f5f9;
+  --mfa-toggle-border: rgba(255, 255, 255, 0.15);
+  --mfa-toggle-bg: rgba(15, 23, 42, 0.7);
+}
+
+.mfa-setup-page {
+  background: var(--mfa-page-bg);
+}
+
+/* Theme Toggle Button */
+.mfa-theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--mfa-toggle-border);
+  background: var(--mfa-toggle-bg);
+  color: var(--mfa-toggle-btn);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.mfa-theme-toggle:hover {
+  transform: scale(1.05);
+}
+
+.mfa-theme-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Card Container */
+.mfa-setup-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--mfa-card-bg);
+  backdrop-filter: var(--mfa-card-backdrop);
+  -webkit-backdrop-filter: var(--mfa-card-backdrop);
+  border: 1px solid var(--mfa-card-border);
+  border-radius: 16px;
+  box-shadow: var(--mfa-card-shadow);
+  padding: 26px 28px;
+  box-sizing: border-box;
+  text-align: center;
+  transition: all 0.25s ease;
+}
+
+/* Brand Header */
+.mfa-brand-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mfa-logo-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0284c7, #06b6d4);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+}
+
+.mfa-brand-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--mfa-text-main);
+}
+
+/* Titles */
+.mfa-title {
+  margin: 0 0 4px;
+  color: var(--mfa-text-main);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.mfa-desc {
+  margin: 0 0 10px;
+  color: var(--mfa-text-sub);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Email Badge */
+.mfa-email-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 12px;
+  margin-bottom: 12px;
+  background: var(--mfa-badge-bg);
+  color: var(--mfa-badge-color);
+  border: 1px solid var(--mfa-badge-border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* QR Code Section */
+.mfa-qr-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto 12px;
+  padding: 12px;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  width: fit-content;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Manual Key Section */
+.mfa-manual-label {
+  margin: 0 0 5px;
+  color: var(--mfa-text-sub);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.mfa-secret-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.mfa-secret-box {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  margin: 0;
+  background: var(--mfa-box-bg);
+  border: 1px solid var(--mfa-box-border);
+  border-radius: 8px;
+  color: var(--mfa-box-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-align: center;
+  user-select: all;
+  word-break: break-all;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.mfa-secret-box:hover {
+  border-color: var(--mfa-badge-color);
+}
+
+.mfa-copy-key-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid var(--mfa-box-border);
+  background: var(--mfa-box-bg);
+  color: var(--mfa-badge-color);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.mfa-copy-key-btn:hover {
+  background: var(--mfa-badge-bg);
+  border-color: var(--mfa-badge-border);
+}
+
+.mfa-dev-helper {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px dashed rgba(234, 179, 8, 0.45);
+}
+
+.mfa-dev-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #ca8a04;
+  letter-spacing: 0.5px;
+}
+
+.mfa-dev-fill-btn {
+  background: none;
+  border: none;
+  color: var(--mfa-text-main);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-decoration: underline;
+  transition: opacity 0.15s ease;
+}
+
+.mfa-dev-fill-btn:hover {
+  opacity: 0.8;
+}
+
+.mfa-troubleshoot-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--mfa-text-sub);
+}
+
+.mfa-regenerate-btn {
+  background: none;
+  border: none;
+  color: var(--mfa-badge-color);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  transition: opacity 0.15s ease;
+}
+
+.mfa-regenerate-btn:hover {
+  opacity: 0.8;
+}
+
+.mfa-regenerate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form & Input */
+.mfa-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.mfa-input-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--mfa-text-main);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mfa-otp-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 42px;
+  padding: 0 12px;
+  background: var(--mfa-input-bg);
+  border: 1px solid var(--mfa-input-border);
+  border-radius: 8px;
+  color: var(--mfa-input-text);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mfa-otp-input:focus {
+  border-color: var(--mfa-input-focus);
+  box-shadow: 0 0 0 3px var(--mfa-input-focus-shadow);
+}
+
+.mfa-otp-input::placeholder {
+  color: var(--mfa-text-sub);
+  opacity: 0.5;
+  letter-spacing: 4px;
+}
+
+/* Buttons */
+.mfa-submit-btn {
+  width: 100%;
+  box-sizing: border-box;
+  height: 42px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 3px 12px rgba(6, 182, 212, 0.28);
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.mfa-submit-btn:hover:not(:disabled) {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.mfa-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.mfa-secondary-btn {
+  width: 100%;
+  box-sizing: border-box;
+  height: 40px;
+  margin-bottom: 10px;
+  border: 1px solid var(--mfa-badge-border);
+  border-radius: 8px;
+  background: var(--mfa-badge-bg);
+  color: var(--mfa-badge-color);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.mfa-secondary-btn:hover {
+  filter: brightness(0.96);
+}
+
+/* Messages & Alerts */
+.mfa-error-alert {
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.mfa-recovery-alert {
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  border-radius: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Recovery Codes Grid */
+.mfa-recovery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--mfa-box-border);
+  border-radius: 8px;
+  background: var(--mfa-box-bg);
+  color: var(--mfa-box-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .mfa-setup-page {
+    padding: 14px;
+  }
+
+  .mfa-setup-card {
+    padding: 20px 18px;
+    border-radius: 14px;
+  }
+
+  .mfa-title {
+    font-size: 18px;
+  }
+
+  .mfa-desc {
+    font-size: 12.5px;
+  }
+}

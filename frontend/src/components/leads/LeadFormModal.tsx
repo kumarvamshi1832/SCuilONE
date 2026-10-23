@@ -9,6 +9,7 @@ import { getAccounts } from "../../services/accountService";
 import { friendlyAssignmentError } from "../../utils/leadPermissions";
 import UserSearchDropdown from "./UserSearchDropdown";
 import { Account } from "../../types/account";
+import "./LeadFormModal.css";
 
 interface LeadFormModalProps {
   lead?: Lead | null;
@@ -219,7 +220,7 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content leads-modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content leads-modal-content lead-form-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{isEdit ? "Edit Lead" : "Create Lead"}</h2>
           <button className="btn-close" onClick={handleClose}>

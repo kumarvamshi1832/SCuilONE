@@ -26,14 +26,19 @@ export interface PhotoUploadResponse {
   photo_url: string;
 }
 
+const getHeaders = () => {
+  const token = sessionStorage.getItem("access_token");
+  return {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+  };
+};
+
 export async function getMyProfile(): Promise<UserProfile> {
   const response = await apiClient.get<UserProfile>(
     "/api/v1/users/me",
-    {
-      headers: {
-        Authorization: `Bearer ${sessionStorage.getItem("access_token")}`,
-      },
-    }
+    getHeaders()
   );
 
   return response.data;
@@ -45,11 +50,7 @@ export async function updateMyProfile(
   const response = await apiClient.put<UserProfile>(
     "/api/v1/users/me",
     data,
-    {
-      headers: {
-        Authorization: `Bearer ${sessionStorage.getItem("access_token")}`,
-      },
-    }
+    getHeaders()
   );
 
   return response.data;
@@ -64,11 +65,7 @@ export async function uploadMyProfilePhoto(
   const response = await apiClient.post<PhotoUploadResponse>(
     "/api/v1/users/me/photo",
     formData,
-    {
-      headers: {
-        Authorization: `Bearer ${sessionStorage.getItem("access_token")}`,
-      },
-    }
+    getHeaders()
   );
 
   return response.data;

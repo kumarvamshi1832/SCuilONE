@@ -2,8 +2,8 @@
 
 /* Modal Content Container */
 .lead-form-modal-content {
-  width: min(600px, calc(100vw - 32px));
-  max-width: min(600px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
+  max-width: min(560px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   height: auto;
   display: flex;
@@ -125,15 +125,16 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border: 1px solid #cbd5e0;
   border-radius: 6px;
-  font-size: 0.925rem;
+  font-size: 0.95rem;
   line-height: 1.4;
   background: #ffffff;
   color: #1a202c;
   font-family: inherit;
   box-sizing: border-box;
+  min-height: 42px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -247,8 +248,8 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 6px 12px;
-  min-height: 40px;
+  padding: 8px 12px;
+  min-height: 42px;
 }
 
 /* Alert Box */
