@@ -16,6 +16,7 @@ role_permissions = {
         "user.view", "user.create", "user.update", "user.delete",
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
+        "document.view","document.create","document.delete",
     ],
 
     "Tenant Admin": [
@@ -29,6 +30,7 @@ role_permissions = {
         "user.view", "user.create", "user.update", "user.delete",
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
+        "document.view","document.create","document.delete",
     ],
 
     "Manager": [
@@ -42,6 +44,7 @@ role_permissions = {
         "user.view",
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
+        "document.view","document.create","document.delete",
     ],
 
     "Sales User": [
@@ -53,6 +56,7 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update",
         "pipeline.view",
         "user.view",
+        "document.view","document.create",
     ],
 
     "Operations User": [
@@ -64,6 +68,7 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update", "activity.delete",
         "pipeline.view",
         "user.view",
+        "document.view","document.create",
     ],
 
     "Support User": [
@@ -75,6 +80,7 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update",
         "pipeline.view",
         "user.view",
+        "document.view","document.create",
     ],
 
     "Read-only / Auditor": [
@@ -86,6 +92,7 @@ role_permissions = {
         "activity.view",
         "pipeline.view",
         "user.view",
+        "document.view",
     ],
 }
 

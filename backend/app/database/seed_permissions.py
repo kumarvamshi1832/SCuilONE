@@ -90,6 +90,10 @@ permissions = [
     ("workflow.delete", "Delete workflows"),
     ("workflow.activate", "Activate and deactivate workflows"),
     ("workflow.execution.view", "View workflow execution history"),
+
+    ("document.view", "View documents"),
+    ("document.create", "Upload documents"),
+    ("document.delete", "Delete documents"),
 ]
 
 
