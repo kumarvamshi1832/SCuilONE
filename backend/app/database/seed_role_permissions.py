@@ -18,6 +18,12 @@ role_permissions = {
         "workflow.execution.view",
         "document.view","document.create","document.delete",
         "audit.view",
+        "property.view","property.create","property.update","property.delete",
+        "project.view","project.create","project.update","project.delete",
+        "building.view","building.create","building.update","building.delete",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+
+
     ],
 
     "Tenant Admin": [
@@ -33,6 +39,11 @@ role_permissions = {
         "workflow.execution.view",
         "document.view","document.create","document.delete",
         "audit.view",
+        "property.view","property.create","property.update","property.delete",
+        "project.view","project.create","project.update","project.delete",
+        "building.view","building.create","building.update","building.delete",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+
     ],
 
     "Manager": [
@@ -48,6 +59,12 @@ role_permissions = {
         "workflow.execution.view",
         "document.view","document.create","document.delete",
         "audit.view",
+        "property.view","property.create","property.update","property.delete",
+        "project.view","project.create","project.update","project.delete",
+        "building.view","building.create","building.update","building.delete",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+
+
     ],
 
     "Sales User": [
@@ -60,6 +77,11 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view","document.create",
+        "property.view","property.create","property.update",
+        "project.view","project.create","project.update",
+        "building.view","building.create","building.update",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update",
+
     ],
 
     "Operations User": [
@@ -72,6 +94,10 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view","document.create",
+        "property.view","property.create","property.update",
+        "project.view","project.create","project.update",
+        "building.view","building.create","building.update",
+        "buyer_requirement.view",
     ],
 
     "Support User": [
@@ -84,6 +110,10 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view","document.create",
+        "property.view",
+        "project.view",
+        "building.view",
+        "buyer_requirement.view",
     ],
 
     "Read-only / Auditor": [
@@ -97,6 +127,10 @@ role_permissions = {
         "user.view",
         "document.view",
         "audit.view",
+        "property.view",
+        "project.view",
+        "building.view",
+        "buyer_requirement.view",
     ],
 }
 

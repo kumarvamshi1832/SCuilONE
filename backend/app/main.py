@@ -20,6 +20,12 @@ from app.routes.search import router as search_router
 from app.routes.import_export import router as import_export_router
 from app.routes.import_export_extended import router as import_export_extended_router
 from app.routes.audit_logs import router as audit_logs_router
+from app.routes.properties import router as properties_router
+from app.routes.property_images import router as property_images_router
+from app.routes.projects import router as projects_router
+from app.routes.buildings import router as bulidings_router
+from app.routes.building_images import router as building_images_router
+from app.routes.buyer_requirements import router as buyer_requirements_router
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -27,6 +33,48 @@ from slowapi.errors import RateLimitExceeded
 from app.core.rate_limiter import limiter
 
 app = FastAPI()
+
+from fastapi.openapi.utils import get_openapi
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    for path, path_item in schema.get("paths", {}).items():
+        if path.endswith("/images") and "post" in path_item:
+            operation = path_item["post"]
+            request_body = operation.get("requestBody", {})
+            content = request_body.get("content", {})
+            multipart = content.get("multipart/form-data", {})
+            schema_ref = multipart.get("schema", {}).get("$ref")
+
+            if schema_ref:
+                schema_name = schema_ref.rsplit("/", 1)[-1]
+                body_schema = schema.get("components", {}).get(
+                    "schemas", {}
+                ).get(schema_name, {})
+
+                files_schema = body_schema.get("properties", {}).get("files", {})
+                if files_schema.get("type") == "array":
+                    files_schema["items"] = {
+                        "type": "string",
+                        "format": "binary",
+                    }
+
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 app.state.limiter = limiter
 app.add_exception_handler(
@@ -73,6 +121,12 @@ app.include_router(search_router)
 app.include_router(import_export_router)
 app.include_router(import_export_extended_router)
 app.include_router(audit_logs_router)
+app.include_router(properties_router)
+app.include_router(property_images_router)
+app.include_router(projects_router)
+app.include_router(bulidings_router)
+app.include_router(building_images_router)
+app.include_router(buyer_requirements_router)
 
 @app.get("/")
 def home():

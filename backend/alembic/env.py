@@ -31,6 +31,12 @@ from app.models.refresh_session import RefreshSession
 from app.models.user_mfa import UserMFA
 from app.models.document import Document
 from app.models.audit_log import AuditLog
+from app.models.property import Property
+from app.models.property_image import PropertyImage
+from app.models.project import Project
+from app.models.building import Building
+from app.models.building_image import BuildingImage
+from app.models.buyer_requirement import BuyerRequirement
 
 config = context.config
 

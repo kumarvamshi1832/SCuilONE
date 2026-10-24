@@ -55,7 +55,29 @@ permissions = [
     ("document.create", "Upload documents"),
     ("document.delete", "Delete documents"),
 
-    ("audit.view","View tenant audit logs")
+    ("audit.view","View tenant audit logs"),
+
+    ("property.view", "View properties"),
+    ("property.create", "Create properties"),
+    ("property.update", "Update properties"),
+    ("property.delete", "Delete properties"),
+
+    ("project.view", "View projects"),
+    ("project.create", "Create projects"),
+    ("project.update", "Update projects"),
+    ("project.delete", "Delete projects"),
+
+    ("building.view", "View buildings"),
+    ("building.create", "Create buildings"),
+    ("building.update", "Update buildings"),
+    ("building.delete", "Delete buildings"),
+
+    ("buyer_requirement.create", "Create buyer requirements"),
+    ("buyer_requirement.view", "View buyer requirements"),
+    ("buyer_requirement.update", "Update buyer requirements"),
+    ("buyer_requirement.delete", "Delete buyer requirements"),
+
+
 ]
 
 
