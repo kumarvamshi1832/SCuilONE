@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -468,7 +467,7 @@ def complete_booking(
     booking_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_active_user),
-    _permission=Depends(require_permission("booking.update")),
+    _permission=Depends(require_permission("booking.sale.complete")),
 ):
     tenant_id, user_id = get_tenant_and_user(current_user)
 

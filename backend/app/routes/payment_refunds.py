@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -219,6 +218,17 @@ def booking_refundable_balance(
     return received - reserved
 
 
+def ensure_booking_allows_refund(booking: Booking):
+    if booking.status == "Completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Refunds are not allowed after the sale is completed. "
+                "The property has been sold."
+            ),
+        )
+
+
 def validate_refund_processing(
     db: Session,
     booking: Booking,
@@ -226,6 +236,8 @@ def validate_refund_processing(
     refund: PaymentRefund,
     tenant_id: UUID,
 ):
+    ensure_booking_allows_refund(booking)
+
     if payment.status != "Verified":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -317,6 +329,8 @@ def create_refund(
         payment = get_payment(
             db, payment_id, booking_id, tenant_id, lock=True
         )
+
+        ensure_booking_allows_refund(booking)
 
         if payment.status != "Verified":
             raise HTTPException(

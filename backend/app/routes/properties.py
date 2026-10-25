@@ -1,4 +1,3 @@
-
 from uuid import UUID
 
 import cloudinary.uploader
@@ -120,6 +119,38 @@ def validate_unit_number(
         )
 
 
+BOOKING_MANAGED_STATUSES = ("Reserved", "Sold")
+
+
+def ensure_status_not_booking_managed(
+    current_status: str | None,
+    new_status: str | None,
+):
+    """Reserved and Sold are controlled only by the booking endpoints."""
+    if new_status is None or new_status == current_status:
+        return
+
+    if new_status in BOOKING_MANAGED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"A property cannot be set to {new_status} manually. "
+                "Create a booking to reserve it, and complete the "
+                "booking to mark it as sold."
+            ),
+        )
+
+    if current_status in BOOKING_MANAGED_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This property is {current_status} through a booking. "
+                "Cancel the booking to release it; its status cannot be "
+                "changed manually."
+            ),
+        )
+
+
 def property_snapshot(property_record: Property) -> dict:
     return {
         "name": property_record.name,
@@ -154,6 +185,7 @@ def create_property(
     current_user: dict = Depends(require_active_user),
 ):
     tenant_id, user_id = get_tenant_and_user(current_user)
+    ensure_status_not_booking_managed(None, data.status)
 
     validate_assigned_user(db, data.assigned_to, tenant_id)
     validate_building(db, data.building_id, tenant_id)
@@ -332,6 +364,12 @@ def update_property(
         )
 
     changes = data.model_dump(exclude_unset=True)
+
+    if "status" in changes:
+        ensure_status_not_booking_managed(
+            property_record.status,
+            changes["status"],
+        )
 
     if "assigned_to" in changes:
         validate_assigned_user(
