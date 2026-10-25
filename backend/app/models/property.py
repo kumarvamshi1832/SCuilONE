@@ -1,7 +1,18 @@
+
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, ForeignKey, Text, Numeric, Integer, Index
+from sqlalchemy import (
+    String,
+    DateTime,
+    ForeignKey,
+    Text,
+    Numeric,
+    Integer,
+    Index,
+    UniqueConstraint,
+    CheckConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +26,17 @@ class Property(Base):
         Index("ix_properties_tenant_status", "tenant_id", "status"),
         Index("ix_properties_tenant_city", "tenant_id", "city"),
         Index("ix_properties_tenant_assigned_to", "tenant_id", "assigned_to"),
+        Index("ix_properties_tenant_building", "tenant_id", "building_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "building_id",
+            "unit_number",
+            name="uq_properties_tenant_building_unit",
+        ),
+        CheckConstraint(
+            "building_id IS NULL OR unit_number IS NOT NULL",
+            name="ck_properties_building_requires_unit_number",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -33,6 +55,17 @@ class Property(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id"),
+        nullable=True,
+    )
+
+    building_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("buildings.id"),
+        nullable=True,
+    )
+
+    unit_number: Mapped[str | None] = mapped_column(
+        String(50),
         nullable=True,
     )
 

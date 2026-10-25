@@ -26,6 +26,11 @@ from app.routes.projects import router as projects_router
 from app.routes.buildings import router as bulidings_router
 from app.routes.building_images import router as building_images_router
 from app.routes.buyer_requirements import router as buyer_requirements_router
+from app.routes.property_matches import router as property_matches_router
+from app.routes.site_visits import router as site_visits_router
+from app.routes.bookings import router as bookings_router
+from app.routes.payments import router as payments_router
+from app.routes.payment_refunds import router as payment_refunds_router
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -127,6 +132,11 @@ app.include_router(projects_router)
 app.include_router(bulidings_router)
 app.include_router(building_images_router)
 app.include_router(buyer_requirements_router)
+app.include_router(property_matches_router)
+app.include_router(site_visits_router)
+app.include_router(bookings_router)
+app.include_router(payments_router)
+app.include_router(payment_refunds_router)
 
 @app.get("/")
 def home():

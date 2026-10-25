@@ -22,6 +22,14 @@ role_permissions = {
         "project.view","project.create","project.update","project.delete",
         "building.view","building.create","building.update","building.delete",
         "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
+
+        "booking.view", "booking.create", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
+
 
 
     ],
@@ -43,6 +51,13 @@ role_permissions = {
         "project.view","project.create","project.update","project.delete",
         "building.view","building.create","building.update","building.delete",
         "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
+
+        "booking.view", "booking.create", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
 
     ],
 
@@ -63,6 +78,13 @@ role_permissions = {
         "project.view","project.create","project.update","project.delete",
         "building.view","building.create","building.update","building.delete",
         "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
+
+        "booking.view", "booking.create", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
 
 
     ],
@@ -81,6 +103,13 @@ role_permissions = {
         "project.view","project.create","project.update",
         "building.view","building.create","building.update",
         "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update",
+        "property_match.view","property_match.create","property_match.update",
+        "site_visit.view", "site_visit.create", "site_visit.update",
+
+        "booking.view", "booking.create", "booking.update",
+        "booking.payment.view", "booking.payment.create",
+
+
 
     ],
 
@@ -98,6 +127,14 @@ role_permissions = {
         "project.view","project.create","project.update",
         "building.view","building.create","building.update",
         "buyer_requirement.view",
+        "property_match.view","property_match.create",
+        "site_visit.view", "site_visit.create",
+
+        "booking.view", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
+
     ],
 
     "Support User": [
@@ -114,6 +151,9 @@ role_permissions = {
         "project.view",
         "building.view",
         "buyer_requirement.view",
+        "property_match.view",
+        "site_visit.view",
+        "booking.view", "booking.payment.view",
     ],
 
     "Read-only / Auditor": [
@@ -131,6 +171,9 @@ role_permissions = {
         "project.view",
         "building.view",
         "buyer_requirement.view",
+        "property_match.view",
+        "site_visit.view",
+        "booking.view", "booking.payment.view",
     ],
 }
 

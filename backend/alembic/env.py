@@ -37,6 +37,11 @@ from app.models.project import Project
 from app.models.building import Building
 from app.models.building_image import BuildingImage
 from app.models.buyer_requirement import BuyerRequirement
+from app.models.property_match import PropertyMatch
+from app.models.site_visit import SiteVisit
+from app.models.booking import Booking
+from app.models.payment import Payment
+from app.models.payment_refund import PaymentRefund
 
 config = context.config
 
