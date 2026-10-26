@@ -14,6 +14,7 @@ import { getDealPermissions } from "../../utils/dealPermissions";
 import DealFormModal from "../../components/deals/DealFormModal";
 import DealViewModal from "../../components/deals/DealViewModal";
 import DealDeleteConfirm from "../../components/deals/DealDeleteConfirm";
+import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
 import "../leads/Leads.css";
@@ -33,11 +34,24 @@ export default function Deals() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [search, setSearch] = useState("");
-const [stageFilter, setStageFilter] = useState(
-  () => searchParams.get("stage") || ""
-);
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
+  const [stageFilter, setStageFilter] = useState(
+    () => searchParams.get("stage") || ""
+  );
   const [assignedFilter, setAssignedFilter] = useState("");
+
+  // Pagination
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, stageFilter, assignedFilter]);
+
+  useEffect(() => {
+    const s = searchParams.get("search");
+    if (s) setSearch(s);
+  }, [searchParams]);
 
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -202,6 +216,7 @@ const [stageFilter, setStageFilter] = useState(
     setSearch("");
     setStageFilter("");
     setAssignedFilter("");
+    setCurrentPage(1);
   };
 
   const hasActiveFilters = search || stageFilter || assignedFilter;
@@ -227,6 +242,13 @@ const [stageFilter, setStageFilter] = useState(
 
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredDeals.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedDeals = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredDeals.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredDeals, safePage]);
 
   // Collect unique values from data for filter dropdowns
   const uniqueStages = Array.from(new Set(deals.map((d) => d.stage).filter(Boolean))) as string[];
@@ -431,6 +453,7 @@ const [stageFilter, setStageFilter] = useState(
           </p>
         </div>
       ) : (
+        <>
           <table className="leads-table">
             <thead>
               <tr>
@@ -445,7 +468,7 @@ const [stageFilter, setStageFilter] = useState(
               </tr>
             </thead>
             <tbody>
-              {filteredDeals.map((deal) => {
+              {paginatedDeals.map((deal) => {
                 const assignedUser = getUserDisplay(deal.assigned_to);
                 const accountName = getAccountName(deal.account_id);
                 const contactName = getContactName(deal.contact_id);
@@ -547,6 +570,14 @@ const [stageFilter, setStageFilter] = useState(
               })}
             </tbody>
           </table>
+          <Pagination
+            currentPage={safePage}
+            totalItems={filteredDeals.length}
+            pageSize={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+            entityName="deals"
+          />
+        </>
       )}
       </div>
 

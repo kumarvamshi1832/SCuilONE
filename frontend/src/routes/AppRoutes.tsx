@@ -90,6 +90,21 @@ import Roles from "../pages/roles/Roles";
 
 import Permissions from "../pages/permissions/Permissions";
 
+import Projects from "../pages/projects/Projects";
+
+import Buildings from "../pages/buildings/Buildings";
+
+import Properties from "../pages/properties/Properties";
+
+import BuyerRequirements from "../pages/buyer-requirements/BuyerRequirements";
+
+import SiteVisits from "../pages/site-visits/SiteVisits";
+
+import Bookings from "../pages/bookings/Bookings";
+import Payments from "../pages/payments/Payments";
+import AuditLogs from "../pages/audit-logs/AuditLogs";
+import Documents from "../pages/documents/Documents";
+
 function DashboardResolver() {
 
   const { industry } = useParams();
@@ -522,16 +537,102 @@ export default function AppRoutes() {
           />
 
           <Route
-
             path="/:industry/form-builder"
-
             element={
               <DashboardLayout>
                 <FormBuilder />
               </DashboardLayout>
-
             }
+          />
 
+          <Route
+            path="/:industry/projects"
+            element={
+              <DashboardLayout>
+                <Projects />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/buildings"
+            element={
+              <DashboardLayout>
+                <Buildings />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/properties"
+            element={
+              <DashboardLayout>
+                <Properties />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/buyer-requirements"
+            element={
+              <DashboardLayout>
+                <BuyerRequirements />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/site-visits"
+            element={
+              <DashboardLayout>
+                <SiteVisits />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/bookings"
+            element={
+              <DashboardLayout>
+                <Bookings />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/payments"
+            element={
+              <DashboardLayout>
+                <Payments />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/audit-logs"
+            element={
+              <DashboardLayout>
+                <AuditLogs />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/documents"
+            element={
+              <DashboardLayout>
+                <Documents />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/documents"
+            element={
+              <DashboardLayout>
+                <Documents />
+              </DashboardLayout>
+            }
           />
         </Route>
 

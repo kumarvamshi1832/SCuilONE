@@ -25,6 +25,7 @@ import {
 import "./DashboardLayout.css";
 
 import { getIndustryConfig, normalizeIndustrySlug } from "../../config/industryConfig";
+import GlobalSearch from "../search/GlobalSearch";
 
 interface DashboardLayoutProps {
 
@@ -429,31 +430,39 @@ export default function DashboardLayout({
         const moduleName = item.related_module.toLowerCase();
 
         const routeMap: Record<string, string> = {
-
           lead: "leads",
-
           leads: "leads",
-
           contact: "contacts",
-
           contacts: "contacts",
-
           account: "accounts",
-
           accounts: "accounts",
-
           deal: "deals",
-
           deals: "deals",
-
           task: "tasks",
-
           tasks: "tasks",
-
           activity: "activities",
-
           activities: "activities",
-
+          project: "projects",
+          projects: "projects",
+          building: "buildings",
+          buildings: "buildings",
+          property: "properties",
+          properties: "properties",
+          buyer_requirement: "buyer-requirements",
+          buyer_requirements: "buyer-requirements",
+          "buyer-requirements": "buyer-requirements",
+          site_visit: "site-visits",
+          site_visits: "site-visits",
+          "site-visits": "site-visits",
+          booking: "bookings",
+          bookings: "bookings",
+          payment: "payments",
+          payments: "payments",
+          document: "documents",
+          documents: "documents",
+          audit_log: "audit-logs",
+          audit_logs: "audit-logs",
+          "audit-logs": "audit-logs",
         };
 
         const route = routeMap[moduleName];
@@ -637,288 +646,342 @@ export default function DashboardLayout({
       "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z M10 7h4 M7 10v4 M14 17h-4";
 
     const settingsIcon =
-
       "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 2 2 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0l.06.06a2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z";
 
+    const projectIcon =
+      "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5";
+
+    const buildingIcon =
+      "M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18M6 22H3m3 0h12m0 0h3M9 6h2m-2 4h2m-2 4h2m-2 4h2m4-12h2m-2 4h2m-2 4h2m-2 4h2";
+
+    const propertyIcon =
+      "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10";
+
+    const buyerRequirementIcon =
+      "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z M9 12l2 2 4-4";
+
+    const siteVisitIcon =
+      "M21 10H3 M16 2v4 M8 2v4 M7 21h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z M9 15l2 2 4-4";
+
+    const bookingIcon =
+      "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8";
+
+    const paymentIcon =
+      "M2 7h20v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7zm0-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2H2V4zm2 8h4v2H4v-2z";
+
+    const auditLogIcon =
+      "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z M9 12l2 2 4-4";
+
+    const documentIcon =
+      "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8";
+
+    const isRealEstate = currentIndustry === "real-estate";
+
     const pipelineItem: NavItem = {
-
       label: industryConfig.pipelineLabel,
-
       path: `${basePath}/pipelines`,
-
       icon: pipelineIcon,
-
     };
 
     const workflowItem: NavItem = {
-
       label: "Workflows",
-
       path: `${basePath}/workflows`,
-
       icon: workflowIcon,
-
     };
 
     if (isManager) {
-
-      return [
-
+      const managerNav: NavItem[] = [
         { label: "Dashboard", path: "/manager/dashboard", icon: dashboardIcon },
-
         { label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon },
-
         { label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon },
-
         { label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon },
-
         { label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon },
-
         pipelineItem,
-
-        { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
-
-        { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
-
-        workflowItem,
-
       ];
 
+      if (isRealEstate) {
+        managerNav.push(
+          { label: "Projects", path: `${basePath}/projects`, icon: projectIcon },
+          { label: "Buildings", path: `${basePath}/buildings`, icon: buildingIcon },
+          { label: "Properties", path: `${basePath}/properties`, icon: propertyIcon },
+          { label: "Requirements", path: `${basePath}/buyer-requirements`, icon: buyerRequirementIcon },
+          { label: "Site Visits", path: `${basePath}/site-visits`, icon: siteVisitIcon },
+          { label: "Bookings", path: `${basePath}/bookings`, icon: bookingIcon },
+          { label: "Payments", path: `${basePath}/payments`, icon: paymentIcon },
+        );
+      }
+
+      managerNav.push(
+        { label: "Documents", path: `${basePath}/documents`, icon: documentIcon },
+        { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
+        { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
+        workflowItem,
+      );
+
+      if (isRealEstate || hasPermission("audit.view")) {
+        managerNav.push({ label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon });
+      }
+
+      return managerNav;
     }
 
     if (isSales) {
-
       const salesNav: NavItem[] = [
-
         { label: "Dashboard", path: "/sales/dashboard", icon: dashboardIcon },
-
       ];
 
       if (hasPermission("lead.view")) {
-
         salesNav.push({ label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon });
-
       }
 
       if (hasPermission("contact.view")) {
-
         salesNav.push({ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon });
-
       }
 
       if (hasPermission("account.view")) {
-
         salesNav.push({ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon });
-
       }
 
       if (hasPermission("deal.view")) {
-
         salesNav.push({ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon });
-
       }
 
       if (hasPermission("pipeline.view")) salesNav.push(pipelineItem);
 
+      if (isRealEstate) {
+        if (hasPermission("project.view") || hasPermission("projects")) {
+          salesNav.push({ label: "Projects", path: `${basePath}/projects`, icon: projectIcon });
+        }
+        if (hasPermission("building.view") || hasPermission("buildings")) {
+          salesNav.push({ label: "Buildings", path: `${basePath}/buildings`, icon: buildingIcon });
+        }
+        if (hasPermission("property.view") || hasPermission("properties")) {
+          salesNav.push({ label: "Properties", path: `${basePath}/properties`, icon: propertyIcon });
+        }
+        if (hasPermission("buyer_requirement.view") || hasPermission("buyer_requirements")) {
+          salesNav.push({ label: "Requirements", path: `${basePath}/buyer-requirements`, icon: buyerRequirementIcon });
+        }
+        if (hasPermission("site_visit.view") || hasPermission("site_visits")) {
+          salesNav.push({ label: "Site Visits", path: `${basePath}/site-visits`, icon: siteVisitIcon });
+        }
+        if (hasPermission("booking.view") || hasPermission("bookings")) {
+          salesNav.push({ label: "Bookings", path: `${basePath}/bookings`, icon: bookingIcon });
+        }
+        if (hasPermission("booking.payment.view") || hasPermission("payments")) {
+          salesNav.push({ label: "Payments", path: `${basePath}/payments`, icon: paymentIcon });
+        }
+      }
+
+      if (hasPermission("document.view") || hasPermission("documents") || isRealEstate) {
+        salesNav.push({ label: "Documents", path: `${basePath}/documents`, icon: documentIcon });
+      }
+
       if (hasPermission("task.view")) {
-
         salesNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
-
       }
 
       return salesNav;
-
     }
 
     if (isOps) {
-
       const opsNav: NavItem[] = [
-
         { label: "Dashboard", path: "/operations/dashboard", icon: dashboardIcon },
-
       ];
 
       if (hasPermission("lead.view")) {
-
         opsNav.push({ label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon });
-
       }
 
       if (hasPermission("contact.view")) {
-
         opsNav.push({ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon });
-
       }
 
       if (hasPermission("account.view")) {
-
         opsNav.push({ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon });
-
       }
 
       if (hasPermission("deal.view")) {
-
         opsNav.push({ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon });
-
       }
 
       if (hasPermission("pipeline.view")) opsNav.push(pipelineItem);
 
+      if (isRealEstate) {
+        if (hasPermission("project.view") || hasPermission("projects")) {
+          opsNav.push({ label: "Projects", path: `${basePath}/projects`, icon: projectIcon });
+        }
+        if (hasPermission("building.view") || hasPermission("buildings")) {
+          opsNav.push({ label: "Buildings", path: `${basePath}/buildings`, icon: buildingIcon });
+        }
+        if (hasPermission("property.view") || hasPermission("properties")) {
+          opsNav.push({ label: "Properties", path: `${basePath}/properties`, icon: propertyIcon });
+        }
+        if (hasPermission("buyer_requirement.view") || hasPermission("buyer_requirements")) {
+          opsNav.push({ label: "Requirements", path: `${basePath}/buyer-requirements`, icon: buyerRequirementIcon });
+        }
+        if (hasPermission("site_visit.view") || hasPermission("site_visits")) {
+          opsNav.push({ label: "Site Visits", path: `${basePath}/site-visits`, icon: siteVisitIcon });
+        }
+        if (hasPermission("booking.view") || hasPermission("bookings")) {
+          opsNav.push({ label: "Bookings", path: `${basePath}/bookings`, icon: bookingIcon });
+        }
+        if (hasPermission("booking.payment.view") || hasPermission("payments")) {
+          opsNav.push({ label: "Payments", path: `${basePath}/payments`, icon: paymentIcon });
+        }
+      }
+
+      if (hasPermission("document.view") || hasPermission("documents") || isRealEstate) {
+        opsNav.push({ label: "Documents", path: `${basePath}/documents`, icon: documentIcon });
+      }
+
       if (hasPermission("task.view")) {
-
         opsNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
-
       }
 
       return opsNav;
-
     }
 
     if (isSupport || isAuditor) {
-
       const customNav: NavItem[] = [
-
         {
-
           label: "Dashboard",
-
           path: isSupport ? "/support/dashboard" : "/auditor/dashboard",
-
           icon: dashboardIcon,
-
         },
-
       ];
 
       if (hasPermission("lead.view")) {
-
         customNav.push({ label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon });
-
       }
 
       if (hasPermission("contact.view")) {
-
         customNav.push({ label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon });
-
       }
 
       if (hasPermission("account.view")) {
-
         customNav.push({ label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon });
-
       }
 
       if (hasPermission("deal.view")) {
-
         customNav.push({ label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon });
-
       }
 
       if (hasPermission("pipeline.view")) customNav.push(pipelineItem);
 
+      if (isRealEstate) {
+        if (isAuditor || hasPermission("project.view")) {
+          customNav.push({ label: "Projects", path: `${basePath}/projects`, icon: projectIcon });
+        }
+        if (isAuditor || hasPermission("building.view")) {
+          customNav.push({ label: "Buildings", path: `${basePath}/buildings`, icon: buildingIcon });
+        }
+        if (isAuditor || hasPermission("property.view")) {
+          customNav.push({ label: "Properties", path: `${basePath}/properties`, icon: propertyIcon });
+        }
+        if (isAuditor || hasPermission("buyer_requirement.view")) {
+          customNav.push({ label: "Requirements", path: `${basePath}/buyer-requirements`, icon: buyerRequirementIcon });
+        }
+        if (isAuditor || hasPermission("site_visit.view")) {
+          customNav.push({ label: "Site Visits", path: `${basePath}/site-visits`, icon: siteVisitIcon });
+        }
+        if (isAuditor || hasPermission("booking.view")) {
+          customNav.push({ label: "Bookings", path: `${basePath}/bookings`, icon: bookingIcon });
+        }
+        if (isAuditor || hasPermission("booking.payment.view") || hasPermission("payments")) {
+          customNav.push({ label: "Payments", path: `${basePath}/payments`, icon: paymentIcon });
+        }
+      }
+
+      if (isAuditor || hasPermission("document.view") || hasPermission("documents")) {
+        customNav.push({ label: "Documents", path: `${basePath}/documents`, icon: documentIcon });
+      }
+
       if (hasPermission("task.view")) {
-
         customNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
-
       }
 
       if (hasPermission("activity.view")) {
-
         customNav.push({ label: "Activities", path: `${basePath}/activities`, icon: activityIcon });
-
       }
 
       if (hasPermission("user.view")) {
-
         customNav.push({ label: "Users", path: `${basePath}/users`, icon: userIcon });
-
       }
 
       if (hasPermission("role.view")) {
-
         customNav.push({ label: "Roles", path: `${basePath}/roles`, icon: roleIcon });
-
       }
 
       if (hasPermission("permission.view")) {
-
         customNav.push({
-
           label: "Permissions",
-
           path: `${basePath}/permissions`,
-
           icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
-
         });
-
       }
 
       if (hasPermission("report.view")) {
-
         customNav.push({ label: "Reports", path: `${basePath}/reports`, icon: reportIcon });
+      }
 
+      if (isAuditor || hasPermission("audit.view")) {
+        customNav.push({ label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon });
       }
 
       if (isSupport && hasPermission("settings")) {
-
         customNav.push({ label: "Settings", path: `${basePath}/settings`, icon: settingsIcon });
-
       }
 
       return customNav;
-
     }
 
-    return [
-
+    const defaultNav: NavItem[] = [
       { label: "Dashboard", path: `${basePath}/dashboard`, icon: dashboardIcon },
-
       { label: industryConfig.leadLabel, path: `${basePath}/leads`, icon: peopleIcon },
-
       { label: industryConfig.contactLabel, path: `${basePath}/contacts`, icon: peopleIcon },
-
       { label: industryConfig.accountLabel, path: `${basePath}/accounts`, icon: accountIcon },
-
       { label: industryConfig.dealLabel, path: `${basePath}/deals`, icon: dealIcon },
-
       pipelineItem,
-
-      { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
-
-      { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
-
-      { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
-
-      { label: "Users", path: `${basePath}/users`, icon: userIcon },
-
-      { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
-
-      {
-
-        label: "Permissions",
-
-        path: `${basePath}/permissions`,
-
-        icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
-
-      },
-
-      { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
-
-      {
-
-        label: "Form Builder",
-
-        path: `${basePath}/form-builder`,
-
-        icon: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
-
-      },
-
-      workflowItem,
-
     ];
+
+    if (isRealEstate) {
+      defaultNav.push(
+        { label: "Projects", path: `${basePath}/projects`, icon: projectIcon },
+        { label: "Buildings", path: `${basePath}/buildings`, icon: buildingIcon },
+        { label: "Properties", path: `${basePath}/properties`, icon: propertyIcon },
+        { label: "Requirements", path: `${basePath}/buyer-requirements`, icon: buyerRequirementIcon },
+        { label: "Site Visits", path: `${basePath}/site-visits`, icon: siteVisitIcon },
+        { label: "Bookings", path: `${basePath}/bookings`, icon: bookingIcon },
+        { label: "Payments", path: `${basePath}/payments`, icon: paymentIcon },
+      );
+    }
+
+    defaultNav.push(
+      { label: "Documents", path: `${basePath}/documents`, icon: documentIcon },
+      { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
+      { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
+      { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
+      { label: "Users", path: `${basePath}/users`, icon: userIcon },
+      { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
+      {
+        label: "Permissions",
+        path: `${basePath}/permissions`,
+        icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
+      },
+      { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
+      {
+        label: "Form Builder",
+        path: `${basePath}/form-builder`,
+        icon: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
+      },
+      workflowItem,
+    );
+
+    if (isRealEstate || hasPermission("audit.view")) {
+      defaultNav.push({ label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon });
+    }
+
+    return defaultNav;
 
   };
 
@@ -1200,51 +1263,13 @@ export default function DashboardLayout({
               </svg>
             </div>
 
-            <div className="search-box">
-              <svg
-
-                viewBox="0 0 24 24"
-
-                fill="none"
-
-                stroke="currentColor"
-
-                strokeWidth="2"
-
-                strokeLinecap="round"
-
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-
-              <input
-
-                type="text"
-
-                placeholder={
-
-                  currentIndustry === "education-consulting"
-
-                    ? "Search leads, students, universities, programs..."
-
-                    : "Search..."
-
-                }
-
-                style={
-
-                  currentIndustry === "education-consulting"
-
-                    ? { width: "300px" }
-
-                    : {}
-
-                }
-
-              />
-            </div>
+            <GlobalSearch
+              placeholder={
+                currentIndustry === "education-consulting"
+                  ? "Search leads, students, universities..."
+                  : "Search leads, contacts, accounts, deals..."
+              }
+            />
           </div>
 
           <div className="header-right">

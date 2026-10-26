@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Account } from "../../types/account";
 import { User } from "../../types/user";
 import { getAccounts } from "../../services/accountService";
@@ -7,6 +8,7 @@ import { getAccountPermissions } from "../../utils/accountPermissions";
 import AccountFormModal from "../../components/accounts/AccountFormModal";
 import AccountViewModal from "../../components/accounts/AccountViewModal";
 import AccountDeleteConfirm from "../../components/accounts/AccountDeleteConfirm";
+import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
 import "../leads/Leads.css";
@@ -21,12 +23,27 @@ export default function Accounts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [searchParams] = useSearchParams();
+
   // Filters
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
   const [statusFilter, setStatusFilter] = useState("");
   const [industryFilter, setIndustryFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
+
+  // Pagination
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, industryFilter, sourceFilter, assignedFilter]);
+
+  useEffect(() => {
+    const s = searchParams.get("search");
+    if (s) setSearch(s);
+  }, [searchParams]);
 
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -173,6 +190,7 @@ export default function Accounts() {
     setIndustryFilter("");
     setSourceFilter("");
     setAssignedFilter("");
+    setCurrentPage(1);
   };
 
   const hasActiveFilters = search || statusFilter || industryFilter || sourceFilter || assignedFilter;
@@ -202,6 +220,13 @@ export default function Accounts() {
 
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedAccounts = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredAccounts.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredAccounts, safePage]);
 
   // Collect unique values from data for filter dropdowns
   const uniqueStatuses = Array.from(new Set(accounts.map((a) => a.status).filter(Boolean))) as string[];
@@ -438,6 +463,7 @@ export default function Accounts() {
           </p>
         </div>
       ) : (
+        <>
           <table className="leads-table">
             <thead>
               <tr>
@@ -453,7 +479,7 @@ export default function Accounts() {
               </tr>
             </thead>
             <tbody>
-              {filteredAccounts.map((account) => {
+              {paginatedAccounts.map((account) => {
                 const assignedUser = getUserDisplay(account.assigned_to);
                 return (
                   <tr key={account.id}>
@@ -543,6 +569,14 @@ export default function Accounts() {
               })}
             </tbody>
           </table>
+          <Pagination
+            currentPage={safePage}
+            totalItems={filteredAccounts.length}
+            pageSize={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+            entityName="accounts"
+          />
+        </>
       )}
       </div>
 

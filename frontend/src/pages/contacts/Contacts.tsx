@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Contact } from "../../types/contact";
 import { User } from "../../types/user";
 import { getContacts } from "../../services/contactService";
@@ -8,6 +9,7 @@ import { getContactPermissions } from "../../utils/contactPermissions";
 import ContactFormModal from "../../components/contacts/ContactFormModal";
 import ContactViewModal from "../../components/contacts/ContactViewModal";
 import ContactDeleteConfirm from "../../components/contacts/ContactDeleteConfirm";
+import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
 import "../leads/Leads.css";
@@ -23,10 +25,25 @@ export default function Contacts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [searchParams] = useSearchParams();
+
   // Filters
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
   const [sourceFilter, setSourceFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
+
+  // Pagination
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sourceFilter, assignedFilter]);
+
+  useEffect(() => {
+    const s = searchParams.get("search");
+    if (s) setSearch(s);
+  }, [searchParams]);
 
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -179,6 +196,7 @@ export default function Contacts() {
     setSearch("");
     setSourceFilter("");
     setAssignedFilter("");
+    setCurrentPage(1);
   };
 
   const hasActiveFilters = search || sourceFilter || assignedFilter;
@@ -203,6 +221,13 @@ export default function Contacts() {
 
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredContacts.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedContacts = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredContacts.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredContacts, safePage]);
 
   // Collect unique sources from data
   const uniqueSources = Array.from(new Set(contacts.map((c) => c.source).filter(Boolean))) as string[];
@@ -398,6 +423,7 @@ export default function Contacts() {
           </p>
         </div>
       ) : (
+        <>
           <table className="leads-table">
             <thead>
               <tr>
@@ -412,7 +438,7 @@ export default function Contacts() {
               </tr>
             </thead>
             <tbody>
-              {filteredContacts.map((contact) => {
+              {paginatedContacts.map((contact) => {
                 const assignedUser = getUserDisplay(contact.assigned_to);
                 return (
                   <tr key={contact.id}>
@@ -485,6 +511,14 @@ export default function Contacts() {
               })}
             </tbody>
           </table>
+          <Pagination
+            currentPage={safePage}
+            totalItems={filteredContacts.length}
+            pageSize={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+            entityName="contacts"
+          />
+        </>
       )}
       </div>
 

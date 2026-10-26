@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.auth import router as auth_router
@@ -143,6 +143,19 @@ app.include_router(site_visits_router)
 app.include_router(bookings_router)
 app.include_router(payments_router)
 app.include_router(payment_refunds_router)
+
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.get("/uploads/{file_path:path}")
+def serve_uploaded_file(file_path: str):
+    safe_path = (UPLOAD_DIR / file_path).resolve()
+    if not str(safe_path).startswith(str(UPLOAD_DIR.resolve())) or not safe_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(safe_path)
 
 @app.get("/")
 def home():

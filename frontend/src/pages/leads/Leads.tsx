@@ -8,6 +8,7 @@ import { getLeadPermissions } from "../../utils/leadPermissions";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import LeadDeleteConfirm from "../../components/leads/LeadDeleteConfirm";
+import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
 import "./Leads.css";
@@ -51,13 +52,26 @@ export default function Leads() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
   const [statusFilter, setStatusFilter] = useState(
     () => searchParams.get("status") || ""
   );
 
+  useEffect(() => {
+    const s = searchParams.get("search");
+    if (s) setSearch(s);
+  }, [searchParams]);
+
   const [sourceFilter, setSourceFilter] = useState("");
   const [assignedFilter, setAssignedFilter] = useState("");
+
+  // Pagination
+  const ITEMS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, sourceFilter, assignedFilter]);
 
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -203,6 +217,7 @@ export default function Leads() {
     setStatusFilter("");
     setSourceFilter("");
     setAssignedFilter("");
+    setCurrentPage(1);
   };
 
   const hasActiveFilters = search || statusFilter || sourceFilter || assignedFilter;
@@ -229,6 +244,13 @@ export default function Leads() {
 
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedLeads = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredLeads.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredLeads, safePage]);
 
   // Collect unique sources from data
   const uniqueSources = Array.from(new Set(leads.map((l) => l.source).filter(Boolean))) as string[];
@@ -445,7 +467,8 @@ export default function Leads() {
             )}
           </div>
         ) : (
-          <table className="leads-table">
+          <>
+            <table className="leads-table">
             <thead>
               <tr>
                 <th>Lead Name</th>
@@ -459,7 +482,7 @@ export default function Leads() {
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => {
+              {paginatedLeads.map((lead) => {
                 const leadId = String(lead.id || (lead as any).lead_id || (lead as any)._id || (lead as any).uuid || "");
                 return (
                 <tr key={leadId || lead.full_name}>
@@ -519,7 +542,15 @@ export default function Leads() {
             })}
             </tbody>
           </table>
-        )}
+          <Pagination
+            currentPage={safePage}
+            totalItems={filteredLeads.length}
+            pageSize={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+            entityName="leads"
+          />
+        </>
+      )}
       </div>
 
       {/* Actions Dropdown — rendered outside the table to avoid overflow clipping */}
