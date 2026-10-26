@@ -20,6 +20,7 @@ PaymentStatus = Literal["Pending", "Verified", "Rejected"]
 
 
 class PaymentCreate(BaseModel):
+    installment_id: UUID | None = None
     amount: Decimal = Field(
         gt=0,
         max_digits=14,
@@ -51,6 +52,7 @@ class PaymentResponse(BaseModel):
     id: UUID
     tenant_id: UUID
     booking_id: UUID
+    installment_id: UUID | None
     amount: Decimal
     payment_method: str
     transaction_reference: str | None

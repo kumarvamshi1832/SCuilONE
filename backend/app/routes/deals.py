@@ -10,6 +10,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 
 from app.models.deal import Deal
+from app.models.booking import Booking
 from app.models.lead import Lead
 from app.models.contact import Contact
 from app.models.account import Account
@@ -101,6 +102,28 @@ def validate_lead(
         )
 
     return lead
+
+def validate_booking(
+    booking_id: UUID,
+    tenant_id: UUID,
+    db: Session,
+) -> Booking:
+    booking = (
+        db.query(Booking)
+        .filter(
+            Booking.id == booking_id,
+            Booking.tenant_id == tenant_id,
+        )
+        .first()
+    )
+
+    if booking is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found in this tenant.",
+        )
+
+    return booking
 
 
 def validate_contact(
@@ -219,6 +242,7 @@ def deal_audit_data(deal: Deal):
     return {
         "name": deal.name,
         "lead_id": deal.lead_id,
+        "booking_id": deal.booking_id,
         "contact_id": deal.contact_id,
         "account_id": deal.account_id,
         "assigned_to": deal.assigned_to,
@@ -262,9 +286,23 @@ def create_deal(
     if data.lead_id:
         lead = validate_lead(data.lead_id, tenant_id, db)
 
+    booking = None
+
+    if data.booking_id:
+        booking = validate_booking(data.booking_id, tenant_id, db)
+
+        if (
+            data.lead_id is not None
+            and booking.lead_id is not None
+            and data.lead_id != booking.lead_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The selected booking belongs to a different lead.",
+            )
+
     if data.contact_id:
         contact = validate_contact(data.contact_id, tenant_id, db)
-
     if data.account_id and lead:
         validate_lead_account(lead, data.account_id)
 
@@ -296,6 +334,7 @@ def create_deal(
         created_by=user_id,
         name=data.name,
         lead_id=data.lead_id,
+        booking_id=data.booking_id,
         contact_id=data.contact_id,
         account_id=data.account_id,
         assigned_to=assigned_to,
@@ -458,6 +497,11 @@ def update_deal(
         "lead_id",
         deal.lead_id
     )
+
+    new_booking_id = update_data.get(
+        "booking_id",
+        deal.booking_id
+    )
     new_contact_id = update_data.get(
         "contact_id",
         deal.contact_id
@@ -486,9 +530,23 @@ def update_deal(
     if new_lead_id:
         lead = validate_lead(new_lead_id, tenant_id, db)
 
+    booking = None
+
+    if new_booking_id:
+        booking = validate_booking(new_booking_id, tenant_id, db)
+
+        if (
+            new_lead_id is not None
+            and booking.lead_id is not None
+            and new_lead_id != booking.lead_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The selected booking belongs to a different lead.",
+            )
+
     if new_contact_id:
         contact = validate_contact(new_contact_id, tenant_id, db)
-
     if new_account_id and lead:
         validate_lead_account(lead, new_account_id)
 

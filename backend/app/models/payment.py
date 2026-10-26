@@ -32,6 +32,7 @@ class Payment(Base):
             "tenant_id",
             "status",
         ),
+        Index("ix_payments_installment_id", "installment_id"),
         CheckConstraint(
             "amount > 0",
             name="ck_payments_amount_positive",
@@ -54,6 +55,12 @@ class Payment(Base):
         UUID(as_uuid=True),
         ForeignKey("bookings.id"),
         nullable=False,
+    )
+
+    installment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("payment_plan_installments.id"),
+        nullable=True,
     )
 
     amount: Mapped[Decimal] = mapped_column(

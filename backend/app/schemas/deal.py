@@ -9,6 +9,7 @@ class DealCreate(BaseModel):
     lead_id: UUID | None = None
     contact_id: UUID | None = None
     account_id: UUID | None = None
+    booking_id: UUID | None = None
     assigned_to: UUID | None = None
     amount: float | None = None
     stage: str = "New"
@@ -23,6 +24,7 @@ class DealUpdate(BaseModel):
     lead_id: UUID | None = None
     contact_id: UUID | None = None
     account_id: UUID | None = None
+    booking_id: UUID | None = None
     assigned_to: UUID | None = None
     amount: float | None = None
     stage: str | None = None
@@ -39,6 +41,7 @@ class DealResponse(BaseModel):
     lead_id: UUID | None
     contact_id: UUID | None
     account_id: UUID | None
+    booking_id: UUID | None
     assigned_to: UUID | None
     amount: float | None
     stage: str

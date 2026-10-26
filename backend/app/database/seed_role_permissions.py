@@ -27,6 +27,7 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.payment_plan.view", "booking.payment_plan.create",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -56,6 +57,7 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.payment_plan.view", "booking.payment_plan.create",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -83,6 +85,7 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.payment_plan.view", "booking.payment_plan.create",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -107,7 +110,7 @@ role_permissions = {
         "site_visit.view", "site_visit.create", "site_visit.update",
 
         "booking.view", "booking.create", "booking.update",
-        "booking.payment.view", "booking.payment.create",
+        "booking.payment.view", "booking.payment.create", "booking.payment_plan.view", "booking.payment_plan.create",
 
 
 
@@ -132,6 +135,7 @@ role_permissions = {
 
         "booking.view", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.verify",
+        "booking.payment_plan.view", "booking.payment_plan.create",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -153,7 +157,7 @@ role_permissions = {
         "buyer_requirement.view",
         "property_match.view",
         "site_visit.view",
-        "booking.view", "booking.payment.view",
+        "booking.view", "booking.payment.view", "booking.payment_plan.view",
     ],
 
     "Read-only / Auditor": [
@@ -173,7 +177,7 @@ role_permissions = {
         "buyer_requirement.view",
         "property_match.view",
         "site_visit.view",
-        "booking.view", "booking.payment.view",
+        "booking.view", "booking.payment.view", "booking.payment_plan.view",
     ],
 }
 
