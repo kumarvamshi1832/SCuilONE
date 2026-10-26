@@ -15,7 +15,11 @@ class BookingCreate(BaseModel):
     buyer_name: str = Field(min_length=1, max_length=200)
     buyer_email: str | None = Field(default=None, max_length=255)
     buyer_phone: str | None = Field(default=None, max_length=30)
+    lead_id: UUID | None = None
+    buyer_requirement_id: UUID | None = None
     booking_amount: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    payment_preference: Literal["Full Payment", "Installments"] = "Full Payment"
+    installment_request_notes: str | None = Field(default=None, max_length=2000)
     agreed_price: Decimal | None = Field(
         default=None,
         gt=0,
@@ -44,6 +48,10 @@ class BookingResponse(BaseModel):
     buyer_name: str
     buyer_email: str | None
     buyer_phone: str | None
+    lead_id: UUID | None = None
+    buyer_requirement_id: UUID | None = None
+    payment_preference: Literal["Full Payment", "Installments"]
+    installment_request_notes: str | None
     booking_amount: Decimal
     agreed_price: Decimal
     refund_amount: Decimal

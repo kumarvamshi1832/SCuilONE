@@ -42,6 +42,8 @@ from app.models.site_visit import SiteVisit
 from app.models.booking import Booking
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
+from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
+
 
 config = context.config
 

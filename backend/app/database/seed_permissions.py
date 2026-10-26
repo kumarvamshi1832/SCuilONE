@@ -95,6 +95,8 @@ permissions = [
     ("booking.payment.view", "View booking payments"),
     ("booking.payment.create", "Record booking payments"),
     ("booking.payment.verify", "Verify booking payments"),
+    ("booking.payment_plan.view", "View booking payment plans and collections"),
+    ("booking.payment_plan.create", "Create seller-approved booking payment plans"),
     ("booking.refund.manage", "Manage booking refunds"),
     ("booking.sale.complete", "Complete property sales"),
 

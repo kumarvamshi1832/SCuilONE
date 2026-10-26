@@ -42,6 +42,13 @@ class Deal(Base):
         nullable=True
     )
 
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bookings.id"),
+        nullable=True,
+        index=True,
+    )
+
     contact_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("contacts.id"),

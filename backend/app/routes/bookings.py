@@ -6,7 +6,8 @@ from app.models.payment_refund import PaymentRefund
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
+from app.models.buyer_requirement import BuyerRequirement
+from app.models.lead import Lead
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
@@ -52,9 +53,13 @@ def booking_snapshot(booking: Booking) -> dict:
         "id": booking.id,
         "tenant_id": booking.tenant_id,
         "property_id": booking.property_id,
+        "lead_id": booking.lead_id,
+        "buyer_requirement_id": booking.buyer_requirement_id,
         "buyer_name": booking.buyer_name,
         "buyer_email": booking.buyer_email,
         "buyer_phone": booking.buyer_phone,
+        "payment_preference": booking.payment_preference,
+        "installment_request_notes": booking.installment_request_notes,
         "booking_amount": booking.booking_amount,
         "refund_amount": booking.refund_amount,
         "status": booking.status,
@@ -159,12 +164,68 @@ def create_booking(
                 detail="Only available properties can be booked.",
             )
 
+        linked_lead_id = payload.lead_id
+        requirement = None
+
+        if payload.buyer_requirement_id:
+            requirement = (
+                db.query(BuyerRequirement)
+                .filter(
+                    BuyerRequirement.id == payload.buyer_requirement_id,
+                    BuyerRequirement.tenant_id == tenant_id,
+                )
+                .first()
+            )
+
+            if requirement is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Buyer requirement not found in this tenant.",
+                )
+
+            if requirement.lead_id is not None:
+                if linked_lead_id is not None and linked_lead_id != requirement.lead_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="The buyer requirement belongs to a different lead.",
+                    )
+
+                linked_lead_id = requirement.lead_id
+
+            elif linked_lead_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="The selected buyer requirement is not linked to the selected lead.",
+                )
+
+        if linked_lead_id is not None:
+            lead = (
+                db.query(Lead)
+                .filter(
+                    Lead.id == linked_lead_id,
+                    Lead.tenant_id == tenant_id,
+                )
+                .first()
+            )
+
+            if lead is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Lead not found in this tenant.",
+                )
+
         booking = Booking(
             tenant_id=tenant_id,
             property_id=property_record.id,
+            lead_id=linked_lead_id,
+            buyer_requirement_id=(
+                requirement.id if requirement is not None else None
+            ),
             buyer_name=payload.buyer_name.strip(),
             buyer_email=payload.buyer_email,
             buyer_phone=payload.buyer_phone,
+            payment_preference=payload.payment_preference,
+            installment_request_notes=(payload.installment_request_notes.strip() if payload.installment_request_notes else None),
             booking_amount=payload.booking_amount,
             agreed_price=(
                 payload.agreed_price

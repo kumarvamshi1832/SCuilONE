@@ -11,6 +11,7 @@ from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.booking import Booking
 from app.models.payment import Payment
+from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.schemas.payment import (
     PaymentCreate,
     PaymentDecision,
@@ -90,6 +91,7 @@ def payment_snapshot(payment: Payment) -> dict:
     return {
         "id": payment.id,
         "booking_id": payment.booking_id,
+        "installment_id": payment.installment_id,
         "amount": payment.amount,
         "payment_method": payment.payment_method,
         "transaction_reference": payment.transaction_reference,
@@ -146,11 +148,40 @@ def create_payment(
                 detail="Payments can only be recorded for active bookings.",
             )
 
+        active_plan = db.query(PaymentPlan).filter(
+            PaymentPlan.tenant_id == tenant_id,
+            PaymentPlan.booking_id == booking.id,
+            PaymentPlan.status == "Active",
+        ).first()
+        if active_plan and payload.installment_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Select the instalment this payment is for because this booking has an active payment plan.",
+            )
+
+        installment = None
+        if payload.installment_id is not None:
+            installment = (
+                db.query(PaymentPlanInstallment)
+                .join(PaymentPlan, PaymentPlan.id == PaymentPlanInstallment.payment_plan_id)
+                .filter(
+                    PaymentPlanInstallment.id == payload.installment_id,
+                    PaymentPlanInstallment.tenant_id == tenant_id,
+                    PaymentPlan.booking_id == booking.id,
+                    PaymentPlan.tenant_id == tenant_id,
+                    PaymentPlan.status == "Active",
+                )
+                .first()
+            )
+            if not installment:
+                raise HTTPException(status_code=404, detail="Active payment-plan instalment not found for this booking.")
+
         payment_date = payload.payment_date or datetime.utcnow()
 
         payment = Payment(
             tenant_id=tenant_id,
             booking_id=booking.id,
+            installment_id=installment.id if installment else None,
             amount=payload.amount,
             payment_method=payload.payment_method,
             transaction_reference=(
@@ -312,6 +343,43 @@ def decide_payment(
                         "agreed sale price after processed refunds."
                     ),
                 )
+
+            if payment.installment_id is not None:
+                installment = (
+                    db.query(PaymentPlanInstallment)
+                    .join(PaymentPlan, PaymentPlan.id == PaymentPlanInstallment.payment_plan_id)
+                    .filter(
+                        PaymentPlanInstallment.id == payment.installment_id,
+                        PaymentPlanInstallment.tenant_id == tenant_id,
+                        PaymentPlan.booking_id == booking.id,
+                        PaymentPlan.tenant_id == tenant_id,
+                        PaymentPlan.status == "Active",
+                    )
+                    .with_for_update()
+                    .first()
+                )
+                if not installment:
+                    raise HTTPException(status_code=409, detail="The linked instalment is no longer active.")
+
+                linked_verified = db.query(Payment).filter(
+                    Payment.tenant_id == tenant_id,
+                    Payment.booking_id == booking.id,
+                    Payment.installment_id == installment.id,
+                    Payment.status == "Verified",
+                ).all()
+                linked_ids = [item.id for item in linked_verified]
+                from app.models.payment_refund import PaymentRefund
+                linked_refunds = db.query(PaymentRefund).filter(
+                    PaymentRefund.tenant_id == tenant_id,
+                    PaymentRefund.booking_id == booking.id,
+                    PaymentRefund.payment_id.in_(linked_ids) if linked_ids else PaymentRefund.payment_id == None,
+                    PaymentRefund.status == "Processed",
+                ).all()
+                received_for_installment = sum((Decimal(str(item.amount)) for item in linked_verified), Decimal("0.00"))
+                refunded_for_installment = sum((Decimal(str(item.amount)) for item in linked_refunds), Decimal("0.00"))
+                remaining_for_installment = max(Decimal("0.00"), Decimal(str(installment.amount)) - received_for_installment + refunded_for_installment)
+                if Decimal(str(payment.amount)) > remaining_for_installment:
+                    raise HTTPException(status_code=409, detail=f"This payment exceeds the linked instalment's remaining balance of {remaining_for_installment:.2f}.")
 
         before_data = payment_snapshot(payment)
         payment.status = payload.status

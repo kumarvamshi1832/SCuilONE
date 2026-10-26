@@ -31,6 +31,8 @@ from app.routes.site_visits import router as site_visits_router
 from app.routes.bookings import router as bookings_router
 from app.routes.payments import router as payments_router
 from app.routes.payment_refunds import router as payment_refunds_router
+from app.routes.payment_plans import router as payment_plans_router
+
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -137,6 +139,8 @@ app.include_router(site_visits_router)
 app.include_router(bookings_router)
 app.include_router(payments_router)
 app.include_router(payment_refunds_router)
+app.include_router(payment_plans_router)
+
 
 @app.get("/")
 def home():
