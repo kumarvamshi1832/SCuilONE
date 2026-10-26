@@ -488,15 +488,17 @@ export default function Workflows() {
                 </p>
               </div>
             </section>
+          </div>
 
-            <section className="workflow-panel workflow-assignment-panel">
-              <div className="workflow-panel-heading">
-                <div>
-                  <h2>Lead Assignment Management</h2>
-                  <p>Assign or reassign leads to your sales team.</p>
-                </div>
+          <section className="workflow-panel workflow-assignment-panel">
+            <div className="workflow-panel-heading">
+              <div>
+                <h2>Lead Assignment Management</h2>
+                <p>Assign or reassign leads to your sales team.</p>
               </div>
+            </div>
 
+            <div className="workflow-assignment-body">
               {assignmentMessage && (
                 <div className="workflow-assignment-success" role="status">
                   {assignmentMessage}
@@ -609,8 +611,8 @@ export default function Workflows() {
                   {assignmentLoading ? "Saving assignment..." : "Assign Lead"}
                 </button>
               </form>
-            </section>
-          </div>
+            </div>
+          </section>
 
           <section className="workflow-panel workflow-leads-panel">
             <div className="workflow-panel-heading">

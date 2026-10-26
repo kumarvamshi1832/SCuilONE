@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { User } from "../../types/user";
-import { getUsers } from "../../services/userService";
+import { getUsers, resendUserInvitation } from "../../services/userService";
 import EditUserModal from "../../components/users/EditUserModal";
 import AddUserModal from "../../components/users/AddUserModal";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
@@ -20,7 +20,8 @@ export default function Users() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   
   // Notification state
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -46,14 +47,41 @@ export default function Users() {
 
   const handleUserCreated = () => {
     fetchUsers();
-    setNotification("User created successfully");
+    setNotification({ message: "User created successfully", type: "success" });
     setTimeout(() => setNotification(null), 3000);
   };
 
   const handleUserUpdated = () => {
     fetchUsers();
-    setNotification("User role updated successfully");
+    setNotification({ message: "User role updated successfully", type: "success" });
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleResendInvite = async (user: User) => {
+    setResendingUserId(user.id);
+    try {
+      const res = await resendUserInvitation(user.id);
+      if (res.invitation_sent) {
+        setNotification({ 
+          message: `Invitation resent successfully to ${user.email}`, 
+          type: "success" 
+        });
+      } else {
+        setNotification({ 
+          message: res.message || `Failed to send invitation email to ${user.email}`, 
+          type: "error" 
+        });
+      }
+      fetchUsers();
+    } catch (err: any) {
+      setNotification({ 
+        message: err.message || "Failed to resend invitation email", 
+        type: "error" 
+      });
+    } finally {
+      setResendingUserId(null);
+      setTimeout(() => setNotification(null), 5000);
+    }
   };
 
   const filteredUsers = users.filter(u => 
@@ -64,9 +92,13 @@ export default function Users() {
   return (
     <div className="users-page">
       {notification && (
-        <div className="notification-toast success">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-          {notification}
+        <div className={`notification-toast ${notification.type}`}>
+          {notification.type === "success" ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          )}
+          {notification.message}
         </div>
       )}
 
@@ -128,15 +160,32 @@ export default function Users() {
                   <td className="text-muted">{user.email}</td>
                   <td><span className="role-badge">{user.role}</span></td>
                   <td>
-                    <span className={`status-badge ${user.status?.toLowerCase() === 'active' ? 'active' : 'inactive'}`}>
-                      {user.status || 'Inactive'}
-                    </span>
+                    {user.status?.toLowerCase() === "active" ? (
+                      <span className="status-badge active">Active</span>
+                    ) : (
+                      <span className={`status-badge ${(user.invitation_status || "pending").toLowerCase()}`}>
+                        {user.invitation_status || "Pending"}
+                      </span>
+                    )}
                   </td>
                   <td>
-                    <button className="btn-icon" onClick={() => handleEditClick(user)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                      Edit
-                    </button>
+                    <div className="table-actions">
+                      <button className="btn-icon" onClick={() => handleEditClick(user)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        Edit
+                      </button>
+                      {user.status?.toLowerCase() !== "active" && (
+                        <button 
+                          className="btn-icon btn-resend" 
+                          onClick={() => handleResendInvite(user)}
+                          disabled={resendingUserId === user.id}
+                          title="Resend invitation email"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                          {resendingUserId === user.id ? "Sending..." : "Resend Invite"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

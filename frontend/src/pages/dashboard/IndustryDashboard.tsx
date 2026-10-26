@@ -17,21 +17,34 @@ export default function IndustryDashboard() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([getDashboardSummary(), getTenantDetails()])
-      .then(([dashboardSummary, tenantDetails]) => {
-        if (!active) return;
-        setSummary(dashboardSummary);
-        setTenant(tenantDetails);
-      })
-      .catch(() => {
-        if (active) setError("Unable to load dashboard data. Please refresh and try again.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const loadData = () => {
+      Promise.all([getDashboardSummary(), getTenantDetails()])
+        .then(([dashboardSummary, tenantDetails]) => {
+          if (!active) return;
+          setSummary(dashboardSummary);
+          setTenant(tenantDetails);
+        })
+        .catch(() => {
+          if (active) setError("Unable to load dashboard data. Please refresh and try again.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    };
+
+    loadData();
+
+    const handleActivityUpdated = () => {
+      getDashboardSummary().then((s) => {
+        if (active) setSummary(s);
+      }).catch(() => {});
+    };
+
+    window.addEventListener("crm:activity-updated", handleActivityUpdated);
 
     return () => {
       active = false;
+      window.removeEventListener("crm:activity-updated", handleActivityUpdated);
     };
   }, []);
 

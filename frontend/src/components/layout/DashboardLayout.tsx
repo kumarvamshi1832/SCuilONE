@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useCallback } from "react";
+import { ReactNode, useState, useEffect, useCallback, useRef } from "react";
 
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -95,10 +95,44 @@ export default function DashboardLayout({
   const [unreadCount, setUnreadCount] = useState(0);
 
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-
   const [isNotificationLoading, setIsNotificationLoading] = useState(false);
-
   const [notificationError, setNotificationError] = useState("");
+
+  const notificationWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isNotificationOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        notificationWrapperRef.current &&
+        !notificationWrapperRef.current.contains(event.target as Node)
+      ) {
+        setIsNotificationOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isNotificationOpen]);
+
+  const formatNotificationTime = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateStr;
+    }
+  };
 
   const [tenant, setTenant] = useState<TenantDetails | null>(null);
 
@@ -1278,45 +1312,28 @@ export default function DashboardLayout({
               )}
             </button>
 
-            <div className="notification-wrapper">
+            <div className="notification-wrapper" ref={notificationWrapperRef}>
               <button
-
                 type="button"
-
                 className="notification-btn"
-
-                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""
-
-                  }`}
-
+                aria-label={`Notifications${
+                  unreadCount ? `, ${unreadCount} unread` : ""
+                }`}
                 aria-expanded={isNotificationOpen}
-
                 onClick={() => {
-
                   const willOpen = !isNotificationOpen;
-
                   setIsNotificationOpen(willOpen);
-
                   if (willOpen) {
-
                     void loadNotifications();
-
                   }
-
                 }}
               >
                 <svg
-
                   viewBox="0 0 24 24"
-
                   fill="none"
-
                   stroke="currentColor"
-
                   strokeWidth="2"
-
                   strokeLinecap="round"
-
                   strokeLinejoin="round"
                 >
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1325,100 +1342,124 @@ export default function DashboardLayout({
 
                 {unreadCount > 0 && (
                   <span className="notification-badge">
-
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
-
                 )}
               </button>
 
               {isNotificationOpen && (
-                <div className="notification-panel">
+                <div
+                  className="notification-panel"
+                  role="dialog"
+                  aria-label="Notifications panel"
+                >
                   <div className="notification-panel-header">
-                    <div>
-                      <h3>Notifications</h3>
-                      <span>{unreadCount} unread</span>
+                    <div className="notification-header-row">
+                      <h3 className="notification-heading">Notifications</h3>
+                      <button
+                        type="button"
+                        className="notification-close-btn"
+                        onClick={() => setIsNotificationOpen(false)}
+                        aria-label="Close notifications"
+                        title="Close"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
                     </div>
 
-                    <button
-
-                      type="button"
-
-                      className="notification-mark-all"
-
-                      disabled={unreadCount === 0}
-
-                      onClick={() => void handleMarkAllAsRead()}
-                    >
-
-                      Mark all read
-                    </button>
+                    <div className="notification-sub-bar">
+                      <span className="notification-unread-count">
+                        {unreadCount} {unreadCount === 1 ? "unread" : "unread"}
+                      </span>
+                      <button
+                        type="button"
+                        className="notification-mark-all"
+                        disabled={unreadCount === 0}
+                        onClick={() => void handleMarkAllAsRead()}
+                        title="Mark all notifications as read"
+                      >
+                        Mark all read
+                      </button>
+                    </div>
                   </div>
 
                   {notificationError && (
-                    <p className="notification-error">{notificationError}</p>
-
+                    <p className="notification-error" role="alert">
+                      {notificationError}
+                    </p>
                   )}
 
                   {isNotificationLoading ? (
-                    <div className="notification-empty">
-
-                      Loading notifications...
+                    <div className="notification-empty" role="status">
+                      <div className="notification-spinner" aria-hidden="true" />
+                      <span>Loading notifications...</span>
                     </div>
-
                   ) : notifications.length === 0 ? (
-                    <div className="notification-empty">
-                      <span className="notification-empty-icon">♧</span>
+                    <div className="notification-empty" role="status">
+                      <span className="notification-empty-icon" aria-hidden="true">
+                        ♧
+                      </span>
                       <strong>You're all caught up</strong>
                       <p>New notifications will appear here.</p>
                     </div>
-
                   ) : (
-                    <div className="notification-list">
-
+                    <div
+                      className="notification-list"
+                      role="feed"
+                      aria-label="Notification list"
+                    >
                       {notifications.map((item) => (
                         <button
-
                           type="button"
-
                           key={item.id}
-
-                          className={`notification-item ${item.is_read ? "is-read" : "is-unread"
-
-                            }`}
-
-                          onClick={() =>
-
-                            void handleNotificationClick(item)
-
-                          }
+                          className={`notification-item ${
+                            item.is_read ? "is-read" : "is-unread"
+                          }`}
+                          onClick={() => void handleNotificationClick(item)}
                         >
-                          <span className="notification-item-icon">
-
+                          <span
+                            className="notification-item-icon"
+                            aria-hidden="true"
+                          >
                             {item.is_read ? "○" : "●"}
                           </span>
 
                           <span className="notification-item-content">
-                            <strong>{item.title}</strong>
-                            <span>{item.message}</span>
-                            <small>
-
-                              {new Date(item.created_at).toLocaleString()}
+                            <strong className="notification-item-title">
+                              {item.title}
+                            </strong>
+                            <span className="notification-item-msg">
+                              {item.message}
+                            </span>
+                            <small className="notification-item-time">
+                              {formatNotificationTime(item.created_at)}
                             </small>
                           </span>
 
                           {!item.is_read && (
-                            <span className="notification-unread-dot" />
-
+                            <span
+                              className="notification-unread-dot"
+                              aria-label="Unread notification"
+                            />
                           )}
                         </button>
-
                       ))}
                     </div>
-
                   )}
                 </div>
-
               )}
             </div>
 

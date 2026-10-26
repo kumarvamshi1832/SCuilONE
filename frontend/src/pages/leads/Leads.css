@@ -195,6 +195,10 @@
 .actions-dropdown-fixed {
   position: fixed;
   z-index: 9999;
+  top: auto;
+  bottom: auto;
+  right: auto;
+  margin-top: 0;
 }
 
 .actions-dropdown button {

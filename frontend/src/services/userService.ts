@@ -47,12 +47,32 @@ export const deleteUser = async (userId: string): Promise<void> => {
 export interface CreateUserData {
   full_name: string;
   email: string;
-  password?: string;
   role: Role;
 }
 
-export const createUser = async (data: CreateUserData): Promise<User> => {
-  const response = await apiClient.post<User>("/api/v1/users", data, getHeaders());
+export interface CreateUserResponse {
+  message: string;
+  user: User;
+  invitation_sent?: boolean;
+}
+
+export const createUser = async (data: CreateUserData): Promise<CreateUserResponse> => {
+  const response = await apiClient.post<CreateUserResponse>("/api/v1/users/", data, getHeaders());
+  return response.data;
+};
+
+export interface ResendInvitationResponse {
+  message: string;
+  email: string;
+  invitation_sent: boolean;
+}
+
+export const resendUserInvitation = async (userId: string): Promise<ResendInvitationResponse> => {
+  const response = await apiClient.post<ResendInvitationResponse>(
+    `/api/v1/users/${userId}/resend-invitation`,
+    {},
+    getHeaders()
+  );
   return response.data;
 };
 

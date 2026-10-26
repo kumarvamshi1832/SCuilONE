@@ -22,6 +22,7 @@ import ActivityViewModal from "../../components/activities/ActivityViewModal";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import ActivityDeleteConfirm from "../../components/activities/ActivityDeleteConfirm";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { normalizeTaskStatus } from "../../utils/taskStatus";
 import "../users/Users.css";
 import "../leads/Leads.css";
 import "./Activities.css";
@@ -316,8 +317,8 @@ export default function Activities() {
       return false;
     }
 
-    // 4. Status filter (case-insensitive)
-    if (statusFilter && (act.status || "").toLowerCase() !== statusFilter.toLowerCase()) {
+    // 4. Status filter (normalized)
+    if (statusFilter && normalizeTaskStatus(act.status) !== normalizeTaskStatus(statusFilter)) {
       return false;
     }
 
@@ -335,14 +336,15 @@ export default function Activities() {
   });
 
   const getStatusBadgeClass = (st: string) => {
-    switch (st) {
-      case "Completed":
+    const normalized = normalizeTaskStatus(st);
+    switch (normalized) {
+      case "completed":
         return "status-completed";
-      case "In Progress":
+      case "in_progress":
         return "status-in-progress";
-      case "Cancelled":
+      case "cancelled":
         return "status-cancelled";
-      case "Pending":
+      case "pending":
       default:
         return "status-pending";
     }

@@ -84,6 +84,7 @@ apiClient.interceptors.response.use(
         "/verify-reset-otp",
         "/reset-password",
         "/accept-invitation",
+        "/set-password",
         "/complete-profile",
       ];
       const isPublicPage = publicPaths.some(
@@ -332,6 +333,84 @@ export async function resetPassword(
     const response = await apiClient.post<MessageResponse>(
       AUTH_ENDPOINTS.RESET_PASSWORD,
       data
+    );
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+export interface InvitationDetailsResponse {
+  valid: boolean;
+  email: string;
+  full_name: string;
+  role: string;
+  tenant_name?: string;
+  expires_at?: string;
+}
+
+export interface SetPasswordRequest {
+  invitation_token: string;
+  password: string;
+  confirm_password: string;
+}
+
+export interface SetPasswordResponse {
+  message: string;
+  access_token: string;
+  token_type: string;
+  email: string;
+  full_name?: string;
+  role?: string;
+  next_step?: string;
+}
+
+export interface CompleteProfileRequest {
+  full_name: string;
+  phone: string;
+  job_title: string;
+}
+
+export interface CompleteProfileResponse {
+  message: string;
+  profile_completed: boolean;
+  status: string;
+  login_required: boolean;
+}
+
+export async function getInvitationDetails(token: string): Promise<InvitationDetailsResponse> {
+  try {
+    const response = await apiClient.get<InvitationDetailsResponse>(
+      `/api/v1/auth/invitation-details?token=${encodeURIComponent(token)}`
+    );
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+export async function setInvitationPassword(data: SetPasswordRequest): Promise<SetPasswordResponse> {
+  try {
+    const response = await apiClient.post<SetPasswordResponse>(
+      "/api/v1/auth/set-password",
+      data
+    );
+    return response.data;
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
+export async function completeUserProfile(data: CompleteProfileRequest, token: string): Promise<CompleteProfileResponse> {
+  try {
+    const response = await apiClient.post<CompleteProfileResponse>(
+      "/api/v1/auth/complete-profile",
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
     );
     return response.data;
   } catch (error) {

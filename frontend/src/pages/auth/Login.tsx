@@ -1,5 +1,5 @@
 import { FormEvent, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { loginUser } from "../../services/authService";
 import { useTheme } from "../../context/ThemeContext";
 import { normalizeIndustry } from "../../utils/industryUtils";
@@ -9,6 +9,7 @@ import "./Login.css";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
 
   // Email field initializes empty per requirements
@@ -18,6 +19,10 @@ export default function Login() {
     return localStorage.getItem("scuilone_remember_me") === "true";
   });
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState<string | null>(() => {
+    const locState = location.state as any;
+    return locState?.message || locState?.successMessage || null;
+  });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -410,6 +415,49 @@ export default function Login() {
                       Forgot Password?
                     </button>
                   </div>
+
+                  {/* Activation Success Banner */}
+                  {successMessage && (
+                    <div
+                      className="auth-alert-message"
+                      role="status"
+                      style={{
+                        backgroundColor: "rgba(22, 163, 74, 0.12)",
+                        borderColor: "rgba(22, 163, 74, 0.3)",
+                        color: "#16a34a",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      <div className="alert-content-left">
+                        <svg
+                          className="alert-warning-icon"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ color: "#16a34a" }}
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span className="alert-text" style={{ color: "#16a34a", fontWeight: 500 }}>
+                          {successMessage}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="alert-close-btn"
+                        onClick={() => setSuccessMessage(null)}
+                        aria-label="Dismiss message"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Persistent Error Alert */}
                   {error && (

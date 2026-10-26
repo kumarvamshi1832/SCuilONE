@@ -1221,7 +1221,90 @@ def complete_profile(
     }
 
 
+@router.get("/invitation-details")
+@router.get("/validate-invitation")
+@router.get("/set-password")
+@limiter.limit("20/minute")
+def get_invitation_details(
+    request: Request,
+    response: Response,
+    token: str,
+    db: Session = Depends(get_db),
+):
+    if not token or len(token) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid invitation token",
+        )
+
+    token_hash = hashlib.sha256(
+        token.encode("utf-8")
+    ).hexdigest()
+
+    invitation = db.query(UserInvitation).filter(
+        UserInvitation.token_hash == token_hash
+    ).first()
+
+    if not invitation:
+        raise HTTPException(
+            status_code=404,
+            detail="Invitation not found or link is invalid",
+        )
+
+    if invitation.used:
+        raise HTTPException(
+            status_code=400,
+            detail="This invitation link has already been used. Please log in or request a new invitation.",
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if now >= expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="This invitation has expired. Ask your administrator for a new invitation.",
+        )
+
+    user = db.query(User).filter(
+        User.id == invitation.user_id
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Invited user not found",
+        )
+
+    if user.status == "Active" and user.profile_completed:
+        raise HTTPException(
+            status_code=400,
+            detail="This account has already completed setup. Please log in.",
+        )
+
+    role = db.query(Role).join(
+        UserRole,
+        UserRole.role_id == Role.id,
+    ).filter(
+        UserRole.user_id == user.id
+    ).first()
+
+    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
+
+    return {
+        "valid": True,
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": role.name if role else "User",
+        "tenant_name": tenant.name if tenant else "SCuilONE",
+        "expires_at": invitation.expires_at.isoformat(),
+    }
+
+
 @router.post("/accept-invitation")
+@router.post("/set-password")
 @limiter.limit("5/minute")
 def accept_invitation(
     request: Request,
@@ -1237,10 +1320,16 @@ def accept_invitation(
         UserInvitation.token_hash == token_hash
     ).with_for_update().first()
 
-    if not invitation or invitation.used:
+    if not invitation:
         raise HTTPException(
             status_code=400,
-            detail="Invalid or already used invitation",
+            detail="Invalid invitation token. Please check your invitation email.",
+        )
+
+    if invitation.used:
+        raise HTTPException(
+            status_code=400,
+            detail="This invitation has already been used. Please log in or request a new invitation.",
         )
 
     now = datetime.now(timezone.utc)
@@ -1254,7 +1343,7 @@ def accept_invitation(
         db.commit()
         raise HTTPException(
             status_code=400,
-            detail="Invitation has expired. Ask your administrator for a new invitation.",
+            detail="This invitation has expired. Please request a new invitation.",
         )
 
     user = db.query(User).filter(
@@ -1303,52 +1392,22 @@ def accept_invitation(
         UserRole.user_id == user.id
     ).first()
 
-   
-    mfa = db.query(UserMFA).filter(
-        UserMFA.user_id == user.id
-    ).first()
-
-    if mfa and mfa.enabled:
-        onboarding_token = create_mfa_token(
-            {
-                "user_id": str(user.id),
-                "tenant_id": str(user.tenant_id),
-                "role": role.name if role else None,
-            },
-            purpose="mfa_challenge",
-        )
-
-        return {
-            "message": "Invitation accepted. Verify MFA to continue.",
-            "mfa_required": True,
-            "mfa_setup_required": False,
-            "mfa_token": onboarding_token,
-            "next_step": "mfa_verification",
-            "email": user.email,
-        }
-
-    onboarding_token = create_mfa_token(
+    onboarding_token = create_access_token(
         {
             "user_id": str(user.id),
             "tenant_id": str(user.tenant_id),
             "role": role.name if role else None,
-        },
-        purpose="mfa_enrollment",
+            "purpose": "onboarding",
+            "mfa_verified": True,
+        }
     )
 
     return {
-        "message": "Invitation accepted. Set up MFA to continue.",
-        "mfa_required": True,
-        "mfa_setup_required": True,
-        "mfa_token": onboarding_token,
-        "next_step": "mfa_enrollment",
-        "email": user.email,
-    }
-
-    return {
-        "message": "Password created successfully. Complete your profile.",
+        "message": "Password created successfully. Please complete your profile.",
         "access_token": onboarding_token,
         "token_type": "bearer",
         "email": user.email,
+        "full_name": user.full_name,
+        "role": role.name if role else None,
         "next_step": "complete_profile",
     }

@@ -19,7 +19,6 @@ export default function MFASetup() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [copiedKey, setCopiedKey] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const handleRegenerateKey = async () => {
@@ -40,17 +39,6 @@ export default function MFASetup() {
       );
     } finally {
       setResetting(false);
-    }
-  };
-
-  const copySecretKey = async () => {
-    if (!setup?.secret) return;
-    try {
-      await navigator.clipboard.writeText(setup.secret);
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2000);
-    } catch {
-      setError("Unable to copy to clipboard automatically.");
     }
   };
 
@@ -187,90 +175,181 @@ export default function MFASetup() {
 
   return (
     <div className={`mfa-setup-page ${theme}`}>
-      {/* Sleek Theme Toggle */}
-      <button
-        type="button"
-        className="mfa-theme-toggle"
-        onClick={toggleTheme}
-        aria-label="Toggle theme"
-      >
-        {theme === "light" ? (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="5" />
-            <line x1="12" y1="1" x2="12" y2="3" />
-            <line x1="12" y1="21" x2="12" y2="23" />
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-            <line x1="1" y1="12" x2="3" y2="12" />
-            <line x1="21" y1="12" x2="23" y2="12" />
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-          </svg>
-        )}
-      </button>
+      {/* Sleek Theme Toggle Pill matching SCuilONE Login design */}
+      <div className="mfa-theme-toggle-wrapper">
+        <button
+          type="button"
+          className="theme-toggle-pill mfa-theme-toggle"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+        >
+          <span className={`toggle-icon sun-icon ${theme === "light" ? "active" : ""}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          </span>
+          <span className={`toggle-icon moon-icon ${theme === "dark" ? "active" : ""}`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </span>
+        </button>
+      </div>
 
-      <div className="mfa-setup-card">
-        {/* Brand Header */}
+      <main className="mfa-setup-card" aria-labelledby="mfa-heading">
+        {/* SCuilONE Branding */}
         <div className="mfa-brand-header">
-          <div className="mfa-logo-badge">S</div>
-          <h1 className="mfa-brand-name">SCuilONE</h1>
+          <div className="mfa-brand-logo-squircle" aria-hidden="true">
+            <span className="mfa-brand-logo-glyph">S</span>
+          </div>
+          <div className="mfa-brand-text-block">
+            <span className="mfa-brand-name">SCuilONE</span>
+            <span className="mfa-brand-sub-label">CRM</span>
+          </div>
         </div>
 
-        <h2 className="mfa-title">Set Up Two-Factor Authentication</h2>
+        {/* Primary Heading */}
+        <h1 id="mfa-heading" className="mfa-title">
+          Set Up Two-Factor Authentication
+        </h1>
+
+        {/* Short Explanation */}
         <p className="mfa-desc">
           Scan this QR code with Google Authenticator or Microsoft Authenticator, then enter the 6-digit code shown in the app.
         </p>
 
-        <div className="mfa-email-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect width="20" height="16" x="2" y="4" rx="2" />
-            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-          </svg>
-          {email}
-        </div>
+        {/* Email Identity Pill Badge */}
+        {email && (
+          <div className="mfa-email-badge-wrapper">
+            <div className="mfa-email-pill" title={`Signed in as ${email}`}>
+              <svg
+                className="mfa-email-icon"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect width="20" height="16" x="2" y="4" rx="2" />
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+              </svg>
+              <span className="mfa-email-text">{email}</span>
+            </div>
+          </div>
+        )}
 
-        {error && <div className="mfa-error-alert">{error}</div>}
+        {/* Error Alert Message */}
+        {error && (
+          <div className="mfa-error-alert" role="alert" aria-live="assertive">
+            <svg className="mfa-alert-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
 
         {!setup && !error && (
-          <p className="mfa-desc">Preparing your secure setup...</p>
+          <div className="mfa-loading-state" role="status">
+            <svg className="mfa-spinner" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
+            </svg>
+            <p className="mfa-desc">Preparing your secure setup...</p>
+          </div>
         )}
 
         {setup && (
           <>
-            {/* Centered, high-contrast QR Container */}
+            {/* Centered, Scannable QR Container */}
             <div className="mfa-qr-container">
-              <QRCodeSVG
-                value={setup.otpauth_url}
-                size={168}
-                level="M"
-                bgColor="#ffffff"
-                fgColor="#000000"
-              />
+              <div className="mfa-qr-card">
+                <QRCodeSVG
+                  value={setup.otpauth_url}
+                  size={156}
+                  level="M"
+                  bgColor="#ffffff"
+                  fgColor="#000000"
+                />
+              </div>
             </div>
 
-            <p className="mfa-manual-label">
-              Can't scan the QR code? Enter this setup key manually:
-            </p>
+            {/* Authenticator Code Form */}
+            <form onSubmit={handleVerify} className="mfa-form" noValidate={false}>
+              <label htmlFor="mfa-setup-code" className="mfa-input-label">
+                Authenticator Code
+              </label>
 
-            {/* Monospace setup key, with copy button */}
-            <div className="mfa-secret-row">
-              <div className="mfa-secret-box" title="Click to copy setup key" onClick={copySecretKey}>
-                {setup.secret}
+              <div className="mfa-input-wrapper">
+                <input
+                  id="mfa-setup-code"
+                  className="mfa-otp-input"
+                  value={code}
+                  onChange={(event) => {
+                    setCode(event.target.value.replace(/\D/g, "").slice(0, 6));
+                    setError("");
+                  }}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="000000"
+                  required
+                  aria-required="true"
+                  aria-label="6-digit authenticator code"
+                />
               </div>
+
+              {/* Primary CTA Button */}
+              <button
+                type="submit"
+                disabled={loading || code.length !== 6}
+                className="mfa-submit-btn"
+                aria-busy={loading}
+              >
+                {loading ? (
+                  <span className="mfa-btn-loading-content">
+                    <svg className="mfa-spinner" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
+                    </svg>
+                    <span>Verifying...</span>
+                  </span>
+                ) : (
+                  <span className="mfa-btn-text-content">
+                    <span>Verify and Enable MFA</span>
+                    <span className="mfa-btn-arrow" aria-hidden="true">→</span>
+                  </span>
+                )}
+              </button>
+            </form>
+
+            {/* Secondary Action: Regenerate QR Code */}
+            <div className="mfa-troubleshoot-row">
+              <span>Having trouble?</span>
               <button
                 type="button"
-                className="mfa-copy-key-btn"
-                onClick={copySecretKey}
-                title="Copy setup key"
+                className="mfa-regenerate-btn"
+                onClick={handleRegenerateKey}
+                disabled={resetting || loading}
               >
-                {copiedKey ? "Copied!" : "Copy"}
+                {resetting ? "Regenerating..." : "Regenerate QR Code"}
               </button>
             </div>
 
+            {/* Dev Mode Code Helper (Only shown when dev_code is available from API) */}
             {setup.dev_code && (
               <div className="mfa-dev-helper">
                 <span className="mfa-dev-badge">Dev Mode</span>
@@ -284,51 +363,9 @@ export default function MFASetup() {
                 </button>
               </div>
             )}
-
-            {/* Form matching exact width */}
-            <form onSubmit={handleVerify} className="mfa-form">
-              <label htmlFor="mfa-setup-code" className="mfa-input-label">
-                Authenticator Code
-              </label>
-
-              <input
-                id="mfa-setup-code"
-                className="mfa-otp-input"
-                value={code}
-                onChange={(event) => {
-                  setCode(event.target.value.replace(/\D/g, "").slice(0, 6));
-                  setError("");
-                }}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="000000"
-                required
-              />
-
-              <button
-                type="submit"
-                disabled={loading || code.length !== 6}
-                className="mfa-submit-btn"
-              >
-                {loading ? "Verifying..." : "Verify and Enable MFA →"}
-              </button>
-            </form>
-
-            <div className="mfa-troubleshoot-row">
-              <span>Having trouble?</span>
-              <button
-                type="button"
-                className="mfa-regenerate-btn"
-                onClick={handleRegenerateKey}
-                disabled={resetting || loading}
-              >
-                {resetting ? "Regenerating..." : "Regenerate QR Code"}
-              </button>
-            </div>
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }

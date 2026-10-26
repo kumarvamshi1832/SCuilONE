@@ -1,275 +1,325 @@
 /* ==========================================================================
-   SCuilONE CRM - MFA Setup UI Polish
-   Compact, Centered Layout with Perfect Vertical Rhythm & Theme Support
+   SCuilONE CRM - Two-Factor Authentication / MFA Setup
+   Enterprise SaaS Layout, Crisp Glassmorphism & Flawless Light/Dark Theme
    ========================================================================== */
 
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* --- Page Root & Theme Tokens --- */
 .mfa-setup-page {
   min-height: 100vh;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 32px 20px;
   box-sizing: border-box;
   position: relative;
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  transition: background 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* Light Theme Variables */
 .mfa-setup-page.light {
-  --mfa-page-bg: linear-gradient(135deg, #f0f4ff 0%, #e8ecf8 50%, #f4f7fb 100%);
+  --mfa-page-bg: radial-gradient(circle at 50% 0%, #e0f2fe 0%, #f4f7fb 60%, #eef2f6 100%);
   --mfa-card-bg: #ffffff;
   --mfa-card-backdrop: none;
   --mfa-card-border: #e2e8f0;
-  --mfa-card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --mfa-card-shadow: 0 20px 45px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
   --mfa-text-main: #0f172a;
-  --mfa-text-sub: #64748b;
+  --mfa-text-sub: #475467;
   --mfa-badge-bg: #eff6ff;
-  --mfa-badge-color: #1d4ed8;
-  --mfa-badge-border: #dbeafe;
+  --mfa-badge-color: #0284c7;
+  --mfa-badge-border: #bfdbfe;
   --mfa-box-bg: #f8fafc;
-  --mfa-box-border: #e2e8f0;
-  --mfa-box-text: #0f172a;
+  --mfa-box-border: #cbd5e1;
+  --mfa-box-text: #1e293b;
   --mfa-input-bg: #ffffff;
   --mfa-input-border: #cbd5e1;
   --mfa-input-text: #0f172a;
+  --mfa-input-placeholder: #94a3b8;
   --mfa-input-focus: #0284c7;
-  --mfa-input-focus-shadow: rgba(2, 132, 199, 0.15);
-  --mfa-toggle-btn: #475467;
+  --mfa-input-focus-shadow: rgba(2, 132, 199, 0.18);
+  --mfa-btn-gradient: linear-gradient(90deg, #0284c7 0%, #06b6d4 100%);
+  --mfa-btn-shadow: 0 4px 16px rgba(2, 132, 199, 0.28);
+  --mfa-btn-hover-shadow: 0 6px 22px rgba(2, 132, 199, 0.42);
+  --mfa-link-color: #0284c7;
+  --mfa-qr-border: #e2e8f0;
+  --mfa-qr-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --mfa-error-bg: #fef2f2;
+  --mfa-error-border: #fecaca;
+  --mfa-error-text: #b91c1c;
+  --mfa-toggle-bg: rgba(255, 255, 255, 0.9);
   --mfa-toggle-border: #e2e8f0;
-  --mfa-toggle-bg: #ffffff;
+  --mfa-toggle-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
 /* Dark Theme Variables */
 .mfa-setup-page.dark {
-  --mfa-page-bg: radial-gradient(circle at 50% 0%, #0c1b33 0%, #040915 100%);
-  --mfa-card-bg: rgba(13, 24, 46, 0.78);
-  --mfa-card-backdrop: blur(18px);
-  --mfa-card-border: rgba(56, 189, 248, 0.25);
-  --mfa-card-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6), 0 0 30px rgba(6, 182, 212, 0.12);
+  --mfa-page-bg: radial-gradient(ellipse at 50% -20%, #0c2044 0%, #040915 75%);
+  --mfa-card-bg: rgba(8, 18, 38, 0.85);
+  --mfa-card-backdrop: blur(20px);
+  --mfa-card-border: rgba(56, 189, 248, 0.28);
+  --mfa-card-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.75), 0 0 35px rgba(6, 182, 212, 0.12), inset 0 1px 1.5px rgba(255, 255, 255, 0.15);
   --mfa-text-main: #ffffff;
   --mfa-text-sub: #94a3b8;
-  --mfa-badge-bg: rgba(56, 189, 248, 0.15);
+  --mfa-badge-bg: rgba(56, 189, 248, 0.12);
   --mfa-badge-color: #38bdf8;
-  --mfa-badge-border: rgba(56, 189, 248, 0.3);
-  --mfa-box-bg: rgba(15, 23, 42, 0.6);
-  --mfa-box-border: rgba(255, 255, 255, 0.12);
+  --mfa-badge-border: rgba(56, 189, 248, 0.28);
+  --mfa-box-bg: rgba(13, 22, 41, 0.7);
+  --mfa-box-border: rgba(255, 255, 255, 0.14);
   --mfa-box-text: #f1f5f9;
-  --mfa-input-bg: rgba(15, 23, 42, 0.6);
-  --mfa-input-border: rgba(255, 255, 255, 0.18);
-  --mfa-input-text: #ffffff;
+  --mfa-input-bg: rgba(13, 22, 41, 0.75);
+  --mfa-input-border: rgba(255, 255, 255, 0.16);
+  --mfa-input-text: #f8fafc;
+  --mfa-input-placeholder: rgba(148, 163, 184, 0.45);
   --mfa-input-focus: #38bdf8;
   --mfa-input-focus-shadow: rgba(56, 189, 248, 0.25);
-  --mfa-toggle-btn: #f1f5f9;
-  --mfa-toggle-border: rgba(255, 255, 255, 0.15);
+  --mfa-btn-gradient: linear-gradient(90deg, #0284c7 0%, #06b6d4 100%);
+  --mfa-btn-shadow: 0 4px 18px rgba(6, 182, 212, 0.38);
+  --mfa-btn-hover-shadow: 0 6px 24px rgba(6, 182, 212, 0.55);
+  --mfa-link-color: #38bdf8;
+  --mfa-qr-border: rgba(56, 189, 248, 0.35);
+  --mfa-qr-shadow: 0 8px 25px rgba(0, 0, 0, 0.45), 0 0 24px rgba(6, 182, 212, 0.16);
+  --mfa-error-bg: rgba(239, 68, 68, 0.14);
+  --mfa-error-border: rgba(239, 68, 68, 0.32);
+  --mfa-error-text: #fca5a5;
   --mfa-toggle-bg: rgba(15, 23, 42, 0.7);
+  --mfa-toggle-border: rgba(56, 189, 248, 0.28);
+  --mfa-toggle-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .mfa-setup-page {
   background: var(--mfa-page-bg);
 }
 
-/* Theme Toggle Button */
-.mfa-theme-toggle {
+/* --- Theme Switcher Pill (Consistent with SCuilONE Login design) --- */
+.mfa-theme-toggle-wrapper {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 24px;
+  right: 24px;
+  z-index: 20;
+}
+
+.mfa-theme-toggle {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid var(--mfa-toggle-border);
+  gap: 3px;
+  padding: 3px;
   background: var(--mfa-toggle-bg);
-  color: var(--mfa-toggle-btn);
+  border: 1px solid var(--mfa-toggle-border);
+  border-radius: 9999px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  z-index: 10;
+  box-shadow: var(--mfa-toggle-shadow);
+  transition: all 0.25s ease;
+  outline: none;
 }
 
 .mfa-theme-toggle:hover {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
-.mfa-theme-toggle svg {
-  width: 18px;
-  height: 18px;
+.mfa-theme-toggle:focus-visible {
+  outline: 2px solid var(--mfa-input-focus);
+  outline-offset: 2px;
 }
 
-/* Card Container */
+.toggle-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mfa-text-sub);
+  transition: all 0.25s ease;
+}
+
+.toggle-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toggle-icon.active {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+/* --- MFA Setup Card Container --- */
 .mfa-setup-card {
   width: 100%;
-  max-width: 460px;
+  max-width: 460px; /* enterprise compact sweet spot */
   background: var(--mfa-card-bg);
   backdrop-filter: var(--mfa-card-backdrop);
   -webkit-backdrop-filter: var(--mfa-card-backdrop);
   border: 1px solid var(--mfa-card-border);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--mfa-card-shadow);
-  padding: 26px 28px;
+  padding: 30px 32px 24px;
   box-sizing: border-box;
   text-align: center;
-  transition: all 0.25s ease;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+  z-index: 10;
 }
 
-/* Brand Header */
+/* --- Brand Header (Matching SCuilONE Logo System) --- */
 .mfa-brand-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.mfa-logo-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #0284c7, #06b6d4);
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 800;
+.mfa-brand-logo-squircle {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+  box-shadow: 0 3px 10px rgba(2, 132, 199, 0.35);
+  flex-shrink: 0;
+}
+
+.mfa-brand-logo-glyph {
+  font-size: 19px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.mfa-brand-text-block {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
 }
 
 .mfa-brand-name {
-  margin: 0;
   font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
   color: var(--mfa-text-main);
+  letter-spacing: -0.4px;
+  line-height: 1.1;
 }
 
-/* Titles */
-.mfa-title {
-  margin: 0 0 4px;
-  color: var(--mfa-text-main);
-  font-size: 19px;
+.mfa-brand-sub-label {
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  color: var(--mfa-badge-color);
+  letter-spacing: 1.5px;
+  margin-top: 1px;
+}
+
+/* --- Typography Hierarchy --- */
+.mfa-title {
+  margin: 0 0 6px;
+  color: var(--mfa-text-main);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
 .mfa-desc {
-  margin: 0 0 10px;
+  margin: 0 auto 12px;
   color: var(--mfa-text-sub);
   font-size: 13px;
+  font-weight: 500;
   line-height: 1.45;
+  max-width: 390px;
 }
 
-/* Email Badge */
-.mfa-email-badge {
+/* --- Email Identity Pill Badge --- */
+.mfa-email-badge-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0 auto 16px;
+}
+
+.mfa-setup-card .mfa-email-pill,
+.mfa-email-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 3px 12px;
-  margin-bottom: 12px;
+  gap: 7px;
+  padding: 4px 14px;
   background: var(--mfa-badge-bg);
   color: var(--mfa-badge-color);
   border: 1px solid var(--mfa-badge-border);
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  max-width: 90%;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  max-width: min(100%, 380px);
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.mfa-email-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.mfa-email-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  display: inline-block;
+  vertical-align: baseline;
 }
 
-/* QR Code Section */
+/* --- QR Code Presentation Container --- */
 .mfa-qr-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin: 0 auto 12px;
+  margin: 0 auto 18px;
+  width: fit-content;
+}
+
+.mfa-qr-card {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
   padding: 12px;
   background: #ffffff !important;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  width: fit-content;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--mfa-qr-border);
+  border-radius: 14px;
+  box-shadow: var(--mfa-qr-shadow);
+  transition: all 0.25s ease;
 }
 
-/* Manual Key Section */
-.mfa-manual-label {
-  margin: 0 0 5px;
-  color: var(--mfa-text-sub);
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: center;
+.mfa-qr-card svg {
+  display: block;
+  border-radius: 4px;
 }
 
-.mfa-secret-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-}
-
-.mfa-secret-box {
-  flex: 1;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  margin: 0;
-  background: var(--mfa-box-bg);
-  border: 1px solid var(--mfa-box-border);
-  border-radius: 8px;
-  color: var(--mfa-box-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
-  text-align: center;
-  user-select: all;
-  word-break: break-all;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-
-.mfa-secret-box:hover {
-  border-color: var(--mfa-badge-color);
-}
-
-.mfa-copy-key-btn {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 7px;
-  border: 1px solid var(--mfa-box-border);
-  background: var(--mfa-box-bg);
-  color: var(--mfa-badge-color);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.mfa-copy-key-btn:hover {
-  background: var(--mfa-badge-bg);
-  border-color: var(--mfa-badge-border);
-}
-
+/* --- Dev Mode Helper Banner --- */
 .mfa-dev-helper {
   width: 100%;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  background: rgba(234, 179, 8, 0.12);
-  border: 1px dashed rgba(234, 179, 8, 0.45);
+  padding: 7px 12px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px dashed rgba(234, 179, 8, 0.35);
 }
 
 .mfa-dev-badge {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   color: #ca8a04;
@@ -280,9 +330,9 @@
   background: none;
   border: none;
   color: var(--mfa-text-main);
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 2px 4px;
   border-radius: 4px;
   text-decoration: underline;
   transition: opacity 0.15s ease;
@@ -292,39 +342,7 @@
   opacity: 0.8;
 }
 
-.mfa-troubleshoot-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 14px;
-  font-size: 12px;
-  color: var(--mfa-text-sub);
-}
-
-.mfa-regenerate-btn {
-  background: none;
-  border: none;
-  color: var(--mfa-badge-color);
-  font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 0;
-  transition: opacity 0.15s ease;
-}
-
-.mfa-regenerate-btn:hover {
-  opacity: 0.8;
-}
-
-.mfa-regenerate-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Form & Input */
+/* --- Authenticator Code Input Form --- */
 .mfa-form {
   width: 100%;
   display: flex;
@@ -334,27 +352,35 @@
 
 .mfa-input-label {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 7px;
   color: var(--mfa-text-main);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
+}
+
+.mfa-input-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
 }
 
 .mfa-otp-input {
   width: 100%;
   box-sizing: border-box;
-  height: 42px;
-  padding: 0 12px;
+  height: 50px; /* 48-52px specification */
+  padding: 0 14px;
   background: var(--mfa-input-bg);
-  border: 1px solid var(--mfa-input-border);
-  border-radius: 8px;
+  border: 1.5px solid var(--mfa-input-border);
+  border-radius: 10px;
   color: var(--mfa-input-text);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: 6px;
+  font-size: 24px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 10px;
+  text-indent: 10px; /* Counterbalances trailing letter spacing for perfect optical centering */
   text-align: center;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 .mfa-otp-input:focus {
@@ -363,122 +389,283 @@
 }
 
 .mfa-otp-input::placeholder {
-  color: var(--mfa-text-sub);
-  opacity: 0.5;
-  letter-spacing: 4px;
+  color: var(--mfa-input-placeholder);
+  opacity: 0.45;
+  letter-spacing: 10px;
+  text-indent: 10px;
 }
 
-/* Buttons */
+/* --- Primary Verify and Enable MFA CTA Button --- */
 .mfa-submit-btn {
   width: 100%;
   box-sizing: border-box;
-  height: 42px;
-  margin-top: 10px;
+  height: 50px; /* 48-52px specification */
+  margin-top: 14px;
   border: none;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+  border-radius: 10px;
+  background: var(--mfa-btn-gradient);
   color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  box-shadow: 0 3px 12px rgba(6, 182, 212, 0.28);
-  transition: opacity 0.15s ease, transform 0.1s ease;
+  gap: 8px;
+  box-shadow: var(--mfa-btn-shadow);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
 }
 
 .mfa-submit-btn:hover:not(:disabled) {
-  opacity: 0.95;
+  filter: brightness(1.06);
   transform: translateY(-1px);
+  box-shadow: var(--mfa-btn-hover-shadow);
+}
+
+.mfa-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.96);
 }
 
 .mfa-submit-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
+  transform: none;
+  filter: none;
 }
 
-.mfa-secondary-btn {
+.mfa-submit-btn:focus-visible {
+  outline: 2px solid var(--mfa-input-focus);
+  outline-offset: 3px;
+}
+
+.mfa-btn-text-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mfa-btn-arrow {
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.mfa-submit-btn:hover:not(:disabled) .mfa-btn-arrow {
+  transform: translateX(3px);
+}
+
+.mfa-btn-loading-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- Secondary Troubleshoot / Regenerate Action --- */
+.mfa-troubleshoot-row {
   width: 100%;
-  box-sizing: border-box;
-  height: 40px;
-  margin-bottom: 10px;
-  border: 1px solid var(--mfa-badge-border);
-  border-radius: 8px;
-  background: var(--mfa-badge-bg);
-  color: var(--mfa-badge-color);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--mfa-text-sub);
+}
+
+.mfa-regenerate-btn {
+  background: none;
+  border: none;
+  color: var(--mfa-link-color);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 4px;
   transition: all 0.15s ease;
+  outline: none;
 }
 
-.mfa-secondary-btn:hover {
-  filter: brightness(0.96);
+.mfa-regenerate-btn:hover:not(:disabled) {
+  text-decoration: underline;
+  opacity: 0.9;
 }
 
-/* Messages & Alerts */
+.mfa-regenerate-btn:focus-visible {
+  outline: 2px solid var(--mfa-input-focus);
+  outline-offset: 2px;
+}
+
+.mfa-regenerate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Alert Messages & Loading --- */
 .mfa-error-alert {
-  padding: 8px 12px;
-  margin: 0 0 10px;
-  border-radius: 8px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
-  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 0 0 14px;
+  border-radius: 9px;
+  background: var(--mfa-error-bg);
+  border: 1px solid var(--mfa-error-border);
+  color: var(--mfa-error-text);
+  font-size: 12.5px;
+  line-height: 1.45;
   text-align: left;
-  line-height: 1.4;
+  box-sizing: border-box;
 }
 
-.mfa-recovery-alert {
-  padding: 8px 12px;
-  margin: 0 0 12px;
-  border-radius: 8px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  color: #166534;
-  font-size: 12px;
-  line-height: 1.4;
+.mfa-alert-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-/* Recovery Codes Grid */
-.mfa-recovery-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 10px;
-  margin-bottom: 12px;
-  border: 1px solid var(--mfa-box-border);
-  border-radius: 8px;
-  background: var(--mfa-box-bg);
-  color: var(--mfa-box-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  text-align: center;
+.mfa-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 0;
+  gap: 12px;
 }
 
-/* Responsive adjustments */
-@media (max-width: 480px) {
+.mfa-spinner {
+  width: 22px;
+  height: 22px;
+  color: var(--mfa-input-focus);
+  animation: mfa-spin 0.8s linear infinite;
+}
+
+.mfa-btn-loading-content .mfa-spinner {
+  width: 16px;
+  height: 16px;
+  color: #ffffff;
+}
+
+@keyframes mfa-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN SYSTEM
+   Checked across Desktop (1440px), Laptop (1024px), Tablet (768px), Mobile (480px, 360px)
+   ========================================================================== */
+
+@media (max-width: 600px) {
   .mfa-setup-page {
-    padding: 14px;
+    padding: 20px 14px;
   }
 
   .mfa-setup-card {
-    padding: 20px 18px;
-    border-radius: 14px;
+    padding: 26px 22px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mfa-setup-page {
+    padding: 16px 12px;
+  }
+
+  .mfa-theme-toggle-wrapper {
+    top: 14px;
+    right: 14px;
+  }
+
+  .mfa-setup-card {
+    padding: 22px 16px 18px;
+    border-radius: 16px;
   }
 
   .mfa-title {
-    font-size: 18px;
+    font-size: 18.5px;
   }
 
   .mfa-desc {
     font-size: 12.5px;
+    margin-bottom: 10px;
+  }
+
+  .mfa-email-badge-wrapper {
+    margin-bottom: 12px;
+  }
+
+  .mfa-setup-card .mfa-email-pill,
+  .mfa-email-pill {
+    font-size: 12px;
+    padding: 3px 12px;
+    max-width: 100%;
+  }
+
+  .mfa-qr-container {
+    margin-bottom: 14px;
+  }
+
+  .mfa-qr-card {
+    padding: 10px;
+  }
+
+  .mfa-qr-card svg {
+    width: 140px;
+    height: 140px;
+  }
+
+  .mfa-otp-input {
+    height: 46px;
+    font-size: 21px;
+    letter-spacing: 7px;
+    text-indent: 7px;
+  }
+
+  .mfa-otp-input::placeholder {
+    letter-spacing: 7px;
+    text-indent: 7px;
+  }
+
+  .mfa-submit-btn {
+    height: 46px;
+    font-size: 14.5px;
+    margin-top: 10px;
+  }
+
+  .mfa-troubleshoot-row {
+    margin-top: 12px;
+    font-size: 12px;
+  }
+
+  .mfa-regenerate-btn {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .mfa-setup-card {
+    padding: 18px 12px 16px;
+  }
+
+  .mfa-title {
+    font-size: 17px;
+  }
+
+  .mfa-otp-input {
+    font-size: 18px;
+    letter-spacing: 5px;
+    text-indent: 5px;
+  }
+
+  .mfa-otp-input::placeholder {
+    letter-spacing: 5px;
+    text-indent: 5px;
   }
 }

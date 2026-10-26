@@ -16,6 +16,7 @@ export interface User {
   phone?: string;
   role: string;
   status: string;
+  invitation_status?: string;
   photo_url?: string | null;
   created_at?: string;
 }

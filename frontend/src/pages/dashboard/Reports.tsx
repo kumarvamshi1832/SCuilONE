@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import {
   ResponsiveContainer,
@@ -16,6 +15,7 @@ import {
 import { getReportsSummary } from "../../services/reportService";
 import type { ReportsSummary } from "../../types/report";
 import type { ReportFilters } from "../../services/reportService";
+import { useTheme } from "../../context/ThemeContext";
 import "./Reports.css";
 
 const CHART_COLORS = [
@@ -48,6 +48,63 @@ export default function Reports() {
   const [appliedFilters, setAppliedFilters] = useState<ReportFilters>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  let isDark = false;
+  try {
+    const { theme } = useTheme();
+    isDark = theme === "dark";
+  } catch {
+    isDark =
+      typeof document !== "undefined" &&
+      (document.body.classList.contains("dark") ||
+        Boolean(document.querySelector(".dashboard-wrapper.dark")));
+  }
+
+  // Theme-aware tokens for Recharts SVG attributes
+  const textMutedColor = isDark ? "#e2e8f0" : "#64748b";
+  const gridColor = isDark ? "rgba(255, 255, 255, 0.08)" : "#f1f5f9";
+  const axisColor = isDark ? "#475569" : "#e2e8f0";
+  const tickColor = isDark ? "#e2e8f0" : "#64748b";
+  const tooltipBg = isDark ? "#1e293b" : "#ffffff";
+  const tooltipBorder = isDark ? "#475569" : "#e2e8f0";
+  const tooltipText = isDark ? "#ffffff" : "#0f172a";
+
+  const tooltipStyle = {
+    backgroundColor: tooltipBg,
+    borderColor: tooltipBorder,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderRadius: 8,
+    color: tooltipText,
+    boxShadow: isDark
+      ? "0 4px 16px rgba(0, 0, 0, 0.45)"
+      : "0 4px 16px rgba(0, 0, 0, 0.08)",
+    fontSize: 12,
+    padding: "8px 12px",
+  };
+
+  const renderPieLabel = (entry: any) => {
+    const { name, value, cx, cy, midAngle, outerRadius } = entry;
+    if (!value || value <= 0) return null;
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 18;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text
+        x={x}
+        y={y}
+        fill={isDark ? "#f8fafc" : "#1e293b"}
+        textAnchor={x > cx ? "start" : "end"}
+        dominantBaseline="central"
+        fontSize={12}
+        fontWeight={600}
+      >
+        {`${name}: ${value}`}
+      </text>
+    );
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +261,7 @@ export default function Reports() {
   };
 
   const leadChartData = report?.leads.status_breakdown ?? [];
+  const activeLeadChartData = leadChartData.filter((item) => item.count > 0);
 
   const pipelineChartData = (report?.pipeline ?? []).map((item) => ({
     name: `${item.pipeline_name} - ${item.stage_name}`,
@@ -213,13 +271,16 @@ export default function Reports() {
   if (loading && !report) {
     return (
       <div className="reports-page">
-        <p className="reports-message">Loading reports...</p>
+        <div className="reports-loading-card">
+          <p className="reports-message">Loading reports & analytics...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="reports-page">
+      {/* ─── Header ─── */}
       <div className="reports-header">
         <div>
           <h1>Reports & Analytics</h1>
@@ -230,32 +291,53 @@ export default function Reports() {
           className="reports-export-button"
           onClick={exportCsv}
           disabled={!report || loading}
+          title="Download report data as CSV"
         >
-          Export CSV
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span>Export CSV</span>
         </button>
       </div>
 
+      {/* ─── Compact Date Filter Card ─── */}
       <section className="reports-filter-card">
-        <div className="reports-filter-heading">
-          <h2>Date Range</h2>
-          <span>Filter records by creation date</span>
-        </div>
+        <div className="reports-filter-top">
+          <div className="reports-filter-heading">
+            <h2>Date Range</h2>
+            <span>Filter records by creation date</span>
+          </div>
 
-        <div className="reports-presets">
-          <button type="button" onClick={() => setPreset("today")}>
-            Today
-          </button>
-          <button type="button" onClick={() => setPreset("week")}>
-            This Week
-          </button>
-          <button type="button" onClick={() => setPreset("month")}>
-            This Month
-          </button>
+          <div className="reports-presets">
+            <button
+              type="button"
+              className="reports-preset-btn"
+              onClick={() => setPreset("today")}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className="reports-preset-btn"
+              onClick={() => setPreset("week")}
+            >
+              This Week
+            </button>
+            <button
+              type="button"
+              className="reports-preset-btn"
+              onClick={() => setPreset("month")}
+            >
+              This Month
+            </button>
+          </div>
         </div>
 
         <div className="reports-filter-controls">
-          <label>
-            Start Date
+          <label className="reports-filter-label">
+            <span>Start Date</span>
             <input
               type="date"
               value={startDate}
@@ -264,8 +346,8 @@ export default function Reports() {
             />
           </label>
 
-          <label>
-            End Date
+          <label className="reports-filter-label">
+            <span>End Date</span>
             <input
               type="date"
               value={endDate}
@@ -274,27 +356,29 @@ export default function Reports() {
             />
           </label>
 
-          <button
-            type="button"
-            className="reports-apply-button"
-            onClick={applyFilters}
-          >
-            Apply Filters
-          </button>
+          <div className="reports-filter-actions">
+            <button
+              type="button"
+              className="reports-apply-button"
+              onClick={applyFilters}
+            >
+              Apply Filters
+            </button>
 
-          <button
-            type="button"
-            className="reports-clear-button"
-            onClick={clearFilters}
-          >
-            Clear
-          </button>
+            <button
+              type="button"
+              className="reports-clear-button"
+              onClick={clearFilters}
+            >
+              Clear
+            </button>
+          </div>
         </div>
       </section>
 
       {error && (
         <div className="reports-error" role="alert">
-          {error}
+          <span>{error}</span>
           {report && (
             <button type="button" onClick={() => setError("")}>
               Dismiss
@@ -309,9 +393,10 @@ export default function Reports() {
 
       {report && (
         <>
+          {/* ─── 1. Sales Overview (5-Card Grid) ─── */}
           <section className="reports-section">
-            <h2>Sales Overview</h2>
-            <div className="reports-metrics-grid">
+            <h2 className="reports-section-title">Sales Overview</h2>
+            <div className="reports-metrics-grid reports-sales-grid">
               <MetricCard
                 title="Total Deals"
                 value={formatNumber(report.sales.total_deals)}
@@ -344,9 +429,10 @@ export default function Reports() {
             </div>
           </section>
 
+          {/* ─── 2. Lead Performance (3-Card Grid) ─── */}
           <section className="reports-section">
-            <h2>Lead Performance</h2>
-            <div className="reports-metrics-grid">
+            <h2 className="reports-section-title">Lead Performance</h2>
+            <div className="reports-metrics-grid reports-leads-grid">
               <MetricCard
                 title="Total Leads"
                 value={formatNumber(report.leads.total_leads)}
@@ -367,31 +453,61 @@ export default function Reports() {
             </div>
           </section>
 
+          {/* ─── 3. Lead & Deals Charts (2-Column Grid) ─── */}
           <section className="reports-charts-grid">
             <div className="reports-chart-card">
               <h3>Leads by Status</h3>
               {leadChartData.length ? (
                 <div className="reports-chart">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={290}>
                     <PieChart>
                       <Pie
-                        data={leadChartData}
+                        data={activeLeadChartData}
                         dataKey="count"
                         nameKey="status"
                         cx="50%"
-                        cy="50%"
-                        outerRadius={95}
-                        label={({ name, value }) => `${name}: ${value}`}
+                        cy="46%"
+                        innerRadius={46}
+                        outerRadius={76}
+                        paddingAngle={activeLeadChartData.length > 1 ? 3 : 0}
+                        stroke={isDark ? "#1f1f1f" : "#ffffff"}
+                        strokeWidth={2}
+                        label={renderPieLabel}
+                        labelLine={{
+                          stroke: isDark ? "#94a3b8" : "#64748b",
+                          strokeWidth: 1.5,
+                        }}
                       >
-                        {leadChartData.map((item, index) => (
+                        {activeLeadChartData.map((item, index) => (
                           <Cell
                             key={item.status}
                             fill={CHART_COLORS[index % CHART_COLORS.length]}
                           />
                         ))}
                       </Pie>
-                      <Tooltip />
-                      <Legend />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: tooltipText }}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        align="center"
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ paddingTop: 8 }}
+                        formatter={(value) => (
+                          <span
+                            style={{
+                              color: textMutedColor,
+                              fontSize: 12,
+                              marginRight: 8,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {value}
+                          </span>
+                        )}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -404,27 +520,52 @@ export default function Reports() {
               <h3>Deals by Pipeline Stage</h3>
               {pipelineChartData.length ? (
                 <div className="reports-chart reports-pipeline-chart">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height={290}>
                     <BarChart
                       data={pipelineChartData}
-                      margin={{ top: 10, right: 12, left: -12, bottom: 65 }}
+                      margin={{
+                        top: 16,
+                        right: 16,
+                        left: -12,
+                        bottom: pipelineChartData.length > 3 ? 48 : 20,
+                      }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" />
+                      <CartesianGrid
+                        stroke={gridColor}
+                        strokeDasharray="3 3"
+                        vertical={false}
+                      />
                       <XAxis
                         dataKey="name"
-                        angle={-35}
-                        textAnchor="end"
+                        angle={pipelineChartData.length > 3 ? -25 : 0}
+                        textAnchor={pipelineChartData.length > 3 ? "end" : "middle"}
                         interval={0}
-                        height={90}
-                        tick={{ fontSize: 10 }}
+                        height={pipelineChartData.length > 3 ? 56 : 28}
+                        tick={{ fill: tickColor, fontSize: 11, fontWeight: 500 }}
+                        axisLine={{ stroke: axisColor }}
+                        tickLine={{ stroke: axisColor }}
                       />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fill: tickColor, fontSize: 11 }}
+                        axisLine={{ stroke: axisColor }}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: tooltipText }}
+                        cursor={{
+                          fill: isDark
+                            ? "rgba(255, 255, 255, 0.04)"
+                            : "rgba(0, 0, 0, 0.04)",
+                        }}
+                      />
                       <Bar
                         dataKey="deals"
                         name="Deals"
                         fill="#6366f1"
-                        radius={[5, 5, 0, 0]}
+                        radius={[6, 6, 0, 0]}
+                        maxBarSize={48}
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -435,29 +576,32 @@ export default function Reports() {
             </div>
           </section>
 
+          {/* ─── 4. Pipeline Table ─── */}
           <section className="reports-section">
-            <h2>Pipeline Breakdown</h2>
+            <h2 className="reports-section-title">Pipeline Breakdown</h2>
             <div className="reports-table-wrapper">
               <table className="reports-table">
                 <thead>
                   <tr>
-                    <th>Pipeline</th>
-                    <th>Stage</th>
-                    <th>Deals</th>
+                    <th className="th-pipeline-name">Pipeline</th>
+                    <th className="th-pipeline-stage">Stage</th>
+                    <th className="th-pipeline-deals">Deals</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.pipeline.length ? (
                     report.pipeline.map((item, index) => (
                       <tr key={`${item.pipeline_name}-${item.stage_name}-${index}`}>
-                        <td>{item.pipeline_name}</td>
-                        <td>{item.stage_name}</td>
-                        <td>{item.count}</td>
+                        <td className="td-pipeline-name">{item.pipeline_name}</td>
+                        <td className="td-pipeline-stage">{item.stage_name}</td>
+                        <td className="td-pipeline-deals">{item.count}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={3}>No pipeline data for this period.</td>
+                      <td colSpan={3} className="text-center py-4 text-muted">
+                        No pipeline data for this period.
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -465,9 +609,10 @@ export default function Reports() {
             </div>
           </section>
 
+          {/* ─── 5. Task Overview (4-Card Grid + Controlled Chart) ─── */}
           <section className="reports-section">
-            <h2>Task Overview</h2>
-            <div className="reports-metrics-grid">
+            <h2 className="reports-section-title">Task Overview</h2>
+            <div className="reports-metrics-grid reports-tasks-grid">
               <MetricCard
                 title="Total Tasks"
                 value={formatNumber(report.tasks.total_tasks)}
@@ -497,17 +642,43 @@ export default function Reports() {
               <h3>Tasks by Status</h3>
               {report.tasks.status_breakdown.length ? (
                 <div className="reports-chart reports-task-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={report.tasks.status_breakdown}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="status" />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart
+                      data={report.tasks.status_breakdown}
+                      margin={{ top: 16, right: 16, left: -12, bottom: 16 }}
+                    >
+                      <CartesianGrid
+                        stroke={gridColor}
+                        strokeDasharray="3 3"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="status"
+                        tick={{ fill: tickColor, fontSize: 11, fontWeight: 500 }}
+                        axisLine={{ stroke: axisColor }}
+                        tickLine={{ stroke: axisColor }}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fill: tickColor, fontSize: 11 }}
+                        axisLine={{ stroke: axisColor }}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: tooltipText }}
+                        cursor={{
+                          fill: isDark
+                            ? "rgba(255, 255, 255, 0.04)"
+                            : "rgba(0, 0, 0, 0.04)",
+                        }}
+                      />
                       <Bar
                         dataKey="count"
                         name="Tasks"
                         fill="#10b981"
-                        radius={[5, 5, 0, 0]}
+                        radius={[6, 6, 0, 0]}
+                        maxBarSize={56}
                       />
                     </BarChart>
                   </ResponsiveContainer>

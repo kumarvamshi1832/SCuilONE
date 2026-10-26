@@ -1,0 +1,363 @@
+/* ==========================================================================
+   SCuilONE CRM - MFA / Two-Factor Authentication Page
+   Full Theme Awareness (Light/Dark) consuming Application ThemeContext
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+/* --- Light Theme Variables --- */
+.mfa-page-root.light,
+body.light .mfa-page-root {
+  --mfa-bg-page: linear-gradient(135deg, #f0f4ff 0%, #e8ecf8 50%, #f4f7fb 100%);
+  --mfa-bg-card: #ffffff;
+  --mfa-card-border: #e2e8f0;
+  --mfa-card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 20px 50px -12px rgba(0, 0, 0, 0.12);
+  --mfa-text-primary: #111827;
+  --mfa-text-secondary: #667085;
+  --mfa-badge-bg: #eff6ff;
+  --mfa-badge-color: #1d4ed8;
+  --mfa-badge-border: #dbeafe;
+  --mfa-input-bg: #ffffff;
+  --mfa-input-border: #d0d5dd;
+  --mfa-input-text: #111827;
+  --mfa-input-placeholder: #94a3b8;
+  --mfa-input-focus: #0284c7;
+  --mfa-input-focus-shadow: rgba(2, 132, 199, 0.18);
+  --mfa-btn-bg: linear-gradient(135deg, #1d4ed8, #2563eb);
+  --mfa-btn-shadow: 0 4px 14px rgba(29, 78, 216, 0.25);
+  --mfa-link-color: #1d4ed8;
+  --mfa-error-bg: #fef2f2;
+  --mfa-error-text: #b91c1c;
+  --mfa-error-border: #fecaca;
+  --mfa-success-bg: #f0fdf4;
+  --mfa-success-text: #15803d;
+  --mfa-success-border: #bbf7d0;
+}
+
+/* --- Dark Theme Variables (SCuilONE Cinematic Dark Identity) --- */
+.mfa-page-root.dark,
+body.dark .mfa-page-root {
+  --mfa-bg-page: radial-gradient(ellipse at 50% -20%, #0c2044 0%, #040915 75%);
+  --mfa-bg-card: #0B1425;
+  --mfa-card-border: rgba(56, 189, 248, 0.28);
+  --mfa-card-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(6, 182, 212, 0.12);
+  --mfa-text-primary: #ffffff;
+  --mfa-text-secondary: #94a3b8;
+  --mfa-badge-bg: rgba(56, 189, 248, 0.12);
+  --mfa-badge-color: #38bdf8;
+  --mfa-badge-border: rgba(56, 189, 248, 0.28);
+  --mfa-input-bg: #101c30;
+  --mfa-input-border: rgba(255, 255, 255, 0.18);
+  --mfa-input-text: #ffffff;
+  --mfa-input-placeholder: rgba(148, 163, 184, 0.5);
+  --mfa-input-focus: #38bdf8;
+  --mfa-input-focus-shadow: rgba(56, 189, 248, 0.25);
+  --mfa-btn-bg: linear-gradient(90deg, #0284c7 0%, #06b6d4 100%);
+  --mfa-btn-shadow: 0 4px 18px rgba(6, 182, 212, 0.38);
+  --mfa-link-color: #38bdf8;
+  --mfa-error-bg: rgba(185, 28, 28, 0.15);
+  --mfa-error-text: #fca5a5;
+  --mfa-error-border: rgba(248, 113, 113, 0.3);
+  --mfa-success-bg: rgba(21, 128, 61, 0.15);
+  --mfa-success-text: #86efac;
+  --mfa-success-border: rgba(134, 239, 172, 0.3);
+}
+
+/* --- Page Layout --- */
+.mfa-page-root {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  background: var(--mfa-bg-page);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--mfa-text-primary);
+  transition: background 0.25s ease, color 0.25s ease;
+  position: relative;
+}
+
+/* --- Card Container --- */
+.mfa-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--mfa-bg-card);
+  border: 1px solid var(--mfa-card-border);
+  padding: 36px 32px;
+  border-radius: 16px;
+  box-shadow: var(--mfa-card-shadow);
+  text-align: center;
+  box-sizing: border-box;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Branding Header --- */
+.mfa-logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.mfa-logo-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.3);
+}
+
+.mfa-logo-text {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--mfa-text-primary);
+  letter-spacing: -0.02em;
+  transition: color 0.25s ease;
+}
+
+/* --- Headings & Subtext --- */
+.mfa-heading {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--mfa-text-primary);
+  letter-spacing: -0.01em;
+  transition: color 0.25s ease;
+}
+
+.mfa-subtext {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--mfa-text-secondary);
+  line-height: 1.5;
+  transition: color 0.25s ease;
+}
+
+/* --- Email Badge --- */
+.mfa-email-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  margin-bottom: 20px;
+  background: var(--mfa-badge-bg);
+  color: var(--mfa-badge-color);
+  border: 1px solid var(--mfa-badge-border);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* --- Label & Input --- */
+.mfa-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mfa-text-primary);
+  text-align: left;
+  transition: color 0.25s ease;
+}
+
+.mfa-otp-input {
+  width: 100%;
+  height: 52px;
+  padding: 0 14px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 24px;
+  letter-spacing: 10px;
+  text-indent: 10px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: var(--mfa-input-bg);
+  border: 1px solid var(--mfa-input-border);
+  border-radius: 8px;
+  outline: none;
+  color: var(--mfa-input-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.mfa-otp-input:focus {
+  border-color: var(--mfa-input-focus);
+  box-shadow: 0 0 0 3px var(--mfa-input-focus-shadow);
+}
+
+.mfa-otp-input::placeholder {
+  color: var(--mfa-input-placeholder);
+  opacity: 0.5;
+  letter-spacing: 10px;
+  text-indent: 10px;
+}
+
+/* --- Submit Button --- */
+.mfa-verify-btn {
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--mfa-btn-bg);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  box-shadow: var(--mfa-btn-shadow);
+  transition: opacity 0.15s ease, transform 0.1s ease, filter 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.mfa-verify-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.mfa-verify-btn:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.mfa-verify-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* --- Resend & Back Actions --- */
+.mfa-resend-row {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.mfa-resend-text {
+  color: var(--mfa-text-secondary);
+  transition: color 0.25s ease;
+}
+
+.mfa-link-btn {
+  border: none;
+  background: transparent;
+  color: var(--mfa-link-color);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s ease, opacity 0.15s ease;
+  text-decoration: none;
+}
+
+.mfa-link-btn:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.mfa-link-btn:focus-visible {
+  outline: 2px solid var(--mfa-input-focus);
+  outline-offset: 2px;
+}
+
+.mfa-back-btn {
+  border: none;
+  background: transparent;
+  color: var(--mfa-link-color);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: block;
+  margin: 16px auto 0;
+  transition: color 0.15s ease, opacity 0.15s ease;
+  text-decoration: none;
+}
+
+.mfa-back-btn:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.mfa-back-btn:focus-visible {
+  outline: 2px solid var(--mfa-input-focus);
+  outline-offset: 2px;
+}
+
+/* --- Feedback Alerts --- */
+.mfa-error-box {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--mfa-error-bg);
+  color: var(--mfa-error-text);
+  border-radius: 8px;
+  border: 1px solid var(--mfa-error-border);
+  font-size: 13px;
+  text-align: left;
+  line-height: 1.45;
+}
+
+.mfa-success-box {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--mfa-success-bg);
+  color: var(--mfa-success-text);
+  border-radius: 8px;
+  border: 1px solid var(--mfa-success-border);
+  font-size: 13px;
+  text-align: left;
+  line-height: 1.45;
+}
+
+/* --- Responsive Breakpoints --- */
+@media (max-width: 480px) {
+  .mfa-page-root {
+    padding: 16px 12px;
+  }
+
+  .mfa-card {
+    padding: 28px 20px 24px;
+    border-radius: 14px;
+  }
+
+  .mfa-heading {
+    font-size: 20px;
+  }
+
+  .mfa-otp-input {
+    height: 48px;
+    font-size: 21px;
+    letter-spacing: 7px;
+    text-indent: 7px;
+  }
+
+  .mfa-verify-btn {
+    height: 44px;
+    font-size: 14px;
+  }
+}

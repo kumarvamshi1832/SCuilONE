@@ -67,7 +67,12 @@ export default function Leads() {
 
   // Actions dropdown
   const [openActionId, setOpenActionId] = useState<string | null>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    openUp: boolean;
+  } | null>(null);
   const actionsRef = useRef<HTMLDivElement | null>(null);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -112,10 +117,14 @@ export default function Leads() {
     fetchData();
   }, [fetchData]);
 
-  // Close actions dropdown on outside click
+  // Close actions dropdown on outside click, escape key, or scroll
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement;
+      if (target?.closest && target.closest(".btn-actions-trigger")) {
+        return;
+      }
+      if (actionsRef.current && !actionsRef.current.contains(target as Node)) {
         setOpenActionId(null);
         setDropdownPos(null);
       }
@@ -126,13 +135,21 @@ export default function Leads() {
         setDropdownPos(null);
       }
     };
+    const handleScroll = (e: Event) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
+        setOpenActionId(null);
+        setDropdownPos(null);
+      }
+    };
     if (openActionId) {
       document.addEventListener("mousedown", handleClickOutside);
       document.addEventListener("keydown", handleEscape);
+      window.addEventListener("scroll", handleScroll, true);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, [openActionId]);
 
@@ -149,9 +166,17 @@ export default function Leads() {
       const dropdownHeight = 140; // approximate height of the 3-item menu
       const spaceBelow = window.innerHeight - rect.bottom;
       const openUp = spaceBelow < dropdownHeight + 8;
+      const menuWidth = 148;
+      let left = rect.right - menuWidth;
+      if (left < 8) left = Math.max(8, rect.left);
+      if (left + menuWidth > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - menuWidth - 8);
+      }
+
       setDropdownPos({
-        top: openUp ? rect.top : rect.bottom + 4,
-        left: rect.right - 148, // 140 min-width + 8 padding
+        top: openUp ? undefined : Math.round(rect.bottom + 4),
+        bottom: openUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+        left: Math.round(left),
         openUp,
       });
     }
@@ -216,6 +241,8 @@ export default function Leads() {
   };
 
   const handleView = (lead: Lead) => {
+    setOpenActionId(null);
+    setDropdownPos(null);
     console.log("Opening lead:", lead.id, lead.full_name);
     setViewLead(lead);
   };
@@ -432,8 +459,10 @@ export default function Leads() {
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => (
-                <tr key={lead.id}>
+              {filteredLeads.map((lead) => {
+                const leadId = String(lead.id || (lead as any).lead_id || (lead as any)._id || (lead as any).uuid || "");
+                return (
+                <tr key={leadId || lead.full_name}>
                   <td>
                     <div className="lead-name-cell">
                       <div className="lead-avatar">
@@ -474,9 +503,9 @@ export default function Leads() {
                   <td className="actions-cell">
                     <button
                       className="btn-actions-trigger"
-                      ref={(el) => { triggerRefs.current[lead.id] = el; }}
-                      onClick={() => toggleActions(lead.id)}
-                      id={`lead-actions-${lead.id}`}
+                      ref={(el) => { triggerRefs.current[leadId] = el; }}
+                      onClick={() => toggleActions(leadId)}
+                      id={`lead-actions-${leadId}`}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                         <circle cx="12" cy="12" r="1"></circle>
@@ -486,27 +515,31 @@ export default function Leads() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              );
+            })}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Actions Dropdown â€” rendered outside the table to avoid overflow clipping */}
+      {/* Actions Dropdown — rendered outside the table to avoid overflow clipping */}
       {openActionId && dropdownPos && (() => {
-        const targetLead = leads.find((l) => l.id === openActionId);
+        const targetLead = leads.find((l) => {
+          const lid = String(l.id || (l as any).lead_id || (l as any)._id || (l as any).uuid || "");
+          return lid === openActionId || (lid && openActionId && lid.toLowerCase() === openActionId.toLowerCase());
+        });
         if (!targetLead) return null;
         return (
           <div
-
-
             ref={actionsRef}
-            className="actions-dropdown actions-dropdown-fixed"
+            className={`actions-dropdown actions-dropdown-fixed ${dropdownPos.openUp ? "open-up" : ""}`}
             style={{
               position: "fixed",
-              top: dropdownPos.openUp ? undefined : dropdownPos.top,
-              bottom: dropdownPos.openUp ? window.innerHeight - dropdownPos.top + 4 : undefined,
-              left: dropdownPos.left,
+              top: dropdownPos.top !== undefined ? `${dropdownPos.top}px` : "auto",
+              bottom: dropdownPos.bottom !== undefined ? `${dropdownPos.bottom}px` : "auto",
+              left: `${dropdownPos.left}px`,
+              right: "auto",
+              marginTop: 0,
               zIndex: 9999,
             }}
           >

@@ -94,6 +94,22 @@ export default function SalesDashboard() {
     });
   };
 
+  const renderTaskDueDate = (dueDate?: string | null) => {
+    if (!dueDate) return <span className="task-empty-cell">—</span>;
+    const formatted = formatDateTime(dueDate);
+    if (formatted === "—") return <span className="task-empty-cell">—</span>;
+    const parts = formatted.split(", ");
+    if (parts.length === 2) {
+      return (
+        <div className="task-date-cell">
+          <span className="task-date-main">{parts[0]}</span>
+          <span className="task-date-sub">{parts[1]}</span>
+        </div>
+      );
+    }
+    return <span className="task-date-main">{formatted}</span>;
+  };
+
   return (
     <div className="real-estate-dashboard">
       <div className="welcome-section">
@@ -175,24 +191,24 @@ export default function SalesDashboard() {
             </div>
           </div>
 
-          <div className="dashboard-section-card" style={{ marginTop: '1.5rem' }}>
-            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3>Today's Tasks</h3>
-              <Link to={`${basePath}/activities`} className="view-all-link" style={{ fontSize: '0.875rem' }}>
+          <div className="dashboard-section-card today-tasks-card" style={{ marginTop: '1.5rem' }}>
+            <div className="section-header today-tasks-header">
+              <h3 className="today-tasks-title">Today's Tasks</h3>
+              <Link to={`${basePath}/activities`} className="view-all-link today-tasks-view-all">
                 View All Activities →
               </Link>
             </div>
             {hasPermission("task.view") || hasPermission("activity.view") || true ? (
-              <div className="table-responsive">
-                <table className="roles-table">
+              <div className="table-responsive today-tasks-table-responsive">
+                <table className="today-tasks-table roles-table">
                   <thead>
                     <tr>
-                      <th>Due Date</th>
-                      <th>Task Title</th>
-                      <th>Related Lead</th>
-                      <th>Priority</th>
-                      <th>Status</th>
-                      <th>Action</th>
+                      <th className="tasks-col-due-date">Due Date</th>
+                      <th className="tasks-col-title">Task Title</th>
+                      <th className="tasks-col-lead">Related Lead</th>
+                      <th className="tasks-col-priority">Priority</th>
+                      <th className="tasks-col-status">Status</th>
+                      <th className="tasks-col-action">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -212,66 +228,60 @@ export default function SalesDashboard() {
                       tasks.slice(0, 8).map((task) => {
                         const relatedLead = leads.find((l) => l.id === task.lead_id);
                         return (
-                          <tr key={task.id}>
-                            <td style={{ padding: '10px 12px' }}>
-                              {task.due_date ? formatDateTime(task.due_date) : "—"}
+                          <tr key={task.id} className="today-tasks-row">
+                            <td className="tasks-col-due-date">
+                              {renderTaskDueDate(task.due_date)}
                             </td>
-                            <td style={{ padding: '10px 12px', fontWeight: 500 }}>
-                              <span
-                                style={{ cursor: 'pointer', color: 'var(--primary-color, #2563eb)' }}
-                                onClick={() => setViewTask(task)}
-                                title="Click to view task details"
-                              >
-                                {task.title}
-                              </span>
-                            </td>
-                            <td style={{ padding: '10px 12px' }}>
-                              {relatedLead ? (
-                                <span
-                                  style={{
-                                    cursor: 'pointer',
-                                    textDecoration: 'underline',
-                                    color: 'var(--primary-color, #2563eb)',
-                                    fontWeight: 500,
-                                  }}
-                                  onClick={() => setViewLead(relatedLead)}
-                                  title={`Click to view lead: ${relatedLead.full_name}`}
+                            <td className="tasks-col-title">
+                              <div className="task-title-cell">
+                                <button
+                                  type="button"
+                                  className="task-title-btn"
+                                  onClick={() => setViewTask(task)}
+                                  title="Click to view task details"
                                 >
-                                  {relatedLead.full_name}
-                                </span>
-                              ) : task.lead_id ? (
-                                <span className="text-muted">Lead #{task.lead_id.slice(0, 8)}</span>
-                              ) : (
-                                <span className="text-muted">—</span>
-                              )}
+                                  {task.title}
+                                </button>
+                              </div>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td className="tasks-col-lead">
+                              <div className="task-lead-cell">
+                                {relatedLead ? (
+                                  <button
+                                    type="button"
+                                    className="task-lead-btn"
+                                    onClick={() => setViewLead(relatedLead)}
+                                    title={`Click to view lead: ${relatedLead.full_name}`}
+                                  >
+                                    {relatedLead.full_name}
+                                  </button>
+                                ) : task.lead_id ? (
+                                  <span className="task-lead-muted">Lead #{task.lead_id.slice(0, 8)}</span>
+                                ) : (
+                                  <span className="task-empty-cell">—</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="tasks-col-priority">
                               <span
-                                className={`status-badge ${
-                                  task.priority?.toLowerCase() === 'high'
-                                    ? 'inactive'
-                                    : 'active'
-                                }`}
+                                className={`task-badge priority-badge priority-${(task.priority || 'medium').toLowerCase()}`}
                               >
-                                {task.priority}
+                                {task.priority || 'Medium'}
                               </span>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td className="tasks-col-status">
                               <span
-                                className={`status-badge ${
-                                  task.status?.toLowerCase() === 'completed'
-                                    ? 'active'
-                                    : 'inactive'
-                                }`}
+                                className={`task-badge status-badge status-${(task.status || 'pending').toLowerCase().replace(/\s+/g, '-')}`}
                               >
-                                {task.status}
+                                {task.status || 'Pending'}
                               </span>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td className="tasks-col-action">
                               <button
-                                className="btn-secondary"
-                                style={{ padding: '4px 10px', fontSize: '0.785rem' }}
+                                type="button"
+                                className="task-action-view-btn"
                                 onClick={() => setViewTask(task)}
+                                aria-label={`View task details for ${task.title}`}
                               >
                                 View
                               </button>

@@ -28,6 +28,18 @@ import RealEstateDashboard from "../pages/dashboard/RealEstateDashboard";
 
 import EducationConsultingDashboard from "../pages/dashboard/EducationConsultingDashboard";
 
+import SoftwareCompanyDashboard from "../pages/dashboard/SoftwareCompanyDashboard";
+
+import TrainingInstituteDashboard from "../pages/dashboard/TrainingInstituteDashboard";
+
+import DigitalMarketingAgencyDashboard from "../pages/dashboard/DigitalMarketingAgencyDashboard";
+
+import InsuranceAgencyDashboard from "../pages/dashboard/InsuranceAgencyDashboard";
+
+import IndustryDashboard from "../pages/dashboard/IndustryDashboard";
+
+import { normalizeIndustry } from "../utils/industryUtils";
+
 import ManagerDashboard from "../pages/dashboard/ManagerDashboard";
 
 import SalesDashboard from "../pages/dashboard/SalesDashboard";
@@ -60,11 +72,13 @@ import Pipelines from "../pages/pipelines/Pipelines";
 
 import Activities from "../pages/activities/Activities";
 
+/* Dedicated Tasks page */
+
+import Tasks from "../pages/tasks/Tasks";
+
 /* Keep these pages as placeholders */
 
 import {
-
-  Tasks,
 
   Settings,
 
@@ -80,16 +94,37 @@ function DashboardResolver() {
 
   const { industry } = useParams();
 
-  switch (industry) {
+  const normalized = normalizeIndustry(industry);
 
-    case "real-estate":
+  switch (normalized) {
 
-      return <RealEstateDashboard />;
+    case "software-company":
+
+      return <SoftwareCompanyDashboard />;
 
     case "education-consulting":
 
       return <EducationConsultingDashboard />;
 
+    case "training-institute":
+
+      return <TrainingInstituteDashboard />;
+
+    case "digital-marketing-agency":
+
+      return <DigitalMarketingAgencyDashboard />;
+
+    case "insurance-agency":
+
+      return <InsuranceAgencyDashboard />;
+
+    case "real-estate":
+
+      return <RealEstateDashboard />;
+
+    default:
+
+      return <IndustryDashboard />;
 
   }
 
@@ -187,11 +222,7 @@ function RootRedirect() {
 
       if (tenant.industry) {
 
-        const slug = tenant.industry
-
-          .toLowerCase()
-
-          .replace(/\s+/g, "-");
+        const slug = normalizeIndustry(tenant.industry);
 
         return <Navigate to={`/${slug}/dashboard`} replace />;
 
@@ -224,6 +255,7 @@ export default function AppRoutes() {
         <Route path="/verify-reset-otp" element={<VerifyResetOTP />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/accept-invitation" element={<AcceptInvitation />} />
+        <Route path="/set-password" element={<AcceptInvitation />} />
         <Route path="/complete-profile" element={<CompleteProfile />} />
 
         {/* Protected Routes */}

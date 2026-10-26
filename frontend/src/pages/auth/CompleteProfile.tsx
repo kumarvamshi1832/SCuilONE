@@ -1,128 +1,252 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useState, useEffect, FormEvent } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useTheme } from "../../context/ThemeContext";
+import { completeUserProfile } from "../../services/authService";
 import "./CompleteProfile.css";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function CompleteProfile() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   const token = sessionStorage.getItem("onboarding_token");
 
-  const [fullName, setFullName] = useState("");
+  const [fullName, setFullName] = useState(() => {
+    return sessionStorage.getItem("onboarding_full_name") || "";
+  });
   const [phone, setPhone] = useState("");
   const [jobTitle, setJobTitle] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (!token) {
+      setError(
+        "Your onboarding session has expired or is invalid. Please accept your invitation again."
+      );
+    }
+  }, [token]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError("");
+    setError(null);
 
     if (!token) {
       setError("Your onboarding session has expired. Please accept your invitation again.");
       return;
     }
 
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      setError("Full Name must contain at least 2 characters.");
+      return;
+    }
+
+    if (!phone.trim() || phone.trim().length < 7) {
+      setError("Please enter a valid phone number (at least 7 digits).");
+      return;
+    }
+
+    if (!jobTitle.trim() || jobTitle.trim().length < 2) {
+      setError("Job Title must contain at least 2 characters.");
+      return;
+    }
+
     try {
       setLoading(true);
 
-      await axios.post(
-        `${API_URL}/api/v1/auth/complete-profile`,
+      await completeUserProfile(
         {
           full_name: fullName.trim(),
           phone: phone.trim(),
           job_title: jobTitle.trim(),
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        token
       );
 
+      // Clean up temporary onboarding storage
       sessionStorage.removeItem("onboarding_token");
+      sessionStorage.removeItem("onboarding_full_name");
+      sessionStorage.removeItem("onboarding_email");
       sessionStorage.removeItem("access_token");
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("tenant");
 
+      // Redirect to login with success message
       navigate("/login", {
         replace: true,
         state: {
-          message: "Profile completed successfully. Please log in.",
+          message:
+            "Account activated successfully! You can now log in with your new password.",
         },
       });
     } catch (err: any) {
-      setError(
-        err.response?.data?.detail ||
-          "Unable to complete your profile. Please try again."
-      );
+      console.error("Complete profile failed", err);
+      const msg =
+        err?.message ||
+        "Unable to complete your profile. Please check your information and try again.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="complete-profile-page">
-      <form className="complete-profile-card" onSubmit={handleSubmit}>
-        <div className="complete-profile-brand">SCuilONE</div>
+    <div className={`complete-profile-wrapper ${theme}`}>
+      {/* Theme Toggle Button */}
+      <button
+        className="complete-profile-theme-toggle"
+        onClick={toggleTheme}
+        aria-label="Toggle theme"
+        type="button"
+      >
+        {theme === "light" ? (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        )}
+      </button>
 
-        <h1>Complete Your Profile</h1>
+      <div className="complete-profile-card">
+        {/* Brand header */}
+        <div className="complete-profile-brand-row">
+          <div className="complete-profile-logo-badge" aria-hidden="true">S</div>
+          <div>
+            <h1 className="complete-profile-brand-title">SCuilONE</h1>
+          </div>
+          <span className="complete-profile-brand-tag">CRM</span>
+        </div>
 
-        <p className="complete-profile-description">
-          Welcome aboard! Enter your details to finish setting up your account.
+        <h2 className="complete-profile-title">Complete Your Profile</h2>
+        <p className="complete-profile-subtext">
+          Welcome aboard! Enter your information to finish setting up your account.
         </p>
 
-        {error && <div className="profile-error">{error}</div>}
+        {error && (
+          <div className="complete-profile-alert error" role="alert">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
 
-        <label htmlFor="fullName">Full Name</label>
-        <input
-          id="fullName"
-          type="text"
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
-          placeholder="Enter your full name"
-          minLength={2}
-          maxLength={150}
-          autoComplete="name"
-          required
-        />
+        {!token ? (
+          <div>
+            <p style={{ fontSize: "14px", color: "var(--auth-text-muted)", margin: "0 0 20px" }}>
+              Please click the setup link in your invitation email to begin.
+            </p>
+            <Link
+              to="/login"
+              className="complete-profile-btn"
+              style={{ textDecoration: "none" }}
+            >
+              Go to Login
+            </Link>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="complete-profile-form-group">
+              <label className="complete-profile-label" htmlFor="profile-full-name">
+                Full Name
+              </label>
+              <input
+                id="profile-full-name"
+                type="text"
+                className="complete-profile-input"
+                value={fullName}
+                onChange={(e) => {
+                  setFullName(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Enter your full name"
+                minLength={2}
+                maxLength={150}
+                autoComplete="name"
+                disabled={loading}
+                required
+              />
+            </div>
 
-        <label htmlFor="phone">Phone Number</label>
-        <input
-          id="phone"
-          type="tel"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          placeholder="Enter your phone number"
-          minLength={7}
-          maxLength={20}
-          autoComplete="tel"
-          required
-        />
+            <div className="complete-profile-form-group">
+              <label className="complete-profile-label" htmlFor="profile-phone">
+                Phone Number
+              </label>
+              <input
+                id="profile-phone"
+                type="tel"
+                className="complete-profile-input"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  setError(null);
+                }}
+                placeholder="e.g. +1 (555) 000-0000"
+                minLength={7}
+                maxLength={20}
+                autoComplete="tel"
+                disabled={loading}
+                required
+              />
+            </div>
 
-        <label htmlFor="jobTitle">Job Title</label>
-        <input
-          id="jobTitle"
-          type="text"
-          value={jobTitle}
-          onChange={(event) => setJobTitle(event.target.value)}
-          placeholder="e.g. Sales Manager"
-          minLength={2}
-          maxLength={100}
-          autoComplete="organization-title"
-          required
-        />
+            <div className="complete-profile-form-group">
+              <label className="complete-profile-label" htmlFor="profile-job-title">
+                Job Title
+              </label>
+              <input
+                id="profile-job-title"
+                type="text"
+                className="complete-profile-input"
+                value={jobTitle}
+                onChange={(e) => {
+                  setJobTitle(e.target.value);
+                  setError(null);
+                }}
+                placeholder="e.g. Senior Account Executive"
+                minLength={2}
+                maxLength={100}
+                autoComplete="organization-title"
+                disabled={loading}
+                required
+              />
+            </div>
 
-        <button type="submit" disabled={loading || !token}>
-          {loading ? "Saving Profile..." : "Complete Profile"}
-        </button>
+            <button
+              type="submit"
+              className="complete-profile-btn"
+              disabled={loading || !token}
+            >
+              {loading ? (
+                <>
+                  <svg className="complete-profile-spinner" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
+                  </svg>
+                  <span>Saving Profile & Activating...</span>
+                </>
+              ) : (
+                <span>Activate Account & Log In →</span>
+              )}
+            </button>
 
-        <div className="profile-step-note">
-          Step 2 of 2 · Account setup
-        </div>
-      </form>
+            <div className="complete-profile-step-note">
+              Step 2 of 2 · Account Setup
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
