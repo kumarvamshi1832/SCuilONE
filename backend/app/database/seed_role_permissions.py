@@ -17,6 +17,21 @@ role_permissions = {
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
         "document.view","document.create","document.delete",
+        "audit.view",
+        "property.view","property.create","property.update","property.delete",
+        "project.view","project.create","project.update","project.delete",
+        "building.view","building.create","building.update","building.delete",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
+
+        "booking.view", "booking.create", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
+
+
+
     ],
 
     "Tenant Admin": [
@@ -31,6 +46,19 @@ role_permissions = {
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
         "document.view","document.create","document.delete",
+        "audit.view",
+        "property.view","property.create","property.update","property.delete",
+        "project.view","project.create","project.update","project.delete",
+        "building.view","building.create","building.update","building.delete",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
+
+        "booking.view", "booking.create", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
+
     ],
 
     "Manager": [
@@ -45,6 +73,20 @@ role_permissions = {
         "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
         "workflow.execution.view",
         "document.view","document.create","document.delete",
+        "audit.view",
+        "property.view","property.create","property.update","property.delete",
+        "project.view","project.create","project.update","project.delete",
+        "building.view","building.create","building.update","building.delete",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
+        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
+
+        "booking.view", "booking.create", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.create", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
+
+
     ],
 
     "Sales User": [
@@ -57,6 +99,18 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view","document.create",
+        "property.view","property.create","property.update",
+        "project.view","project.create","project.update",
+        "building.view","building.create","building.update",
+        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update",
+        "property_match.view","property_match.create","property_match.update",
+        "site_visit.view", "site_visit.create", "site_visit.update",
+
+        "booking.view", "booking.create", "booking.update",
+        "booking.payment.view", "booking.payment.create",
+
+
+
     ],
 
     "Operations User": [
@@ -69,6 +123,18 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view","document.create",
+        "property.view","property.create","property.update",
+        "project.view","project.create","project.update",
+        "building.view","building.create","building.update",
+        "buyer_requirement.view",
+        "property_match.view","property_match.create",
+        "site_visit.view", "site_visit.create",
+
+        "booking.view", "booking.update", "booking.cancel",
+        "booking.payment.view", "booking.payment.verify",
+        "booking.refund.manage", "booking.sale.complete",
+
+
     ],
 
     "Support User": [
@@ -81,6 +147,13 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view","document.create",
+        "property.view",
+        "project.view",
+        "building.view",
+        "buyer_requirement.view",
+        "property_match.view",
+        "site_visit.view",
+        "booking.view", "booking.payment.view",
     ],
 
     "Read-only / Auditor": [
@@ -93,6 +166,14 @@ role_permissions = {
         "pipeline.view",
         "user.view",
         "document.view",
+        "audit.view",
+        "property.view",
+        "project.view",
+        "building.view",
+        "buyer_requirement.view",
+        "property_match.view",
+        "site_visit.view",
+        "booking.view", "booking.payment.view",
     ],
 }
 

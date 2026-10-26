@@ -94,6 +94,52 @@ permissions = [
     ("document.view", "View documents"),
     ("document.create", "Upload documents"),
     ("document.delete", "Delete documents"),
+
+    ("audit.view","View tenant audit logs"),
+
+    ("property.view", "View properties"),
+    ("property.create", "Create properties"),
+    ("property.update", "Update properties"),
+    ("property.delete", "Delete properties"),
+
+    ("project.view", "View projects"),
+    ("project.create", "Create projects"),
+    ("project.update", "Update projects"),
+    ("project.delete", "Delete projects"),
+
+    ("building.view", "View buildings"),
+    ("building.create", "Create buildings"),
+    ("building.update", "Update buildings"),
+    ("building.delete", "Delete buildings"),
+
+    ("buyer_requirement.create", "Create buyer requirements"),
+    ("buyer_requirement.view", "View buyer requirements"),
+    ("buyer_requirement.update", "Update buyer requirements"),
+    ("buyer_requirement.delete", "Delete buyer requirements"),
+
+    ("property_match.view", "View property matches"),
+    ("property_match.create", "Create property matches"),
+    ("property_match.update", "Update property matches"),
+    ("property_match.delete", "Delete property matches"),
+
+    ("site_visit.view", "View site visits"),
+    ("site_visit.create", "Create site visits"),
+    ("site_visit.update", "Update site visits"),
+    ("site_visit.delete", "Delete site visits"),
+
+
+    ("booking.view", "View bookings"),
+    ("booking.create", "Create bookings"),
+    ("booking.update", "Update bookings"),
+    ("booking.cancel", "Cancel bookings"),
+    ("booking.payment.view", "View booking payments"),
+    ("booking.payment.create", "Record booking payments"),
+    ("booking.payment.verify", "Verify booking payments"),
+    ("booking.refund.manage", "Manage booking refunds"),
+    ("booking.sale.complete", "Complete property sales"),
+
+
+
 ]
 
 

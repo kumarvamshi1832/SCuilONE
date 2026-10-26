@@ -1,5 +1,7 @@
+
 import logging
 from uuid import UUID, uuid4
+
 from app.services.notification_service import notify_assignment
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -22,6 +24,7 @@ from app.schemas.account import (
 )
 
 from app.services.workflow_engine import dispatch_workflows
+from app.services.audit_service import log_audit
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +63,6 @@ def validate_assigned_user(
         )
 
 
-
 def run_account_workflows(
     db: Session,
     tenant_id: UUID,
@@ -89,6 +91,24 @@ def run_account_workflows(
             trigger_event
         )
 
+
+def account_audit_data(account: Account):
+    return {
+        "name": account.name,
+        "email": account.email,
+        "phone": account.phone,
+        "website": account.website,
+        "industry": account.industry,
+        "address": account.address,
+        "city": account.city,
+        "state": account.state,
+        "country": account.country,
+        "postal_code": account.postal_code,
+        "status": account.status,
+        "source": account.source,
+        "assigned_to": account.assigned_to,
+        "created_by": account.created_by,
+    }
 
 
 @router.post(
@@ -125,7 +145,6 @@ def create_account(
                 detail="This Lead is already linked to an Account"
             )
 
-    # Use the selected Lead's salesperson when no assignee was selected.
     assigned_to = data.assigned_to
 
     if assigned_to is None and lead is not None:
@@ -163,6 +182,17 @@ def create_account(
         if lead is not None:
             lead.account_id = account.id
 
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="accounts",
+            record_id=account.id,
+            description=f"Created account {account.name}",
+            after_data=account_audit_data(account),
+        )
+
         db.commit()
         db.refresh(account)
 
@@ -170,7 +200,6 @@ def create_account(
         db.rollback()
         raise
 
-    # Notify the assigned salesperson after the Account is saved.
     if account.assigned_to is not None:
         try:
             notify_assignment(
@@ -379,8 +408,6 @@ def get_account(
     }
 
 
-
-
 @router.put(
     "/{account_id}",
     response_model=AccountResponse
@@ -430,9 +457,31 @@ def update_account(
 
     changed_fields = set(changed_values.keys())
 
+    before_data = {
+        field: old_value
+        for field, (old_value, _) in changed_values.items()
+    }
+
     try:
         for field, (_, new_value) in changed_values.items():
             setattr(account, field, new_value)
+
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="update",
+            module="accounts",
+            record_id=account.id,
+            description=f"Updated account {account.name}",
+            before_data=before_data,
+            after_data={
+                field: getattr(account, field, None)
+                for field in changed_fields
+            },
+        )
 
         db.commit()
         db.refresh(account)
@@ -441,7 +490,6 @@ def update_account(
         db.rollback()
         raise
 
-    # Notify the new assignee when assigned or reassigned.
     if (
         account.assigned_to is not None
         and account.assigned_to != previous_assigned_to
@@ -468,7 +516,6 @@ def update_account(
                 account.id
             )
 
-    # Notify the assigned salesperson when the creator updates the account.
     if (
         creator_user_id is not None
         and creator_user_id == user_id
@@ -501,7 +548,6 @@ def update_account(
                 account.id
             )
 
-    # Notify the creator when another user updates the account.
     elif (
         creator_user_id is not None
         and creator_user_id != user_id
@@ -534,7 +580,6 @@ def update_account(
                 account.id
             )
 
-    # Preserve the existing workflow dispatch.
     event_base = (
         f"{account.id}:{account.updated_at.isoformat()}"
         if getattr(account, "updated_at", None)
@@ -584,8 +629,24 @@ def delete_account(
             detail="Account not found"
         )
 
-    db.delete(account)
-    db.commit()
+    try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=UUID(str(current_user["user_id"])),
+            action="delete",
+            module="accounts",
+            record_id=account.id,
+            description=f"Deleted account {account.name}",
+            before_data=account_audit_data(account),
+        )
+
+        db.delete(account)
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "message": "Account deleted successfully"

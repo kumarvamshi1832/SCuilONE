@@ -8,6 +8,7 @@ from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.workflow import Workflow, WorkflowExecution
+from app.services.audit_service import log_audit
 from app.schemas.workflow import (
     WorkflowCreate,
     WorkflowUpdate,
@@ -47,6 +48,20 @@ def get_tenant_workflow(
         )
 
     return workflow
+
+
+def workflow_audit_data(workflow: Workflow):
+    return {
+        "name": workflow.name,
+        "description": workflow.description,
+        "module_name": workflow.module_name,
+        "trigger_event": workflow.trigger_event,
+        "condition_logic": workflow.condition_logic,
+        "conditions": workflow.conditions,
+        "actions": workflow.actions,
+        "is_active": workflow.is_active,
+        "created_by": workflow.created_by,
+    }
 
 
 def validate_workflow_name(
@@ -115,8 +130,22 @@ def create_workflow(
 
     try:
         db.add(workflow)
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="workflows",
+            record_id=workflow.id,
+            description=f"Created workflow '{workflow.name}'",
+            after_data=workflow_audit_data(workflow),
+        )
+
         db.commit()
         db.refresh(workflow)
+
     except Exception:
         db.rollback()
         raise
@@ -173,6 +202,7 @@ def update_workflow(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     workflow = get_tenant_workflow(
         workflow_id,
@@ -180,6 +210,7 @@ def update_workflow(
         db,
     )
 
+    before_data = workflow_audit_data(workflow)
     changes = data.model_dump(exclude_unset=True)
 
     if "name" in changes and changes["name"] is not None:
@@ -207,9 +238,41 @@ def update_workflow(
     for field, value in changes.items():
         setattr(workflow, field, value)
 
+    after_data = workflow_audit_data(workflow)
+
+    changed_fields = [
+        field
+        for field in changes
+        if before_data.get(field) != after_data.get(field)
+    ]
+
+    changed_before = {
+        field: before_data[field]
+        for field in changed_fields
+    }
+
+    changed_after = {
+        field: after_data[field]
+        for field in changed_fields
+    }
+
     try:
+        if changed_fields:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="update",
+                module="workflows",
+                record_id=workflow.id,
+                description=f"Updated workflow '{workflow.name}'",
+                before_data=changed_before,
+                after_data=changed_after,
+            )
+
         db.commit()
         db.refresh(workflow)
+
     except Exception:
         db.rollback()
         raise
@@ -228,6 +291,7 @@ def activate_workflow(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     workflow = get_tenant_workflow(
         workflow_id,
@@ -250,11 +314,26 @@ def activate_workflow(
             detail="Add conditions before activating this workflow",
         )
 
+    was_active = workflow.is_active
     workflow.is_active = True
 
     try:
+        if not was_active:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="activate",
+                module="workflows",
+                record_id=workflow.id,
+                description=f"Activated workflow '{workflow.name}'",
+                before_data={"is_active": False},
+                after_data={"is_active": True},
+            )
+
         db.commit()
         db.refresh(workflow)
+
     except Exception:
         db.rollback()
         raise
@@ -273,6 +352,7 @@ def deactivate_workflow(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     workflow = get_tenant_workflow(
         workflow_id,
@@ -280,11 +360,26 @@ def deactivate_workflow(
         db,
     )
 
+    was_active = workflow.is_active
     workflow.is_active = False
 
     try:
+        if was_active:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="deactivate",
+                module="workflows",
+                record_id=workflow.id,
+                description=f"Deactivated workflow '{workflow.name}'",
+                before_data={"is_active": True},
+                after_data={"is_active": False},
+            )
+
         db.commit()
         db.refresh(workflow)
+
     except Exception:
         db.rollback()
         raise
@@ -331,6 +426,7 @@ def delete_workflow(
     db: Session = Depends(get_db),
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
 
     workflow = get_tenant_workflow(
         workflow_id,
@@ -339,8 +435,20 @@ def delete_workflow(
     )
 
     try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="delete",
+            module="workflows",
+            record_id=workflow.id,
+            description=f"Deleted workflow '{workflow.name}'",
+            before_data=workflow_audit_data(workflow),
+        )
+
         db.delete(workflow)
         db.commit()
+
     except Exception:
         db.rollback()
         raise

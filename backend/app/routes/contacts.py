@@ -1,6 +1,7 @@
 
 import logging
 from uuid import UUID, uuid4
+
 from app.services.notification_service import notify_assignment
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.models.user import User
 from app.models.account import Account
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactResponse
 from app.services.workflow_engine import dispatch_workflows
+from app.services.audit_service import log_audit
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +73,6 @@ def validate_account(
         )
 
 
-
 def run_contact_workflows(
     db: Session,
     tenant_id: UUID,
@@ -99,6 +100,21 @@ def run_contact_workflows(
             contact.id,
             trigger_event
         )
+
+
+def contact_audit_data(contact: Contact):
+    return {
+        "full_name": contact.full_name,
+        "email": contact.email,
+        "phone": contact.phone,
+        "company": contact.company,
+        "job_title": contact.job_title,
+        "address": contact.address,
+        "source": contact.source,
+        "account_id": contact.account_id,
+        "assigned_to": contact.assigned_to,
+        "created_by": contact.created_by,
+    }
 
 
 @router.post(
@@ -153,9 +169,30 @@ def create_contact(
         notes=data.notes
     )
 
-    db.add(contact)
-    db.commit()
-    db.refresh(contact)
+    try:
+        db.add(contact)
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="contacts",
+            record_id=contact.id,
+            description=f"Created contact {contact.full_name}",
+            after_data=contact_audit_data(contact),
+        )
+
+        db.commit()
+        db.refresh(contact)
+
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to create contact or save its audit log"
+        )
+        raise
 
     run_contact_workflows(
         db=db,
@@ -258,8 +295,6 @@ def get_contact(
     return contact
 
 
-
-
 @router.put(
     "/{contact_id}",
     response_model=ContactResponse
@@ -316,9 +351,31 @@ def update_contact(
 
     changed_fields = set(changed_values.keys())
 
+    before_data = {
+        field: old_value
+        for field, (old_value, _) in changed_values.items()
+    }
+
     try:
         for field, (_, new_value) in changed_values.items():
             setattr(contact, field, new_value)
+
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="update",
+            module="contacts",
+            record_id=contact.id,
+            description=f"Updated contact {contact.full_name}",
+            before_data=before_data,
+            after_data={
+                field: getattr(contact, field, None)
+                for field in changed_fields
+            },
+        )
 
         db.commit()
         db.refresh(contact)
@@ -327,7 +384,6 @@ def update_contact(
         db.rollback()
         raise
 
-    # Notify the new assignee when the contact is assigned or reassigned.
     if (
         contact.assigned_to is not None
         and contact.assigned_to != previous_assigned_to
@@ -354,7 +410,6 @@ def update_contact(
             )
             db.rollback()
 
-    # Notify the assigned salesperson when the creator updates the contact.
     if (
         creator_user_id is not None
         and creator_user_id == user_id
@@ -387,7 +442,6 @@ def update_contact(
             )
             db.rollback()
 
-    # Notify the original creator when another user updates the contact.
     elif (
         creator_user_id is not None
         and creator_user_id != user_id
@@ -420,7 +474,6 @@ def update_contact(
             )
             db.rollback()
 
-    # Preserve existing workflow dispatch.
     event_base = (
         f"{contact.id}:{contact.updated_at.isoformat()}"
         if getattr(contact, "updated_at", None)
@@ -457,6 +510,7 @@ def update_contact(
 
     return contact
 
+
 @router.delete(
     "/{contact_id}",
     status_code=status.HTTP_204_NO_CONTENT
@@ -468,6 +522,7 @@ def delete_contact(
     db: Session = Depends(get_db)
 ):
     tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(current_user["user_id"])
 
     contact = db.query(Contact).filter(
         Contact.id == contact_id,
@@ -480,7 +535,23 @@ def delete_contact(
             detail="Contact not found"
         )
 
-    db.delete(contact)
-    db.commit()
+    try:
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="delete",
+            module="contacts",
+            record_id=contact.id,
+            description=f"Deleted contact {contact.full_name}",
+            before_data=contact_audit_data(contact),
+        )
+
+        db.delete(contact)
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
 
     return

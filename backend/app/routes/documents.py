@@ -1,5 +1,7 @@
+
 import io
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -25,6 +27,7 @@ from app.models.contact import Contact
 from app.models.deal import Deal
 from app.models.document import Document
 from app.models.lead import Lead
+from app.services.audit_service import log_audit
 
 
 logger = logging.getLogger(__name__)
@@ -98,6 +101,29 @@ def serialize_document(document: Document):
     }
 
 
+def document_audit_data(document: Document):
+    return {
+        "title": document.title,
+        "filename": document.filename,
+        "document_type": document.document_type,
+        "content_type": document.content_type,
+        "file_size": document.file_size,
+        "description": document.description,
+        "version_number": document.version_number,
+        "is_confidential": document.is_confidential,
+        "expires_at": document.expires_at.isoformat() if document.expires_at else None,
+        "lead_id": str(document.lead_id) if document.lead_id else None,
+        "contact_id": str(document.contact_id) if document.contact_id else None,
+        "account_id": str(document.account_id) if document.account_id else None,
+        "deal_id": str(document.deal_id) if document.deal_id else None,
+        "uploaded_by": str(document.uploaded_by) if document.uploaded_by else None,
+        "updated_by": str(document.updated_by) if document.updated_by else None,
+        "deleted_by": str(document.deleted_by) if document.deleted_by else None,
+        "is_deleted": document.is_deleted,
+        "deleted_at": document.deleted_at.isoformat() if document.deleted_at else None,
+    }
+
+
 def get_parent_record(
     db: Session,
     tenant_id: UUID,
@@ -113,7 +139,11 @@ def get_parent_record(
         ("deal", deal_id, Deal),
     ]
 
-    selected = [(name, record_id, model) for name, record_id, model in parents if record_id]
+    selected = [
+        (name, record_id, model)
+        for name, record_id, model in parents
+        if record_id
+    ]
 
     if len(selected) != 1:
         raise HTTPException(
@@ -177,6 +207,7 @@ async def upload_document(
 ):
     tenant_id = UUID(current_user["tenant_id"])
     user_id = UUID(current_user["user_id"])
+    returned_public_id = None
 
     filename = Path(file.filename or "").name
 
@@ -261,22 +292,23 @@ async def upload_document(
         except UnicodeDecodeError:
             raise HTTPException(status_code=400, detail="Invalid text file encoding")
 
-    storage_public_id = (
-        f"scuilone/documents/{tenant_id}/{uuid4().hex}"
+    storage_public_id = f"scuilone/documents/{tenant_id}/{uuid4().hex}"
+    resource_type = (
+        "image"
+        if extension in {".jpg", ".jpeg", ".png", ".webp"}
+        else "raw"
     )
-
-    resource_type = "image" if extension in {".jpg", ".jpeg", ".png", ".webp"} else "raw"
 
     try:
         upload_result = cloudinary.uploader.upload(
-    io.BytesIO(contents),
-    resource_type=resource_type,
-    type="authenticated",
-    public_id=storage_public_id,
-    overwrite=False,
-    use_filename=False,
-    unique_filename=False,
-)
+            io.BytesIO(contents),
+            resource_type=resource_type,
+            type="authenticated",
+            public_id=storage_public_id,
+            overwrite=False,
+            use_filename=False,
+            unique_filename=False,
+        )
 
         file_url = upload_result.get("secure_url")
         returned_public_id = upload_result.get("public_id")
@@ -305,6 +337,19 @@ async def upload_document(
         )
 
         db.add(document)
+        db.flush()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create",
+            module="documents",
+            record_id=document.id,
+            description=f"Uploaded document '{document.title}'",
+            after_data=document_audit_data(document),
+        )
+
         db.commit()
         db.refresh(document)
 
@@ -321,11 +366,12 @@ async def upload_document(
         db.rollback()
         logger.exception("Document upload failed")
 
-        if "returned_public_id" in locals() and returned_public_id:
+        if returned_public_id:
             try:
                 cloudinary.uploader.destroy(
                     returned_public_id,
                     resource_type=resource_type,
+                    invalidate=True,
                 )
             except Exception:
                 logger.exception("Cloudinary cleanup failed after database error")
@@ -446,6 +492,8 @@ def delete_document(
 
     document = get_document_or_404(db, document_id, tenant_id)
 
+    before_data = document_audit_data(document)
+
     resource_type = (
         "image"
         if Path(document.filename).suffix.lower()
@@ -467,8 +515,25 @@ def delete_document(
             )
 
         document.is_deleted = True
-        document.deleted_at = __import__("datetime").datetime.utcnow()
+        document.deleted_at = datetime.now(timezone.utc)
         document.deleted_by = user_id
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="delete",
+            module="documents",
+            record_id=document.id,
+            description=f"Deleted document '{document.title}'",
+            before_data=before_data,
+            after_data={
+                **before_data,
+                "is_deleted": True,
+                "deleted_by": str(user_id),
+                "deleted_at": document.deleted_at.isoformat(),
+            },
+        )
 
         db.commit()
 
