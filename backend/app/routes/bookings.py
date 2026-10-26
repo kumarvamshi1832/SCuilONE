@@ -8,11 +8,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.models.buyer_requirement import BuyerRequirement
 from app.models.lead import Lead
+from app.models.payment_plan import PaymentPlan
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.booking import Booking
 from app.models.property import Property
+from app.models.deal import Deal
+from app.models.pipeline import Pipeline, PipelineStage
 from app.schemas.booking import (
     BookingCancel,
     BookingCreate,
@@ -110,6 +113,113 @@ def get_locked_property(
         )
 
     return property_record
+
+
+def close_linked_deals(
+    db: Session,
+    booking: Booking,
+    tenant_id: UUID,
+    user_id: UUID,
+    outcome: str,
+) -> None:
+    if outcome not in ("Won", "Lost"):
+        raise ValueError("Outcome must be Won or Lost.")
+
+    deals = (
+        db.query(Deal)
+        .filter(
+            Deal.tenant_id == tenant_id,
+            Deal.booking_id == booking.id,
+        )
+        .with_for_update()
+        .all()
+    )
+
+    for deal in deals:
+        current_stage = None
+
+        if deal.pipeline_stage_id:
+            current_stage = (
+                db.query(PipelineStage)
+                .join(
+                    Pipeline,
+                    Pipeline.id == PipelineStage.pipeline_id,
+                )
+                .filter(
+                    Pipeline.tenant_id == tenant_id,
+                    PipelineStage.id == deal.pipeline_stage_id,
+                )
+                .first()
+            )
+
+        # Never overwrite an already closed Deal.
+        if current_stage and (
+            current_stage.is_closed_won
+            or current_stage.is_closed_lost
+        ):
+            continue
+
+        target_stage = None
+
+        if deal.pipeline_id:
+            target_stage = (
+                db.query(PipelineStage)
+                .join(
+                    Pipeline,
+                    Pipeline.id == PipelineStage.pipeline_id,
+                )
+                .filter(
+                    Pipeline.tenant_id == tenant_id,
+                    PipelineStage.pipeline_id == deal.pipeline_id,
+                    PipelineStage.is_active.is_(True),
+                    (
+                        PipelineStage.is_closed_won.is_(True)
+                        if outcome == "Won"
+                        else PipelineStage.is_closed_lost.is_(True)
+                    ),
+                )
+                .order_by(PipelineStage.position)
+                .first()
+            )
+
+        before_data = {
+            "stage": deal.stage,
+            "pipeline_stage_id": (
+                str(deal.pipeline_stage_id)
+                if deal.pipeline_stage_id else None
+            ),
+        }
+
+        if target_stage:
+            deal.stage = target_stage.name
+            deal.pipeline_stage_id = target_stage.id
+        else:
+            deal.stage = outcome
+            deal.pipeline_stage_id = None
+
+        deal.updated_at = datetime.utcnow()
+
+        log_audit(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="UPDATE",
+            module="deals",
+            record_id=deal.id,
+            description=(
+                f"Deal closed {outcome} after booking "
+                f"{booking.id} was {booking.status}."
+            ),
+            before_data=before_data,
+            after_data={
+                "stage": deal.stage,
+                "pipeline_stage_id": (
+                    str(deal.pipeline_stage_id)
+                    if deal.pipeline_stage_id else None
+                ),
+            },
+        )
+
 
 
 def audit_booking(
@@ -475,12 +585,59 @@ def cancel_booking(
         booking.cancellation_reason = payload.cancellation_reason.strip()
         booking.updated_at = datetime.utcnow()
 
+        close_linked_deals(
+            db=db,
+            booking=booking,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            outcome="Lost",
+        )
+
+
         # Release only when this property is still reserved for this booking.
         if property_record.status == "Reserved":
             property_record.status = "Available"
             property_record.updated_at = datetime.utcnow()
 
+        # Cancel the associated payment plan in the same transaction.
+        payment_plan = (
+            db.query(PaymentPlan)
+            .filter(
+                PaymentPlan.tenant_id == tenant_id,
+                PaymentPlan.booking_id == booking.id,
+            )
+            .with_for_update()
+            .first()
+        )
+
+        plan_before = None
+
+        if payment_plan and payment_plan.status == "Active":
+            plan_before = {
+                "id": str(payment_plan.id),
+                "status": payment_plan.status,
+            }
+            payment_plan.status = "Cancelled"
+            payment_plan.updated_at = datetime.utcnow()
+
         db.flush()
+
+        if payment_plan and plan_before:
+            log_audit(
+                db=db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="UPDATE",
+                module="payment_plans",
+                record_id=payment_plan.id,
+                description=f"Cancelled payment plan after booking {booking.id} was cancelled.",
+                before_data=plan_before,
+                after_data={
+                    "id": str(payment_plan.id),
+                    "status": payment_plan.status,
+                },
+            )
+
 
         audit_booking(
             db,
@@ -618,6 +775,44 @@ def complete_booking(
 
         booking.status = "Completed"
         booking.updated_at = datetime.utcnow()
+
+        close_linked_deals(
+            db=db,
+            booking=booking,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            outcome="Won",
+        )
+
+        if booking.lead_id:
+            lead = (
+                db.query(Lead)
+                .filter(
+                    Lead.id == booking.lead_id,
+                    Lead.tenant_id == tenant_id,
+                )
+                .with_for_update()
+                .first()
+            )
+
+            if lead:
+                lead.status = "Converted"
+                lead.updated_at = datetime.utcnow()
+
+        if booking.buyer_requirement_id:
+            requirement = (
+                db.query(BuyerRequirement)
+                .filter(
+                    BuyerRequirement.id == booking.buyer_requirement_id,
+                    BuyerRequirement.tenant_id == tenant_id,
+                )
+                .with_for_update()
+                .first()
+            )
+
+            if requirement:
+                requirement.status = "Closed"
+                requirement.updated_at = datetime.utcnow()
 
         property_record.status = "Sold"
         property_record.updated_at = datetime.utcnow()

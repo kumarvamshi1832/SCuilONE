@@ -27,7 +27,7 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
-        "booking.payment_plan.view", "booking.payment_plan.create",
+        "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -57,7 +57,7 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
-        "booking.payment_plan.view", "booking.payment_plan.create",
+        "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -85,7 +85,7 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
-        "booking.payment_plan.view", "booking.payment_plan.create",
+        "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
 
@@ -110,7 +110,7 @@ role_permissions = {
         "site_visit.view", "site_visit.create", "site_visit.update",
 
         "booking.view", "booking.create", "booking.update",
-        "booking.payment.view", "booking.payment.create", "booking.payment_plan.view", "booking.payment_plan.create",
+        "booking.payment.view", "booking.payment.create", "booking.payment_plan.view",
 
 
 
@@ -135,7 +135,7 @@ role_permissions = {
 
         "booking.view", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.verify",
-        "booking.payment_plan.view", "booking.payment_plan.create",
+        "booking.payment_plan.view",
         "booking.refund.manage", "booking.sale.complete",
 
 
