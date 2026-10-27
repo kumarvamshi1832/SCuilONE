@@ -53,6 +53,30 @@
   color: #4a90e2;
 }
 
+.sidebar-brand .brand-subtitle {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin-top: 4px;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  line-height: 1.25;
+}
+
+.dashboard-wrapper.dark .sidebar-brand .brand-subtitle {
+  color: #94a3b8;
+}
+
+.insurance-agency-sidebar .sidebar-brand .brand-subtitle {
+  color: #a3c9c1;
+}
+
 .sidebar-nav {
   flex: 1;
   padding: 20px 0;
