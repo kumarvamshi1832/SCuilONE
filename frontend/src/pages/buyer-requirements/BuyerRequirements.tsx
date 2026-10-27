@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   getBuyerRequirements,
   createBuyerRequirement,
@@ -6,10 +6,15 @@ import {
   deleteBuyerRequirement,
 } from "../../services/buyerRequirementService";
 import {
-  createPropertyMatch,
   getMatchesForRequirement,
+  autoMatchProperties,
+  getPotentialMatches,
 } from "../../services/propertyMatchService";
-import { getProperties } from "../../services/propertyService";
+import {
+  getProperties,
+  getProperty,
+  getPropertyImages,
+} from "../../services/propertyService";
 import { getLeads } from "../../services/leadService";
 import { getContacts } from "../../services/contactService";
 import { getUsers } from "../../services/userService";
@@ -24,10 +29,12 @@ import {
 } from "../../types/buyerRequirement";
 import { PROPERTY_TYPES, AREA_UNITS } from "../../types/property";
 import type { PropertyMatch } from "../../types/propertyMatch";
-import type { Property } from "../../types/property";
+import type { Property, PropertyImage } from "../../types/property";
 import type { Lead } from "../../types/lead";
 import type { Contact } from "../../types/contact";
 import type { User } from "../../types/user";
+import PropertyCard from "../../components/properties/PropertyCard";
+import { resolveImageUrl, handleImageError } from "../../utils/imageUrl";
 import "./BuyerRequirements.css";
 
 export default function BuyerRequirements() {
@@ -58,15 +65,32 @@ export default function BuyerRequirements() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Customer link type: 'lead' | 'contact'
-  const [customerLinkType, setCustomerLinkType] = useState<"lead" | "contact">("lead");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
 
-  // Matches State inside View Modal
+  // Matches State
   const [activeMatches, setActiveMatches] = useState<PropertyMatch[]>([]);
+  const [potentialMatches, setPotentialMatches] = useState<Property[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
-  const [matchingActionLoading, setMatchingActionLoading] = useState<string | null>(null);
+  const [isAutoMatching, setIsAutoMatching] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [resolvedProperties, setResolvedProperties] = useState<Record<string, Property>>({});
+  const [propertyImagesMap, setPropertyImagesMap] = useState<Record<string, PropertyImage[]>>({});
+  const [viewingPropertyDetail, setViewingPropertyDetail] = useState<Property | null>(null);
   const [viewTab, setViewTab] = useState<"overview" | "matches">("overview");
+
+  // Stable refs to prevent re-render dependency cycles and visual blinking
+  const resolvedPropertiesRef = useRef<Record<string, Property>>({});
+  const propertyImagesMapRef = useRef<Record<string, PropertyImage[]>>({});
+  const isAutoMatchingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    resolvedPropertiesRef.current = resolvedProperties;
+  }, [resolvedProperties]);
+
+  useEffect(() => {
+    propertyImagesMapRef.current = propertyImagesMap;
+  }, [propertyImagesMap]);
+
 
   // Toast
   const [toastMessage, setToastMessage] = useState<{
@@ -100,28 +124,55 @@ export default function BuyerRequirements() {
   const userPermissions = useMemo(() => {
     try {
       const stored = sessionStorage.getItem("user");
-      if (!stored) return { canCreate: true, canUpdate: true, canDelete: true, canMatch: true };
+      if (!stored)
+        return {
+          canCreate: true,
+          canUpdate: true,
+          canDelete: true,
+          canMatch: true,
+          canViewMatches: true,
+        };
       const parsed = JSON.parse(stored);
-      const perms: string[] = Array.isArray(parsed.permissions)
+      const rawPerms = Array.isArray(parsed.permissions)
         ? parsed.permissions
-        : parsed.role?.permissions || [];
-      const role = String(parsed.role || "").toUpperCase();
+        : Array.isArray(parsed.role?.permissions)
+        ? parsed.role.permissions
+        : Array.isArray(parsed.role_permissions)
+        ? parsed.role_permissions
+        : [];
+      const role = String(parsed.role?.name || parsed.role || "").toUpperCase();
       const isSuperOrAdmin =
-        role.includes("ADMIN") || role.includes("MANAGER") || role === "TENANT ADMIN";
+        role.includes("ADMIN") ||
+        role.includes("MANAGER") ||
+        role === "TENANT ADMIN" ||
+        role === "TENANT_OWNER" ||
+        role === "SUPER ADMIN";
 
       const has = (p: string) =>
-        isSuperOrAdmin || perms.some((x) => x.toLowerCase() === p.toLowerCase());
+        isSuperOrAdmin ||
+        rawPerms.some((x: any) => {
+          const str = typeof x === "string" ? x : x?.name || "";
+          return str.toLowerCase() === p.toLowerCase();
+        });
 
       return {
         canCreate: has("buyer_requirement.create"),
         canUpdate: has("buyer_requirement.update"),
         canDelete: has("buyer_requirement.delete"),
+        canViewMatches: has("property_match.view"),
         canMatch: has("property_match.create"),
       };
     } catch {
-      return { canCreate: true, canUpdate: true, canDelete: true, canMatch: true };
+      return {
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+        canMatch: true,
+        canViewMatches: true,
+      };
     }
   }, []);
+
 
   // Fetch initial dropdown datasets
   useEffect(() => {
@@ -215,27 +266,226 @@ export default function BuyerRequirements() {
     });
   }, [requirements, typeFilter, reqTypeFilter, statusFilter, bhkFilter, locationFilter, searchTerm, leadMap, contactMap]);
 
-  // Load matches when view modal is open
-  const loadMatches = useCallback(async (reqId: string) => {
-    setLoadingMatches(true);
-    try {
-      const data = await getMatchesForRequirement(reqId);
-      setActiveMatches(data);
-    } catch (err) {
-      console.error("Failed to load matches:", err);
-    } finally {
-      setLoadingMatches(false);
+  // Format price helper
+  const formatPrice = (val: number | string, curr = "INR") => {
+    const num = Number(val);
+    if (isNaN(num)) return `${curr} ${val}`;
+    if (curr === "INR") {
+      if (num >= 10000000) return `₹ ${(num / 10000000).toFixed(2)} Cr`;
+      if (num >= 100000) return `₹ ${(num / 100000).toFixed(2)} Lakh`;
+      return `₹ ${num.toLocaleString("en-IN")}`;
     }
-  }, []);
+    return `${curr} ${num.toLocaleString()}`;
+  };
 
+  const formatMatchError = (err: any): string => {
+    const status = err?.response?.status;
+    const detail = err?.response?.data?.detail;
+    if (status === 404 || (typeof detail === "string" && detail.toLowerCase().includes("not found"))) {
+      return "This buyer requirement could not be found.";
+    }
+    if (status === 409 && typeof detail === "string" && detail.toLowerCase().includes("closed")) {
+      return "Closed requirements cannot be matched.";
+    }
+    if (status === 403 || (typeof detail === "string" && detail.toLowerCase().includes("permission"))) {
+      return "You don't have permission to match properties.";
+    }
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    return "Unable to find matching properties. Please try again.";
+  };
+
+  // Helper to fetch details and photos for property IDs
+  const resolvePropertyDetailsAndImages = useCallback(
+    async (matchesData: PropertyMatch[], potentialsData: Property[]) => {
+      const propertyIds = new Set<string>();
+      matchesData.forEach((m) => {
+        if (m.property_id) propertyIds.add(m.property_id);
+      });
+      potentialsData.forEach((p) => {
+        if (p.id) propertyIds.add(p.id);
+      });
+
+      const newResolved: Record<string, Property> = {};
+      potentialsData.forEach((p) => {
+        newResolved[p.id] = p;
+      });
+      properties.forEach((p) => {
+        if (propertyIds.has(p.id)) {
+          newResolved[p.id] = p;
+        }
+      });
+
+      const currentResolved = resolvedPropertiesRef.current;
+      const missingIds = Array.from(propertyIds).filter(
+        (id) => !newResolved[id] && !currentResolved[id]
+      );
+
+      if (missingIds.length > 0) {
+        try {
+          const fetchedProps = await Promise.all(
+            missingIds.map((id) => getProperty(id).catch(() => null))
+          );
+          fetchedProps.forEach((prop) => {
+            if (prop) {
+              newResolved[prop.id] = prop;
+            }
+          });
+        } catch (fetchErr) {
+          console.error("Error fetching property details:", fetchErr);
+        }
+      }
+
+      if (Object.keys(newResolved).length > 0) {
+        setResolvedProperties((prev) => {
+          const merged = { ...prev, ...newResolved };
+          resolvedPropertiesRef.current = merged;
+          return merged;
+        });
+      }
+
+      const currentImages = propertyImagesMapRef.current;
+      const allTargetIds = Array.from(propertyIds);
+      const imagesToFetch = allTargetIds.filter((id) => !currentImages[id]);
+
+      if (imagesToFetch.length > 0) {
+        imagesToFetch.forEach((propId) => {
+          getPropertyImages(propId)
+            .then((imgs) => {
+              if (imgs && imgs.length > 0) {
+                setPropertyImagesMap((prev) => {
+                  const updated = { ...prev, [propId]: imgs };
+                  propertyImagesMapRef.current = updated;
+                  return updated;
+                });
+              }
+            })
+            .catch(() => {});
+        });
+      }
+    },
+    [properties]
+  );
+
+  // Load matches when view modal is open
+  const loadMatches = useCallback(
+    async (reqId: string) => {
+      if (isAutoMatchingRef.current) return;
+      setLoadingMatches(true);
+      setMatchError(null);
+      try {
+        const [existingData, potentialData] = await Promise.all([
+          getMatchesForRequirement(reqId).catch(() => []),
+          getPotentialMatches(reqId).catch(() => []),
+        ]);
+        setActiveMatches(existingData);
+        setPotentialMatches(potentialData);
+        await resolvePropertyDetailsAndImages(existingData, potentialData);
+      } catch (err: any) {
+        console.error("Failed to load matches:", err);
+      } finally {
+        setLoadingMatches(false);
+      }
+    },
+    [resolvePropertyDetailsAndImages]
+  );
+
+  const loadMatchesRef = useRef(loadMatches);
   useEffect(() => {
-    if (viewingRequirement) {
-      setViewTab("overview");
-      loadMatches(viewingRequirement.id);
+    loadMatchesRef.current = loadMatches;
+  }, [loadMatches]);
+
+  const viewingRequirementId = viewingRequirement?.id;
+  useEffect(() => {
+    if (viewingRequirementId) {
+      loadMatchesRef.current(viewingRequirementId);
     } else {
       setActiveMatches([]);
+      setPotentialMatches([]);
+      setMatchError(null);
+      setIsAutoMatching(false);
+      setViewTab("overview");
+      setViewingPropertyDetail(null);
     }
-  }, [viewingRequirement, loadMatches]);
+  }, [viewingRequirementId]);
+
+  const handleAutoMatch = async (requirement: BuyerRequirement) => {
+    if (!userPermissions.canMatch) {
+      const permMsg = "You don't have permission to match properties.";
+      setMatchError(permMsg);
+      showToast(permMsg, "error");
+      return;
+    }
+
+    if (requirement.status === "Closed") {
+      const closedMsg = "Closed requirements cannot be matched.";
+      setMatchError(closedMsg);
+      showToast(closedMsg, "error");
+      return;
+    }
+
+    isAutoMatchingRef.current = true;
+    setIsAutoMatching(true);
+    setMatchError(null);
+
+    try {
+      // 1. Call Auto-Match API
+      const newMatches = await autoMatchProperties(requirement.id);
+
+      // 2. Refresh existing matches
+      const existingMatchesData = await getMatchesForRequirement(requirement.id);
+      setActiveMatches(existingMatchesData);
+
+      // 3. Refresh potential matches
+      const potentialMatchesData = await getPotentialMatches(requirement.id);
+      setPotentialMatches(potentialMatchesData);
+
+      // 4. Update requirement status if matched
+      if (newMatches.length > 0) {
+        setRequirements((prev) =>
+          prev.map((r) =>
+            r.id === requirement.id && r.status !== "Closed"
+              ? { ...r, status: "Matched" }
+              : r
+          )
+        );
+        if (viewingRequirement && viewingRequirement.id === requirement.id && viewingRequirement.status !== "Closed") {
+          setViewingRequirement((prev) =>
+            prev ? { ...prev, status: "Matched" } : prev
+          );
+        }
+        showToast(
+          `Found ${newMatches.length} matching propert${newMatches.length > 1 ? "ies" : "y"}!`,
+          "success"
+        );
+      } else {
+        showToast("No exact property matches found.", "success");
+      }
+
+      // 5. Resolve property details & images
+      await resolvePropertyDetailsAndImages(existingMatchesData, potentialMatchesData);
+
+      // Ensure tab is set to matches so user sees results
+      setViewTab("matches");
+    } catch (err: any) {
+      console.error("Auto match failed:", err);
+      const errMsg = formatMatchError(err);
+      setMatchError(errMsg);
+      showToast(errMsg, "error");
+    } finally {
+      isAutoMatchingRef.current = false;
+      setIsAutoMatching(false);
+    }
+  };
+
+  const handleCardAutoMatch = async (req: BuyerRequirement) => {
+    isAutoMatchingRef.current = true;
+    setViewingRequirement(req);
+    setViewTab("matches");
+    await handleAutoMatch(req);
+  };
+
 
   // Save Buyer Requirement
   const handleSaveRequirement = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -267,11 +517,11 @@ export default function BuyerRequirements() {
     const notes = String(formData.get("notes") || "").trim() || null;
     const assigned_to = String(formData.get("assigned_to") || "") || null;
 
-    const lead_id = customerLinkType === "lead" && selectedCustomerId ? selectedCustomerId : null;
-    const contact_id = customerLinkType === "contact" && selectedCustomerId ? selectedCustomerId : null;
+    const lead_id = selectedCustomerId || (editingRequirement?.lead_id ?? null);
+    const contact_id = !lead_id ? (editingRequirement?.contact_id || null) : null;
 
     if (!lead_id && !contact_id) {
-      setFormError("Link the requirement to an existing Lead or Contact.");
+      setFormError("Please select a Lead to associate with this requirement.");
       setSubmitting(false);
       return;
     }
@@ -368,24 +618,6 @@ export default function BuyerRequirements() {
     }
   };
 
-  // Match property action
-  const handleMatchProperty = async (propertyId: string) => {
-    if (!viewingRequirement) return;
-    setMatchingActionLoading(propertyId);
-    try {
-      const newMatch = await createPropertyMatch({
-        buyer_requirement_id: viewingRequirement.id,
-        property_id: propertyId,
-      });
-      setActiveMatches((prev) => [newMatch, ...prev]);
-      showToast("Property matched successfully!");
-    } catch (err: any) {
-      console.error("Match property error:", err);
-      showToast(err?.response?.data?.detail || "Failed to match property.", "error");
-    } finally {
-      setMatchingActionLoading(null);
-    }
-  };
 
   // Format budget helper
   const formatBudget = (min?: number | string | null, max?: number | string | null) => {
@@ -417,7 +649,7 @@ export default function BuyerRequirements() {
   // Resolve buyer name
   const getBuyerName = (r: BuyerRequirement) => {
     if (r.lead_id) return leadMap.get(r.lead_id) || "Lead Buyer";
-    if (r.contact_id) return contactMap.get(r.contact_id) || "Contact Buyer";
+    if (r.contact_id) return contactMap.get(r.contact_id) || "Buyer";
     return "Unassigned Buyer";
   };
 
@@ -481,7 +713,6 @@ export default function BuyerRequirements() {
               className="btn-add-requirement"
               onClick={() => {
                 setEditingRequirement(null);
-                setCustomerLinkType("lead");
                 setSelectedCustomerId(leads[0]?.id || "");
                 setFormError(null);
                 setIsFormOpen(true);
@@ -696,7 +927,6 @@ export default function BuyerRequirements() {
               className="btn-add-requirement"
               onClick={() => {
                 setEditingRequirement(null);
-                setCustomerLinkType("lead");
                 setSelectedCustomerId(leads[0]?.id || "");
                 setFormError(null);
                 setIsFormOpen(true);
@@ -728,7 +958,7 @@ export default function BuyerRequirements() {
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                       <circle cx="12" cy="7" r="4"></circle>
                     </svg>
-                    <span>{r.lead_id ? "Lead" : "Contact"}</span>
+                    <span>Lead</span>
                   </div>
                   <span className={`badge ${statusClass}`}>{r.status}</span>
                 </div>
@@ -778,6 +1008,20 @@ export default function BuyerRequirements() {
                   </div>
 
                   <div className="action-buttons-group">
+                    {userPermissions.canMatch && r.status !== "Closed" && (
+                      <button
+                        type="button"
+                        className="btn-auto-match-mini"
+                        title="Find Matching Properties"
+                        onClick={() => handleCardAutoMatch(r)}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        <span>Auto Match</span>
+                      </button>
+                    )}
+
                     <button
                       className="btn-action-icon"
                       title="View Details & Matches"
@@ -795,8 +1039,7 @@ export default function BuyerRequirements() {
                         title="Edit Requirement"
                         onClick={() => {
                           setEditingRequirement(r);
-                          setCustomerLinkType(r.lead_id ? "lead" : "contact");
-                          setSelectedCustomerId((r.lead_id || r.contact_id || "") as string);
+                          setSelectedCustomerId((r.lead_id || "") as string);
                           setFormError(null);
                           setIsFormOpen(true);
                         }}
@@ -858,7 +1101,7 @@ export default function BuyerRequirements() {
                     <td>
                       <div style={{ fontWeight: 600 }}>{buyerName}</div>
                       <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                        {r.lead_id ? "Lead" : "Contact"}
+                        Lead
                       </div>
                     </td>
                     <td>
@@ -890,6 +1133,19 @@ export default function BuyerRequirements() {
                     </td>
                     <td>
                       <div className="action-buttons-group" style={{ justifyContent: "flex-end" }}>
+                        {userPermissions.canMatch && r.status !== "Closed" && (
+                          <button
+                            type="button"
+                            className="btn-action-icon match"
+                            title="Find Matching Properties (Auto Match)"
+                            onClick={() => handleCardAutoMatch(r)}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                          </button>
+                        )}
+
                         <button
                           className="btn-action-icon"
                           title="View Details & Matches"
@@ -901,14 +1157,14 @@ export default function BuyerRequirements() {
                           </svg>
                         </button>
 
+
                         {userPermissions.canUpdate && (
                           <button
                             className="btn-action-icon"
                             title="Edit Requirement"
                             onClick={() => {
                               setEditingRequirement(r);
-                              setCustomerLinkType(r.lead_id ? "lead" : "contact");
-                              setSelectedCustomerId((r.lead_id || r.contact_id || "") as string);
+                              setSelectedCustomerId((r.lead_id || "") as string);
                               setFormError(null);
                               setIsFormOpen(true);
                             }}
@@ -961,51 +1217,22 @@ export default function BuyerRequirements() {
                   </div>
                 )}
 
-                {/* Customer Link Toggle */}
+                {/* Associated Lead Selection */}
                 <div className="form-group">
-                  <label>Customer Type *</label>
-                  <div className="customer-link-toggle">
-                    <button
-                      type="button"
-                      className={`customer-toggle-btn ${customerLinkType === "lead" ? "active" : ""}`}
-                      onClick={() => {
-                        setCustomerLinkType("lead");
-                        setSelectedCustomerId(leads[0]?.id || "");
-                      }}
-                    >
-                      Lead
-                    </button>
-                    <button
-                      type="button"
-                      className={`customer-toggle-btn ${customerLinkType === "contact" ? "active" : ""}`}
-                      onClick={() => {
-                        setCustomerLinkType("contact");
-                        setSelectedCustomerId(contacts[0]?.id || "");
-                      }}
-                    >
-                      Contact
-                    </button>
-                  </div>
-
+                  <label>Associated Lead *</label>
                   <select
                     value={selectedCustomerId}
                     onChange={(e) => setSelectedCustomerId(e.target.value)}
                     required
                   >
                     <option value="" disabled>
-                      Select a {customerLinkType === "lead" ? "Lead" : "Contact"}
+                      Select a Lead
                     </option>
-                    {customerLinkType === "lead"
-                      ? leads.map((l) => (
-                          <option key={l.id} value={l.id}>
-                            {l.full_name} ({l.email || l.phone || "No contact"})
-                          </option>
-                        ))
-                      : contacts.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.full_name} ({c.email || c.phone || "No contact"})
-                          </option>
-                        ))}
+                    {leads.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.full_name} ({l.email || l.phone || "No contact info"})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1196,7 +1423,11 @@ export default function BuyerRequirements() {
       {/* ─── View Requirement & Matches Modal ─── */}
       {viewingRequirement && (
         <div className="modal-overlay" onClick={() => setViewingRequirement(null)}>
-          <div className="modal-card" style={{ maxWidth: "780px" }} onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`modal-card ${viewTab === "matches" ? "matches-view-modal" : ""}`}
+            style={{ maxWidth: viewTab === "matches" ? "920px" : "780px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <div>
                 <h2>{getBuyerName(viewingRequirement)}</h2>
@@ -1286,89 +1517,243 @@ export default function BuyerRequirements() {
                       </p>
                     </div>
                   )}
+
+                  {/* Auto-Matching Banner / CTA on Specs View */}
+                  <div className="specs-matching-cta-card">
+                    <div className="cta-content">
+                      <div className="cta-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                      </div>
+                      <div className="cta-text">
+                        <h4>Automated Property Matching</h4>
+                        <p>
+                          {activeMatches.length > 0
+                            ? `${activeMatches.length} exact match${activeMatches.length > 1 ? "es" : ""} and ${potentialMatches.length} near-budget propert${potentialMatches.length > 1 ? "ies" : "y"} currently matched.`
+                            : "Instantly scan inventory to find matching and near-budget properties for this buyer."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="cta-actions">
+                      {userPermissions.canMatch && viewingRequirement.status !== "Closed" && (
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={isAutoMatching}
+                          onClick={() => handleAutoMatch(viewingRequirement)}
+                        >
+                          {isAutoMatching ? (
+                            <>
+                              <div className="spinner-sm"></div>
+                              <span>Finding matching properties...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                              </svg>
+                              <span>Find Matching Properties</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {activeMatches.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setViewTab("matches")}
+                        >
+                          View Matches ({activeMatches.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 /* Matches Tab */
                 <div>
-                  <h4 style={{ margin: "0 0 12px", fontSize: "0.95rem", color: "#0f172a" }}>
-                    Existing Matches ({activeMatches.length})
-                  </h4>
-
-                  {loadingMatches ? (
-                    <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
-                      Loading matches...
-                    </div>
-                  ) : activeMatches.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "20px", color: "#94a3b8" }}>
-                      No properties currently matched.
+                  {!userPermissions.canViewMatches ? (
+                    <div className="match-error-banner">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                      </svg>
+                      <span>You don't have permission to view property matches.</span>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "24px" }}>
-                      {activeMatches.map((m) => (
-                        <div key={m.id} className="match-card">
-                          <div>
-                            <div style={{ fontWeight: 600 }}>Property Match #{m.id.slice(0, 8)}</div>
-                            <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
-                              Status: <strong>{m.status}</strong> • Date: {new Date(m.created_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <span className="badge badge-matched">Matched</span>
+                    <>
+                      {/* Top Action Header */}
+                      <div className="matches-tab-header">
+                        <div>
+                          <h3>Property Matches ({activeMatches.length})</h3>
+                          <p className="matches-tab-subtitle">
+                            Auto-matched properties matching Buy/Rent type, property type, location, bedrooms, area, and budget.
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  )}
 
-                  {/* Match with available properties */}
-                  {userPermissions.canMatch && viewingRequirement.status !== "Closed" && (
-                    <div>
-                      <h4 style={{ margin: "16px 0 10px", fontSize: "0.95rem", color: "#0f172a" }}>
-                        Match with Available Properties
-                      </h4>
-                      <div style={{ maxHeight: "200px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {properties
-                          .filter((p) => {
-                            const expectedListing = viewingRequirement.requirement_type === "Buy" ? "Sale" : "Rent";
-                            return p.listing_type === expectedListing && p.status === "Available";
-                          })
-                          .slice(0, 10)
-                          .map((p) => {
-                            const alreadyMatched = activeMatches.some((m) => m.property_id === p.id);
-                            return (
-                              <div
-                                key={p.id}
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  padding: "8px 12px",
-                                  border: "1px solid #e2e8f0",
-                                  borderRadius: "8px",
-                                }}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: 600, fontSize: "0.875rem" }}>{p.name}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                                    {p.city} • {p.bedrooms ? `${p.bedrooms} BHK` : ""} • ₹ {Number(p.price).toLocaleString()}
-                                  </div>
-                                </div>
-
-                                <button
-                                  className="btn-primary"
-                                  style={{ padding: "5px 12px", fontSize: "0.775rem" }}
-                                  disabled={alreadyMatched || matchingActionLoading === p.id}
-                                  onClick={() => handleMatchProperty(p.id)}
-                                >
-                                  {alreadyMatched
-                                    ? "Matched"
-                                    : matchingActionLoading === p.id
-                                    ? "Matching..."
-                                    : "Match"}
-                                </button>
-                              </div>
-                            );
-                          })}
+                        {userPermissions.canMatch && viewingRequirement.status !== "Closed" && (
+                          <button
+                            type="button"
+                            className="btn-auto-match"
+                            disabled={isAutoMatching}
+                            onClick={() => handleAutoMatch(viewingRequirement)}
+                          >
+                            {isAutoMatching ? (
+                              <>
+                                <div className="spinner-sm"></div>
+                                <span>Finding matching properties...</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                </svg>
+                                <span>Find Matching Properties</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
-                    </div>
+
+                      {/* Match Error Banner */}
+                      {matchError && (
+                        <div className="match-error-banner">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                          </svg>
+                          <span>{matchError}</span>
+                        </div>
+                      )}
+
+                      {/* Loading State */}
+                      {isAutoMatching || loadingMatches ? (
+                        <div className="matching-loading-state">
+                          <div className="spinner"></div>
+                          <h4>
+                            {isAutoMatching
+                              ? "Finding matching properties..."
+                              : "Loading matched properties..."}
+                          </h4>
+                          <p>
+                            {isAutoMatching
+                              ? "Scanning property inventory to find exact and near-budget matches..."
+                              : "Retrieving matched properties and details..."}
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* ─── 1. Exact Matches Section ─── */}
+                          <div className="matches-group-section">
+                            <div className="matches-section-header">
+                              <div className="matches-section-title-row">
+                                <span className="match-group-tag exact">Exact Match</span>
+                                <h4 className="matches-section-title">
+                                  Property Matches ({activeMatches.length})
+                                </h4>
+                              </div>
+                              <span className="matches-section-caption">
+                                Properties meeting all requirement specifications (Type, City, Location, Budget & Specs)
+                              </span>
+                            </div>
+
+                            {activeMatches.length === 0 ? (
+                              <div className="no-matches-box">
+                                <div className="no-matches-icon">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    <line x1="8" y1="11" x2="14" y2="11"></line>
+                                  </svg>
+                                </div>
+                                <p className="no-matches-primary-text">No exact property matches found.</p>
+                                <p className="no-matches-secondary-text">
+                                  {viewingRequirement.status === "Closed"
+                                    ? "Closed requirements cannot be matched."
+                                    : "Click 'Find Matching Properties' above or review the potential near-budget matches below."}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="matched-properties-grid">
+                                {activeMatches.map((m) => {
+                                  const prop =
+                                    resolvedProperties[m.property_id] ||
+                                    properties.find((p) => p.id === m.property_id);
+                                  if (!prop) {
+                                    return (
+                                      <div key={m.id} className="property-card-loading">
+                                        <div className="spinner-sm"></div>
+                                        <span>Loading property details...</span>
+                                      </div>
+                                    );
+                                  }
+                                  const cardImages = propertyImagesMap[prop.id] || [];
+                                  return (
+                                    <PropertyCard
+                                      key={m.id}
+                                      property={prop}
+                                      images={cardImages}
+                                      matchType="exact"
+                                      matchLabel="Matched"
+                                      formatPrice={formatPrice}
+                                      onView={setViewingPropertyDetail}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ─── 2. Potential Matches Section ─── */}
+                          <div className="matches-group-section" style={{ marginTop: "32px" }}>
+                            <div className="matches-section-header">
+                              <div className="matches-section-title-row">
+                                <span className="match-group-tag potential">Potential Match</span>
+                                <h4 className="matches-section-title">
+                                  Potential Matches ({potentialMatches.length})
+                                </h4>
+                              </div>
+                              <span className="matches-section-caption">
+                                Properties matching type and location with budget close to requirement (within ±10% range)
+                              </span>
+                            </div>
+
+                            {potentialMatches.length === 0 ? (
+                              <div className="no-matches-box potential-empty">
+                                <p className="no-matches-primary-text">No potential matches found near budget.</p>
+                                <p className="no-matches-secondary-text">
+                                  Properties with budgets exceeding ±10% margin will not be listed.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="matched-properties-grid">
+                                {potentialMatches.map((prop) => {
+                                  const cardImages = propertyImagesMap[prop.id] || [];
+                                  return (
+                                    <PropertyCard
+                                      key={prop.id}
+                                      property={prop}
+                                      images={cardImages}
+                                      matchType="potential"
+                                      matchLabel="Near Budget"
+                                      formatPrice={formatPrice}
+                                      onView={setViewingPropertyDetail}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -1377,6 +1762,143 @@ export default function BuyerRequirements() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setViewingRequirement(null)}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Property Detail Preview Modal ─── */}
+      {viewingPropertyDetail && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1100 }}
+          onClick={() => setViewingPropertyDetail(null)}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: "720px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <h2>{viewingPropertyDetail.name}</h2>
+                <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                  {viewingPropertyDetail.unit_number ? `Unit ${viewingPropertyDetail.unit_number} • ` : ""}
+                  {viewingPropertyDetail.city}, {viewingPropertyDetail.state}
+                </div>
+              </div>
+              <button
+                className="modal-close-btn"
+                onClick={() => setViewingPropertyDetail(null)}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Photo Gallery if images exist */}
+              {(propertyImagesMap[viewingPropertyDetail.id]?.length ?? 0) > 0 && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+                    gap: "10px",
+                    marginBottom: "18px",
+                  }}
+                >
+                  {(propertyImagesMap[viewingPropertyDetail.id] || []).map((img) => (
+                      <div
+                        key={img.id}
+                        style={{
+                          height: "90px",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          background: "#f1f5f9",
+                        }}
+                      >
+                        <img
+                          src={resolveImageUrl(img.image_url)}
+                          alt="Property"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                          onError={handleImageError}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+              <div className="details-spec-grid">
+                <div className="details-spec-item">
+                  <div className="label">Price</div>
+                  <div className="value" style={{ color: "#059669", fontWeight: 700 }}>
+                    {formatPrice(viewingPropertyDetail.price, viewingPropertyDetail.currency)}
+                  </div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Listing Type</div>
+                  <div className="value">{viewingPropertyDetail.listing_type}</div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Property Type</div>
+                  <div className="value">{viewingPropertyDetail.property_type}</div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Bedrooms</div>
+                  <div className="value">
+                    {viewingPropertyDetail.bedrooms ? `${viewingPropertyDetail.bedrooms} BHK` : "N/A"}
+                  </div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Bathrooms</div>
+                  <div className="value">
+                    {viewingPropertyDetail.bathrooms ? `${viewingPropertyDetail.bathrooms} Baths` : "N/A"}
+                  </div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Area</div>
+                  <div className="value">
+                    {viewingPropertyDetail.area
+                      ? `${viewingPropertyDetail.area} ${viewingPropertyDetail.area_unit}`
+                      : "N/A"}
+                  </div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Status</div>
+                  <div className="value">{viewingPropertyDetail.status}</div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Furnishing</div>
+                  <div className="value">{viewingPropertyDetail.furnishing || "Unfurnished"}</div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Address</div>
+                  <div className="value">{viewingPropertyDetail.address}</div>
+                </div>
+              </div>
+
+              {viewingPropertyDetail.description && (
+                <div style={{ marginTop: "16px" }}>
+                  <h4 style={{ margin: "0 0 6px", fontSize: "0.825rem", textTransform: "uppercase", color: "#64748b" }}>
+                    Description
+                  </h4>
+                  <p style={{ margin: 0, fontSize: "0.925rem", lineHeight: "1.5" }}>
+                    {viewingPropertyDetail.description}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                onClick={() => setViewingPropertyDetail(null)}
+              >
+                Back to Matches
               </button>
             </div>
           </div>

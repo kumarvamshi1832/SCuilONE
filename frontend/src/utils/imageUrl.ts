@@ -62,3 +62,52 @@ export const handleImageError = (
     target.src = SCUILONE_IMAGE_PLACEHOLDER;
   }
 };
+
+/**
+ * Extracts and normalizes an array of valid image URL strings from diverse property image structures.
+ * Accepts PropertyImage[], string[], or objects with url/image_url/src properties.
+ * Filters out falsy, empty, whitespace-only, and duplicate strings while preserving order.
+ */
+export const extractPropertyImageUrls = (
+  imagesInput?: any[] | null,
+  fallbackSingleUrl?: string | null
+): string[] => {
+  const result: string[] = [];
+
+  if (Array.isArray(imagesInput)) {
+    for (const item of imagesInput) {
+      if (!item) continue;
+      let urlCandidate: string | null = null;
+      if (typeof item === "string") {
+        urlCandidate = item.trim();
+      } else if (typeof item === "object") {
+        const raw = item.image_url || item.url || item.src;
+        if (typeof raw === "string") {
+          urlCandidate = raw.trim();
+        }
+      }
+      if (urlCandidate && urlCandidate.length > 0 && !result.includes(urlCandidate)) {
+        result.push(urlCandidate);
+      }
+    }
+  }
+
+  if (
+    result.length === 0 &&
+    fallbackSingleUrl &&
+    typeof fallbackSingleUrl === "string" &&
+    fallbackSingleUrl.trim()
+  ) {
+    const trimmed = fallbackSingleUrl.trim();
+    if (!result.includes(trimmed)) {
+      result.push(trimmed);
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Universal alias for extractPropertyImageUrls for buildings, properties, or any entity.
+ */
+export const extractImageUrls = extractPropertyImageUrls;

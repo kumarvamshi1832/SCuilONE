@@ -31,6 +31,7 @@ import type { Building } from "../../types/building";
 import type { User } from "../../types/user";
 import type { PropertyMatch } from "../../types/propertyMatch";
 import { resolveImageUrl, handleImageError } from "../../utils/imageUrl";
+import PropertyCard from "../../components/properties/PropertyCard";
 import "./Properties.css";
 
 interface StagedPropertyImage {
@@ -44,9 +45,11 @@ interface StagedPropertyImage {
 
 export default function Properties() {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [allProperties, setAllProperties] = useState<Property[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [propertyThumbnails, setPropertyThumbnails] = useState<Record<string, string>>({});
+  const [propertyImagesMap, setPropertyImagesMap] = useState<Record<string, PropertyImage[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -181,12 +184,25 @@ export default function Properties() {
       });
       setProperties(data);
 
-      // Lazily fetch primary images for first 20 properties
-      data.slice(0, 20).forEach((prop) => {
+      if (!searchTerm && !typeFilter && !listingFilter && !statusFilter && !buildingFilter && !cityFilter) {
+        setAllProperties(data);
+      }
+
+      // Fetch full image collections for all properties
+      data.forEach((prop) => {
         getPropertyImages(prop.id)
           .then((imgs) => {
             if (imgs && imgs.length > 0) {
-              const primary = imgs.find((i) => i.is_primary) || imgs[0];
+              const sorted = [...imgs].sort((a, b) => {
+                if (a.is_primary && !b.is_primary) return -1;
+                if (!a.is_primary && b.is_primary) return 1;
+                return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+              });
+              setPropertyImagesMap((prev) => ({
+                ...prev,
+                [prop.id]: sorted,
+              }));
+              const primary = sorted[0];
               if (primary?.image_url) {
                 setPropertyThumbnails((prev) => ({
                   ...prev,
@@ -205,18 +221,33 @@ export default function Properties() {
     }
   }, [searchTerm, typeFilter, listingFilter, statusFilter, buildingFilter, cityFilter]);
 
+  // Baseline properties for consistent KPI statistics across filters & pagination
+  const fetchAllProperties = useCallback(async () => {
+    try {
+      const data = await getProperties({ limit: 100 });
+      setAllProperties(data || []);
+    } catch (err) {
+      console.error("Failed to load baseline properties count:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllProperties();
+  }, [fetchAllProperties]);
+
   useEffect(() => {
     fetchPropertiesList();
   }, [fetchPropertiesList]);
 
-  // Summary counts
+  // Summary counts based on total baseline properties so filters/pagination don't distort metrics
   const summaryCounts = useMemo(() => {
-    const total = properties.length;
-    const available = properties.filter((p) => p.status === "Available").length;
-    const reserved = properties.filter((p) => p.status === "Reserved").length;
-    const sold = properties.filter((p) => p.status === "Sold").length;
+    const source = allProperties.length > 0 ? allProperties : properties;
+    const total = source.length;
+    const available = source.filter((p) => p.status === "Available").length;
+    const reserved = source.filter((p) => p.status === "Reserved").length;
+    const sold = source.filter((p) => p.status === "Sold").length;
     return { total, available, reserved, sold };
-  }, [properties]);
+  }, [allProperties, properties]);
 
   // Load property images & matches when view modal opens
   const loadImages = useCallback(async (propId: string) => {
@@ -224,7 +255,16 @@ export default function Properties() {
     try {
       const imgs = await getPropertyImages(propId);
       setPropertyImages(imgs);
-      const primary = imgs.find((i) => i.is_primary) || imgs[0];
+      const sorted = [...imgs].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setPropertyImagesMap((prev) => ({
+        ...prev,
+        [propId]: sorted,
+      }));
+      const primary = sorted[0];
       if (primary?.image_url) {
         setPropertyThumbnails((prev) => ({
           ...prev,
@@ -382,6 +422,14 @@ export default function Properties() {
     try {
       await deletePropertyImage(editingProperty.id, imageId);
       setExistingFormImages((prev) => prev.filter((img) => img.id !== imageId));
+      setPropertyImagesMap((prev) => {
+        const next = { ...prev };
+        const currentImgs = next[editingProperty.id];
+        if (currentImgs) {
+          next[editingProperty.id] = currentImgs.filter((img) => img.id !== imageId);
+        }
+        return next;
+      });
       setPropertyThumbnails((prev) => {
         const next = { ...prev };
         const remaining = existingFormImages.filter((img) => img.id !== imageId);
@@ -410,13 +458,21 @@ export default function Properties() {
     if (!editingProperty) return;
     try {
       await updatePropertyImage(editingProperty.id, imageId, { is_primary: true });
-      setExistingFormImages((prev) =>
-        prev.map((img) => ({
-          ...img,
-          is_primary: img.id === imageId,
-        }))
-      );
-      const chosen = existingFormImages.find((img) => img.id === imageId);
+      const updatedList = existingFormImages.map((img) => ({
+        ...img,
+        is_primary: img.id === imageId,
+      }));
+      setExistingFormImages(updatedList);
+      const sorted = [...updatedList].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setPropertyImagesMap((prev) => ({
+        ...prev,
+        [editingProperty.id]: sorted,
+      }));
+      const chosen = updatedList.find((img) => img.id === imageId);
       if (chosen?.image_url) {
         setPropertyThumbnails((prev) => ({
           ...prev,
@@ -598,7 +654,30 @@ export default function Properties() {
           }
         }
 
-        if (newPrimaryUrl) {
+        if (targetPropertyId) {
+          getPropertyImages(targetPropertyId)
+            .then((imgs) => {
+              if (imgs && imgs.length > 0) {
+                const sorted = [...imgs].sort((a, b) => {
+                  if (a.is_primary && !b.is_primary) return -1;
+                  if (!a.is_primary && b.is_primary) return 1;
+                  return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+                });
+                setPropertyImagesMap((prev) => ({
+                  ...prev,
+                  [targetPropertyId]: sorted,
+                }));
+                const primary = sorted[0];
+                if (primary?.image_url) {
+                  setPropertyThumbnails((prev) => ({
+                    ...prev,
+                    [targetPropertyId]: primary.image_url,
+                  }));
+                }
+              }
+            })
+            .catch(() => {});
+        } else if (newPrimaryUrl) {
           setPropertyThumbnails((prev) => ({
             ...prev,
             [targetPropertyId]: newPrimaryUrl,
@@ -623,6 +702,7 @@ export default function Properties() {
         );
       }
 
+      fetchAllProperties();
       handleCloseForm();
     } catch (err: any) {
       console.error("Save property error:", err);
@@ -646,8 +726,10 @@ export default function Properties() {
     try {
       await deleteProperty(deletingProperty.id);
       setProperties((prev) => prev.filter((p) => p.id !== deletingProperty.id));
+      setAllProperties((prev) => prev.filter((p) => p.id !== deletingProperty.id));
       showToast("Property deleted successfully!");
       setDeletingProperty(null);
+      fetchAllProperties();
     } catch (err: any) {
       console.error("Delete property error:", err);
       showToast(formatApiError(err, "Failed to delete property."), "error");
@@ -667,7 +749,19 @@ export default function Properties() {
         files,
         uploadCategory
       );
-      setPropertyImages((prev) => [...prev, ...uploaded]);
+      setPropertyImages((prev) => {
+        const next = [...prev, ...uploaded];
+        const sorted = [...next].sort((a, b) => {
+          if (a.is_primary && !b.is_primary) return -1;
+          if (!a.is_primary && b.is_primary) return 1;
+          return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        });
+        setPropertyImagesMap((p) => ({
+          ...p,
+          [viewingProperty.id]: sorted,
+        }));
+        return next;
+      });
       const primary = uploaded.find((i) => i.is_primary) || uploaded[0];
       if (primary?.image_url) {
         setPropertyThumbnails((prev) => ({
@@ -690,12 +784,22 @@ export default function Properties() {
     if (!viewingProperty) return;
     try {
       await updatePropertyImage(viewingProperty.id, imageId, { is_primary: true });
-      setPropertyImages((prev) =>
-        prev.map((img) => ({
+      setPropertyImages((prev) => {
+        const updated = prev.map((img) => ({
           ...img,
           is_primary: img.id === imageId,
-        }))
-      );
+        }));
+        const sorted = [...updated].sort((a, b) => {
+          if (a.is_primary && !b.is_primary) return -1;
+          if (!a.is_primary && b.is_primary) return 1;
+          return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        });
+        setPropertyImagesMap((p) => ({
+          ...p,
+          [viewingProperty.id]: sorted,
+        }));
+        return updated;
+      });
       const chosen = propertyImages.find((img) => img.id === imageId);
       if (chosen?.image_url) {
         setPropertyThumbnails((prev) => ({
@@ -714,7 +818,24 @@ export default function Properties() {
     if (!viewingProperty) return;
     try {
       await deletePropertyImage(viewingProperty.id, imageId);
-      setPropertyImages((prev) => prev.filter((img) => img.id !== imageId));
+      setPropertyImages((prev) => {
+        const updated = prev.filter((img) => img.id !== imageId);
+        setPropertyImagesMap((p) => ({
+          ...p,
+          [viewingProperty.id]: updated,
+        }));
+        const newPrimary = updated.find((i) => i.is_primary) || updated[0];
+        setPropertyThumbnails((t) => {
+          const next = { ...t };
+          if (newPrimary?.image_url) {
+            next[viewingProperty.id] = newPrimary.image_url;
+          } else {
+            delete next[viewingProperty.id];
+          }
+          return next;
+        });
+        return updated;
+      });
       showToast("Image deleted successfully!");
     } catch (err: any) {
       showToast(formatApiError(err, "Failed to delete image."), "error");
@@ -1016,6 +1137,7 @@ export default function Properties() {
         /* ─── Grid View ─── */
         <div className="properties-grid">
           {properties.map((p) => {
+            const cardImages = propertyImagesMap[p.id] || (p.images as PropertyImage[]) || [];
             const thumbUrl = propertyThumbnails[p.id];
             const buildingName = p.building_id ? buildingMap.get(p.building_id) : null;
             const statusClass =
@@ -1030,128 +1152,19 @@ export default function Properties() {
                 : "badge-inactive";
 
             return (
-              <div key={p.id} className="property-card">
-                <div className="property-card-cover">
-                  {thumbUrl ? (
-                    <img
-                      src={resolveImageUrl(thumbUrl)}
-                      alt={p.name}
-                      onError={handleImageError}
-                    />
-                  ) : (
-                    <div className="property-card-placeholder">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                      </svg>
-                      <span>{p.property_type}</span>
-                    </div>
-                  )}
-
-                  <div className="property-badge-group">
-                    <span className={`listing-badge ${p.listing_type === "Sale" ? "sale" : "rent"}`}>
-                      {p.listing_type}
-                    </span>
-                    <span className={`badge ${statusClass}`}>{p.status}</span>
-                  </div>
-
-                  <div className="property-price-tag">
-                    {formatPrice(p.price, p.currency)}
-                  </div>
-                </div>
-
-                <div className="property-card-body">
-                  <div className="property-title-row">
-                    <h3 className="property-card-title">{p.name}</h3>
-                    {p.unit_number && (
-                      <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#2563eb" }}>
-                        Unit {p.unit_number}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="property-location">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                      <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                    <span>{p.city}, {p.state}</span>
-                    {buildingName && <span> • {buildingName}</span>}
-                  </div>
-
-                  <div className="property-specs-pills">
-                    {p.bedrooms !== null && p.bedrooms !== undefined && (
-                      <div className="property-spec-item" title="Bedrooms">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"></path>
-                        </svg>
-                        <span>{p.bedrooms} BHK</span>
-                      </div>
-                    )}
-                    {p.bathrooms !== null && p.bathrooms !== undefined && (
-                      <div className="property-spec-item" title="Bathrooms">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M9 6h6v3H9zM7 9h10v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"></path>
-                        </svg>
-                        <span>{p.bathrooms} Baths</span>
-                      </div>
-                    )}
-                    {p.area && (
-                      <div className="property-spec-item" title="Area">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M3 3h18v18H3zM9 3v18M3 9h18"></path>
-                        </svg>
-                        <span>{p.area} {p.area_unit}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="property-footer-row">
-                    <span className="property-building-tag">
-                      {p.property_type}
-                    </span>
-
-                    <div className="action-buttons-group">
-                      <button
-                        className="btn-action-icon"
-                        title="View Details, Photos & Matches"
-                        onClick={() => setViewingProperty(p)}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                          <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                      </button>
-
-                      {userPermissions.canUpdate && (
-                        <button
-                          className="btn-action-icon"
-                          title="Edit Property"
-                          onClick={() => handleOpenEditProperty(p)}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
-                        </button>
-                      )}
-
-                      {userPermissions.canDelete && (
-                        <button
-                          className="btn-action-icon delete"
-                          title="Delete Property"
-                          onClick={() => setDeletingProperty(p)}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <PropertyCard
+                key={p.id}
+                property={p}
+                images={cardImages}
+                thumbUrl={thumbUrl}
+                buildingName={buildingName}
+                statusClass={statusClass}
+                userPermissions={userPermissions}
+                onView={setViewingProperty}
+                onEdit={handleOpenEditProperty}
+                onDelete={setDeletingProperty}
+                formatPrice={formatPrice}
+              />
             );
           })}
         </div>

@@ -252,6 +252,15 @@ export default function Leads() {
     return filteredLeads.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredLeads, safePage]);
 
+  // If the current page becomes invalid after filtering/deleting records, automatically move to the last valid page
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    } else if (currentPage < 1) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
   // Collect unique sources from data
   const uniqueSources = Array.from(new Set(leads.map((l) => l.source).filter(Boolean))) as string[];
 
@@ -468,7 +477,8 @@ export default function Leads() {
           </div>
         ) : (
           <>
-            <table className="leads-table">
+            <div className="leads-table-wrapper">
+              <table className="leads-table">
             <thead>
               <tr>
                 <th>Lead Name</th>
@@ -542,6 +552,7 @@ export default function Leads() {
             })}
             </tbody>
           </table>
+          </div>
           <Pagination
             currentPage={safePage}
             totalItems={filteredLeads.length}

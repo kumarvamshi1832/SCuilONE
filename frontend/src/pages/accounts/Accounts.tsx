@@ -228,6 +228,15 @@ export default function Accounts() {
     return filteredAccounts.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredAccounts, safePage]);
 
+  // If the current page becomes invalid after filtering/deleting records, automatically move to the last valid page
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    } else if (currentPage < 1) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
   // Collect unique values from data for filter dropdowns
   const uniqueStatuses = Array.from(new Set(accounts.map((a) => a.status).filter(Boolean))) as string[];
   const uniqueIndustries = Array.from(new Set(accounts.map((a) => a.industry).filter(Boolean))) as string[];
@@ -421,7 +430,7 @@ export default function Accounts() {
       </div>
 
       {/* Main Content Area */}
-      <div className="leads-table-container" style={{ overflowX: 'auto' }}>
+      <div className="leads-table-container">
         {loading ? (
         <div className="leads-loading">
           <div className="leads-loading-spinner"></div>
@@ -464,7 +473,8 @@ export default function Accounts() {
         </div>
       ) : (
         <>
-          <table className="leads-table">
+          <div className="leads-table-wrapper">
+            <table className="leads-table">
             <thead>
               <tr>
                 <th>Account Name</th>
@@ -569,6 +579,7 @@ export default function Accounts() {
               })}
             </tbody>
           </table>
+          </div>
           <Pagination
             currentPage={safePage}
             totalItems={filteredAccounts.length}

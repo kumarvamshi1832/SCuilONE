@@ -1,3 +1,5 @@
+import type { Property } from "./property";
+
 export interface PropertyMatch {
   id: string;
   tenant_id: string;
@@ -15,6 +17,7 @@ export interface PropertyMatch {
   property_type?: string;
   buyer_name?: string;
   assigned_to_name?: string;
+  property?: Property;
 }
 
 export interface PropertyMatchCreate {
@@ -22,3 +25,4 @@ export interface PropertyMatchCreate {
   property_id: string;
   assigned_to?: string | null;
 }
+

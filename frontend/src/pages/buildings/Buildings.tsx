@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   getBuildings,
   createBuilding,
@@ -10,11 +10,13 @@ import {
   deleteBuildingImage,
 } from "../../services/buildingService";
 import { getProjects } from "../../services/projectService";
+import { getProperties } from "../../services/propertyService";
 import type {
   Building,
   BuildingCreate,
   BuildingUpdate,
   BuildingImage,
+  BuildingImageCategory,
 } from "../../types/building";
 import {
   BUILDING_TYPES,
@@ -23,13 +25,27 @@ import {
   BUILDING_IMAGE_CATEGORIES,
 } from "../../types/building";
 import type { Project } from "../../types/project";
+import type { Property } from "../../types/property";
+import { BuildingCard } from "../../components/buildings/BuildingCard";
 import { resolveImageUrl, handleImageError } from "../../utils/imageUrl";
 import "./Buildings.css";
+
+interface StagedBuildingImage {
+  id: string;
+  file: File;
+  previewUrl: string;
+  name: string;
+  sizeFormatted: string;
+  category: BuildingImageCategory;
+}
 
 export default function Buildings() {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [buildingThumbnails, setBuildingThumbnails] = useState<Record<string, string>>({});
+  const [buildingImagesMap, setBuildingImagesMap] = useState<Record<string, BuildingImage[]>>({});
+  const [allProperties, setAllProperties] = useState<Property[]>([]);
+  const [loadingProperties, setLoadingProperties] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +68,14 @@ export default function Buildings() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Staged Images for Add / Edit Modal
+  const [stagedImages, setStagedImages] = useState<StagedBuildingImage[]>([]);
+  const [stagedCategory, setStagedCategory] = useState<BuildingImageCategory>("Exterior");
+  const [isDragOver, setIsDragOver] = useState(false);
+  const formFileInputRef = useRef<HTMLInputElement>(null);
+  const [existingFormImages, setExistingFormImages] = useState<BuildingImage[]>([]);
+  const [loadingExistingImages, setLoadingExistingImages] = useState(false);
+
   // Image Gallery in View Modal
   const [viewTab, setViewTab] = useState<"overview" | "images">("overview");
   const [buildingImages, setBuildingImages] = useState<BuildingImage[]>([]);
@@ -59,6 +83,7 @@ export default function Buildings() {
   const [uploadCategory, setUploadCategory] = useState<string>("Exterior");
   const [uploadingImage, setUploadingImage] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
 
   // Toast
   const [toastMessage, setToastMessage] = useState<{
@@ -143,12 +168,21 @@ export default function Buildings() {
       });
       setBuildings(data);
 
-      // Lazily load primary images for buildings (first 15)
-      data.slice(0, 20).forEach((b) => {
+      // Load images for all returned buildings
+      data.forEach((b) => {
         getBuildingImages(b.id)
           .then((imgs) => {
             if (imgs && imgs.length > 0) {
-              const primary = imgs.find((i) => i.is_primary) || imgs[0];
+              const sorted = [...imgs].sort((a, b) => {
+                if (a.is_primary && !b.is_primary) return -1;
+                if (!a.is_primary && b.is_primary) return 1;
+                return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+              });
+              setBuildingImagesMap((prev) => ({
+                ...prev,
+                [b.id]: sorted,
+              }));
+              const primary = sorted[0];
               if (primary?.image_url) {
                 setBuildingThumbnails((prev) => ({
                   ...prev,
@@ -171,6 +205,38 @@ export default function Buildings() {
     fetchBuildingList();
   }, [fetchBuildingList]);
 
+  // Load real properties to compute Total Properties count and per-building links
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingProperties(true);
+    getProperties({ limit: 100 })
+      .then((props) => {
+        if (isMounted) {
+          setAllProperties(props || []);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load properties for building stats:", err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingProperties(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Per-building property counts
+  const buildingPropertyCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allProperties.forEach((p) => {
+      if (p.building_id) {
+        counts[p.building_id] = (counts[p.building_id] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allProperties]);
+
   // Summary counts
   const summaryCounts = useMemo(() => {
     const total = buildings.length;
@@ -181,8 +247,9 @@ export default function Buildings() {
     const completed = buildings.filter(
       (b) => b.construction_status === "Completed"
     ).length;
-    return { total, active, underConstruction, completed };
-  }, [buildings]);
+    const totalProperties = allProperties.length;
+    return { total, active, underConstruction, completed, totalProperties };
+  }, [buildings, allProperties]);
 
   // Load building images when view modal opens
   const loadImages = useCallback(async (buildingId: string) => {
@@ -190,7 +257,17 @@ export default function Buildings() {
     try {
       const imgs = await getBuildingImages(buildingId);
       setBuildingImages(imgs);
-      const primary = imgs.find((i) => i.is_primary) || imgs[0];
+      setActiveGalleryIndex(0);
+      const sorted = [...imgs].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [buildingId]: sorted,
+      }));
+      const primary = sorted[0];
       if (primary?.image_url) {
         setBuildingThumbnails((prev) => ({
           ...prev,
@@ -207,11 +284,160 @@ export default function Buildings() {
   useEffect(() => {
     if (viewingBuilding) {
       setViewTab("overview");
+      setActiveGalleryIndex(0);
       loadImages(viewingBuilding.id);
     } else {
       setBuildingImages([]);
+      setActiveGalleryIndex(0);
     }
   }, [viewingBuilding, loadImages]);
+
+  // Modal open/close helpers
+  const openAddModal = () => {
+    setEditingBuilding(null);
+    setExistingFormImages([]);
+    clearStagedImages();
+    setFormError(null);
+    setIsFormOpen(true);
+  };
+
+  const openEditModal = (b: Building) => {
+    setEditingBuilding(b);
+    clearStagedImages();
+    setFormError(null);
+    setIsFormOpen(true);
+    setLoadingExistingImages(true);
+    getBuildingImages(b.id)
+      .then((imgs) => setExistingFormImages(imgs))
+      .catch(() => setExistingFormImages([]))
+      .finally(() => setLoadingExistingImages(false));
+  };
+
+  const closeFormModal = () => {
+    clearStagedImages();
+    setEditingBuilding(null);
+    setExistingFormImages([]);
+    setFormError(null);
+    setIsFormOpen(false);
+  };
+
+  // Staged Images File Helpers
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleAddFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+
+    const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp"];
+    const ALLOWED_EXT = [".jpg", ".jpeg", ".png", ".webp"];
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+
+    const totalAllowed = 50;
+    const currentCount = (editingBuilding ? existingFormImages.length : 0) + stagedImages.length;
+
+    const newStaged: StagedBuildingImage[] = [];
+    const errors: string[] = [];
+
+    for (const file of files) {
+      if (currentCount + newStaged.length >= totalAllowed) {
+        errors.push(`Maximum ${totalAllowed} images allowed per building.`);
+        break;
+      }
+
+      const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+      const isAllowedType = ALLOWED_MIME.includes(file.type) || ALLOWED_EXT.includes(ext);
+
+      if (!isAllowedType) {
+        errors.push(`"${file.name}" has an unsupported format. Only JPG, PNG, and WebP are allowed.`);
+        continue;
+      }
+
+      if (file.size > MAX_SIZE) {
+        errors.push(`"${file.name}" exceeds 5 MB (${formatFileSize(file.size)}).`);
+        continue;
+      }
+
+      newStaged.push({
+        id: `staged-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        name: file.name,
+        sizeFormatted: formatFileSize(file.size),
+        category: stagedCategory,
+      });
+    }
+
+    if (errors.length > 0 && errors[0]) {
+      showToast(errors[0], "error");
+    }
+
+    if (newStaged.length > 0) {
+      setStagedImages((prev) => [...prev, ...newStaged]);
+    }
+  };
+
+  const handleRemoveStagedImage = (stagedId: string) => {
+    setStagedImages((prev) => {
+      const target = prev.find((i) => i.id === stagedId);
+      if (target?.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((i) => i.id !== stagedId);
+    });
+  };
+
+  const clearStagedImages = () => {
+    stagedImages.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+    setStagedImages([]);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDropFiles = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleAddFiles(e.dataTransfer.files);
+    }
+  };
+
+  // Delete existing image while in Edit modal
+  const handleDeleteExistingFormImage = async (imageId: string) => {
+    if (!editingBuilding) return;
+    try {
+      await deleteBuildingImage(editingBuilding.id, imageId);
+      const updated = existingFormImages.filter((img) => img.id !== imageId);
+      setExistingFormImages(updated);
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [editingBuilding.id]: updated,
+      }));
+      const primary = updated.find((i) => i.is_primary) || updated[0];
+      setBuildingThumbnails((prev) => ({
+        ...prev,
+        [editingBuilding.id]: primary?.image_url || "",
+      }));
+      showToast("Image deleted successfully!");
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || "Failed to delete image.", "error");
+    }
+  };
 
   // Save building
   const handleSaveBuilding = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -246,6 +472,7 @@ export default function Buildings() {
     }
 
     try {
+      let targetBuildingId = "";
       if (editingBuilding) {
         const payload: BuildingUpdate = {
           project_id,
@@ -261,10 +488,10 @@ export default function Buildings() {
           description,
         };
         const updated = await updateBuilding(editingBuilding.id, payload);
+        targetBuildingId = updated.id;
         setBuildings((prev) =>
           prev.map((item) => (item.id === updated.id ? updated : item))
         );
-        showToast("Building updated successfully!");
       } else {
         const payload: BuildingCreate = {
           project_id,
@@ -280,21 +507,78 @@ export default function Buildings() {
           description,
         };
         const created = await createBuilding(payload);
+        targetBuildingId = created.id;
         setBuildings((prev) => [created, ...prev]);
-        showToast("Building created successfully!");
       }
-      setIsFormOpen(false);
-      setEditingBuilding(null);
+
+      // If there are staged images to upload:
+      if (stagedImages.length > 0 && targetBuildingId) {
+        const categoryMap = new Map<string, File[]>();
+        stagedImages.forEach((item) => {
+          const cat = item.category || "Exterior";
+          const list = categoryMap.get(cat) || [];
+          list.push(item.file);
+          categoryMap.set(cat, list);
+        });
+
+        let uploadedTotal = 0;
+        let uploadFailedCount = 0;
+        let lastUploadError = "";
+
+        for (const [cat, fileList] of categoryMap.entries()) {
+          try {
+            const uploaded = await uploadBuildingImages(targetBuildingId, fileList, cat);
+            uploadedTotal += uploaded.length;
+          } catch (uploadErr: any) {
+            console.error(`Failed uploading building images for category "${cat}":`, uploadErr);
+            uploadFailedCount += fileList.length;
+            lastUploadError = formatApiError(uploadErr, "Upload failed");
+          }
+        }
+
+        // Refresh images for targetBuildingId
+        try {
+          const freshImages = await getBuildingImages(targetBuildingId);
+          if (freshImages && freshImages.length > 0) {
+            const sorted = [...freshImages].sort((a, b) => {
+              if (a.is_primary && !b.is_primary) return -1;
+              if (!a.is_primary && b.is_primary) return 1;
+              return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+            });
+            setBuildingImagesMap((prev) => ({
+              ...prev,
+              [targetBuildingId]: sorted,
+            }));
+            const primary = sorted[0];
+            if (primary?.image_url) {
+              setBuildingThumbnails((prev) => ({
+                ...prev,
+                [targetBuildingId]: primary.image_url,
+              }));
+            }
+          }
+        } catch (fetchErr) {
+          console.error("Failed to refresh building images after upload:", fetchErr);
+        }
+
+        if (uploadFailedCount > 0) {
+          showToast(
+            `${editingBuilding ? "Building updated" : "Building created"}, but ${uploadFailedCount} image(s) failed: ${lastUploadError}`,
+            "error"
+          );
+        } else {
+          showToast(
+            `${editingBuilding ? "Building updated" : "Building created"} with ${uploadedTotal} image(s) successfully!`
+          );
+        }
+      } else {
+        showToast(editingBuilding ? "Building updated successfully!" : "Building created successfully!");
+      }
+
+      closeFormModal();
     } catch (err: any) {
       console.error("Save building error:", err);
-      const detail = err?.response?.data?.detail;
-      setFormError(
-        typeof detail === "string"
-          ? detail
-          : Array.isArray(detail)
-          ? detail.map((d: any) => d.msg).join(", ")
-          : "Failed to save building. Please check your inputs."
-      );
+      setFormError(formatApiError(err, "Failed to save building. Please check your inputs."));
     } finally {
       setSubmitting(false);
     }
@@ -328,8 +612,18 @@ export default function Buildings() {
         files,
         uploadCategory
       );
-      setBuildingImages((prev) => [...prev, ...uploaded]);
-      const primary = uploaded.find((i) => i.is_primary) || uploaded[0];
+      const updated = [...buildingImages, ...uploaded];
+      const sorted = [...updated].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setBuildingImages(updated);
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [viewingBuilding.id]: sorted,
+      }));
+      const primary = sorted.find((i) => i.is_primary) || sorted[0];
       if (primary?.image_url) {
         setBuildingThumbnails((prev) => ({
           ...prev,
@@ -351,17 +645,25 @@ export default function Buildings() {
     if (!viewingBuilding) return;
     try {
       await updateBuildingImage(viewingBuilding.id, imageId, { is_primary: true });
-      setBuildingImages((prev) =>
-        prev.map((img) => ({
-          ...img,
-          is_primary: img.id === imageId,
-        }))
-      );
-      const chosen = buildingImages.find((img) => img.id === imageId);
-      if (chosen?.image_url) {
+      const updated = buildingImages.map((img) => ({
+        ...img,
+        is_primary: img.id === imageId,
+      }));
+      const sorted = [...updated].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setBuildingImages(updated);
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [viewingBuilding.id]: sorted,
+      }));
+      const primary = sorted[0];
+      if (primary?.image_url) {
         setBuildingThumbnails((prev) => ({
           ...prev,
-          [viewingBuilding.id]: chosen.image_url,
+          [viewingBuilding.id]: primary.image_url,
         }));
       }
       showToast("Primary image updated!");
@@ -375,7 +677,22 @@ export default function Buildings() {
     if (!viewingBuilding) return;
     try {
       await deleteBuildingImage(viewingBuilding.id, imageId);
-      setBuildingImages((prev) => prev.filter((img) => img.id !== imageId));
+      const updated = buildingImages.filter((img) => img.id !== imageId);
+      const sorted = [...updated].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setBuildingImages(updated);
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [viewingBuilding.id]: sorted,
+      }));
+      const primary = sorted[0];
+      setBuildingThumbnails((prev) => ({
+        ...prev,
+        [viewingBuilding.id]: primary?.image_url || "",
+      }));
       showToast("Image deleted successfully!");
     } catch (err: any) {
       showToast(err?.response?.data?.detail || "Failed to delete image.", "error");
@@ -448,11 +765,7 @@ export default function Buildings() {
           {userPermissions.canCreate && (
             <button
               className="btn-add-building"
-              onClick={() => {
-                setEditingBuilding(null);
-                setFormError(null);
-                setIsFormOpen(true);
-              }}
+              onClick={openAddModal}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -522,6 +835,19 @@ export default function Buildings() {
           <div className="kpi-text-box">
             <span className="kpi-label">Completed</span>
             <span className="kpi-value">{summaryCounts.completed}</span>
+          </div>
+        </div>
+
+        <div className="kpi-card teal">
+          <div className="kpi-icon-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </div>
+          <div className="kpi-text-box">
+            <span className="kpi-label">Total Properties</span>
+            <span className="kpi-value">{loadingProperties ? "..." : summaryCounts.totalProperties}</span>
           </div>
         </div>
       </div>
@@ -672,11 +998,7 @@ export default function Buildings() {
           {userPermissions.canCreate && (
             <button
               className="btn-add-building"
-              onClick={() => {
-                setEditingBuilding(null);
-                setFormError(null);
-                setIsFormOpen(true);
-              }}
+              onClick={openAddModal}
             >
               + Add Building
             </button>
@@ -688,6 +1010,7 @@ export default function Buildings() {
           {buildings.map((b) => {
             const project = projectMap.get(b.project_id);
             const thumbUrl = buildingThumbnails[b.id];
+            const bImages = buildingImagesMap[b.id];
             const stageClass =
               b.construction_status === "Planning"
                 ? "badge-planning"
@@ -698,115 +1021,25 @@ export default function Buildings() {
             const statusClass =
               b.status === "Active" ? "badge-active" : "badge-inactive";
 
+            const linkedCount = buildingPropertyCounts[b.id] ?? 0;
+
             return (
-              <div key={b.id} className="building-card">
-                <div className="building-card-media">
-                  {thumbUrl ? (
-                    <img
-                      src={resolveImageUrl(thumbUrl)}
-                      alt={b.name}
-                      className="building-card-image"
-                      onError={handleImageError}
-                    />
-                  ) : (
-                    <div className="building-card-placeholder">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-                        <line x1="9" y1="22" x2="9" y2="22.01"></line>
-                        <line x1="15" y1="22" x2="15" y2="22.01"></line>
-                      </svg>
-                      {b.building_code && (
-                        <span className="building-code-pill">{b.building_code}</span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="building-badge-overlay">
-                    <span className={`badge ${stageClass}`}>{b.construction_status}</span>
-                  </div>
-                </div>
-
-                <div className="building-card-body">
-                  <div className="building-header-row">
-                    <h3 className="building-title">{b.name}</h3>
-                    <span className={`badge ${statusClass}`}>{b.status}</span>
-                  </div>
-
-                  <div className="building-project-name">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                      <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                    {project ? `${project.name}${project.city ? ` (${project.city})` : ""}` : "Project"}
-                  </div>
-
-                  <div className="building-meta-grid">
-                    <div className="building-meta-item">
-                      <span className="building-meta-label">Total Floors</span>
-                      <span className="building-meta-val">{b.total_floors} Floors</span>
-                    </div>
-                    <div className="building-meta-item">
-                      <span className="building-meta-label">Total Units</span>
-                      <span className="building-meta-val">{b.total_units} Units</span>
-                    </div>
-                    <div className="building-meta-item">
-                      <span className="building-meta-label">Code / ID</span>
-                      <span className="building-meta-val">{b.building_code || "—"}</span>
-                    </div>
-                    <div className="building-meta-item">
-                      <span className="building-meta-label">Type</span>
-                      <span className="building-meta-val">{b.building_type}</span>
-                    </div>
-                  </div>
-
-                  <div className="building-card-footer">
-                    <span className="type-tag">{b.building_type}</span>
-
-                    <div className="action-buttons-group">
-                      <button
-                        className="btn-action-icon"
-                        title="View Details & Photos"
-                        onClick={() => setViewingBuilding(b)}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                          <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                      </button>
-
-                      {userPermissions.canUpdate && (
-                        <button
-                          className="btn-action-icon"
-                          title="Edit Building"
-                          onClick={() => {
-                            setEditingBuilding(b);
-                            setFormError(null);
-                            setIsFormOpen(true);
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
-                        </button>
-                      )}
-
-                      {userPermissions.canDelete && (
-                        <button
-                          className="btn-action-icon delete"
-                          title="Delete Building"
-                          onClick={() => setDeletingBuilding(b)}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <BuildingCard
+                key={b.id}
+                building={b}
+                images={bImages}
+                thumbUrl={thumbUrl}
+                projectName={
+                  project ? `${project.name}${project.city ? ` (${project.city})` : ""}` : undefined
+                }
+                linkedPropertiesCount={linkedCount}
+                stageClass={stageClass}
+                statusClass={statusClass}
+                userPermissions={userPermissions}
+                onView={(building) => setViewingBuilding(building)}
+                onEdit={(building) => openEditModal(building)}
+                onDelete={(building) => setDeletingBuilding(building)}
+              />
             );
           })}
         </div>
@@ -906,11 +1139,7 @@ export default function Buildings() {
                           <button
                             className="btn-action-icon"
                             title="Edit Building"
-                            onClick={() => {
-                              setEditingBuilding(b);
-                              setFormError(null);
-                              setIsFormOpen(true);
-                            }}
+                            onClick={() => openEditModal(b)}
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -943,11 +1172,11 @@ export default function Buildings() {
 
       {/* ─── Add / Edit Modal ─── */}
       {isFormOpen && (
-        <div className="modal-overlay" onClick={() => setIsFormOpen(false)}>
+        <div className="modal-overlay" onClick={closeFormModal}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingBuilding ? "Edit Building" : "Add New Building"}</h2>
-              <button className="modal-close-btn" onClick={() => setIsFormOpen(false)}>
+              <button className="modal-close-btn" onClick={closeFormModal}>
                 &times;
               </button>
             </div>
@@ -1093,13 +1322,193 @@ export default function Buildings() {
                     placeholder="Enter architectural specs, floor layouts, amenities, or notes..."
                   />
                 </div>
+
+                {/* ─── Building Images & Gallery Section ─── */}
+                <div className="building-form-images-section">
+                  <div className="building-form-images-header">
+                    <h3 className="building-form-images-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                      Building Images & Gallery
+                    </h3>
+
+                    <div className="building-category-select-wrapper">
+                      <label htmlFor="building-image-category">Category:</label>
+                      <select
+                        id="building-image-category"
+                        value={stagedCategory}
+                        onChange={(e) => setStagedCategory(e.target.value as BuildingImageCategory)}
+                      >
+                        {BUILDING_IMAGE_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Drag and Drop Zone */}
+                  <div
+                    className={`building-image-dropzone ${isDragOver ? "drag-active" : ""}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDropFiles}
+                    onClick={() => formFileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={formFileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/jpeg,image/png,image/webp"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          handleAddFiles(e.target.files);
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+
+                    <div className="dropzone-icon-circle">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="22" height="22">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                    </div>
+
+                    <p className="dropzone-prompt">Drag & drop images here</p>
+                    <span className="dropzone-divider-text">or</span>
+
+                    <button
+                      type="button"
+                      className="btn-upload-browse"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        formFileInputRef.current?.click();
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                      </svg>
+                      Browse Images
+                    </button>
+
+                    <p className="dropzone-help-text">
+                      Supports JPG, JPEG, PNG, WEBP • Max 5 MB per file • Up to 50 images
+                    </p>
+                  </div>
+
+                  {/* Selected / Staged Images Previews */}
+                  {stagedImages.length > 0 && (
+                    <div className="images-preview-block">
+                      <div className="images-preview-subheading">
+                        <span>Selected Images ({stagedImages.length})</span>
+                        <button
+                          type="button"
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#ef4444",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                          onClick={clearStagedImages}
+                        >
+                          Clear All
+                        </button>
+                      </div>
+
+                      <div className="images-grid-thumbnails">
+                        {stagedImages.map((item) => (
+                          <div key={item.id} className="image-thumb-card">
+                            <div className="image-thumb-media">
+                              <img src={item.previewUrl} alt={item.name} className="image-thumb-img" />
+                              <span className="image-thumb-category-tag">{item.category}</span>
+                              <button
+                                type="button"
+                                className="btn-thumb-remove"
+                                title="Remove image"
+                                aria-label="Remove image"
+                                onClick={() => handleRemoveStagedImage(item.id)}
+                              >
+                                &times;
+                              </button>
+                            </div>
+                            <div className="image-thumb-meta">
+                              <span className="image-thumb-filename" title={item.name}>
+                                {item.name}
+                              </span>
+                              <span className="image-thumb-subtext">{item.sizeFormatted}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Existing Images in Edit Mode */}
+                  {editingBuilding && (
+                    <div className="images-preview-block" style={{ marginTop: "18px" }}>
+                      <div className="images-preview-subheading">
+                        <span>
+                          Existing Building Photos ({existingFormImages.length})
+                          {loadingExistingImages && " — Loading..."}
+                        </span>
+                      </div>
+
+                      {existingFormImages.length === 0 && !loadingExistingImages ? (
+                        <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "4px 0" }}>
+                          No photos have been uploaded for this building yet.
+                        </p>
+                      ) : (
+                        <div className="images-grid-thumbnails">
+                          {existingFormImages.map((img) => (
+                            <div key={img.id} className="image-thumb-card">
+                              <div className="image-thumb-media">
+                                <img
+                                  src={resolveImageUrl(img.image_url)}
+                                  alt="Existing building photo"
+                                  className="image-thumb-img"
+                                  onError={handleImageError}
+                                />
+                                <span className="image-thumb-category-tag">{img.image_type}</span>
+                                {img.is_primary && (
+                                  <span className="image-thumb-primary-tag">Cover</span>
+                                )}
+                                {userPermissions.canDelete && (
+                                  <button
+                                    type="button"
+                                    className="btn-thumb-remove"
+                                    title="Delete image"
+                                    aria-label="Delete image"
+                                    onClick={() => handleDeleteExistingFormImage(img.id)}
+                                  >
+                                    &times;
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="modal-footer">
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setIsFormOpen(false)}
+                  onClick={closeFormModal}
                   disabled={submitting}
                 >
                   Cancel
@@ -1147,6 +1556,25 @@ export default function Buildings() {
             <div className="modal-body">
               {viewTab === "overview" ? (
                 <div>
+                  {buildingThumbnails[viewingBuilding.id] && (
+                    <div className="building-overview-banner">
+                      <img
+                        src={resolveImageUrl(buildingThumbnails[viewingBuilding.id])}
+                        alt={viewingBuilding.name}
+                        onError={handleImageError}
+                      />
+                      <div className="building-overview-banner-overlay">
+                        <div className="building-overview-banner-text">
+                          <h3>{viewingBuilding.name}</h3>
+                          <p>
+                            {viewingBuilding.building_code ? `Code: ${viewingBuilding.building_code} • ` : ""}
+                            {viewingBuilding.total_floors} Floors • {viewingBuilding.construction_status}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="details-spec-grid">
                     <div className="details-spec-item">
                       <div className="label">Building Type</div>
@@ -1206,6 +1634,90 @@ export default function Buildings() {
                 </div>
               ) : (
                 <div>
+                  {/* Featured Large Hero Preview if images exist */}
+                  {buildingImages.length > 0 && (
+                    <>
+                      <div className="building-gallery-hero">
+                        <div className="building-gallery-hero-badges">
+                          <span className="building-gallery-hero-category">
+                            {buildingImages[activeGalleryIndex]?.image_type || "Photo"}
+                          </span>
+                          {buildingImages[activeGalleryIndex]?.is_primary && (
+                            <span className="building-gallery-hero-primary">Cover</span>
+                          )}
+                        </div>
+
+                        <img
+                          src={resolveImageUrl(buildingImages[activeGalleryIndex]?.image_url)}
+                          alt={`${viewingBuilding.name} - Photo ${activeGalleryIndex + 1}`}
+                          className="building-gallery-hero-img"
+                          onError={handleImageError}
+                          onClick={() =>
+                            setPreviewImage(resolveImageUrl(buildingImages[activeGalleryIndex]?.image_url))
+                          }
+                          title="Click to view full size"
+                        />
+
+                        {buildingImages.length > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              className="building-gallery-hero-nav prev"
+                              onClick={() =>
+                                setActiveGalleryIndex(
+                                  (prev) => (prev - 1 + buildingImages.length) % buildingImages.length
+                                )
+                              }
+                              title="Previous photo"
+                              aria-label="Previous photo"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="building-gallery-hero-nav next"
+                              onClick={() =>
+                                setActiveGalleryIndex((prev) => (prev + 1) % buildingImages.length)
+                              }
+                              title="Next photo"
+                              aria-label="Next photo"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                              </svg>
+                            </button>
+                          </>
+                        )}
+
+                        <div className="building-gallery-hero-counter">
+                          {activeGalleryIndex + 1} / {buildingImages.length}
+                        </div>
+                      </div>
+
+                      {/* Horizontal Thumbnail Navigation Strip */}
+                      {buildingImages.length > 1 && (
+                        <div className="building-gallery-thumbnails-strip">
+                          {buildingImages.map((img, idx) => (
+                            <div
+                              key={img.id}
+                              className={`building-gallery-thumb-item ${idx === activeGalleryIndex ? "active" : ""}`}
+                              onClick={() => setActiveGalleryIndex(idx)}
+                              title={`Photo ${idx + 1}`}
+                            >
+                              <img
+                                src={resolveImageUrl(img.image_url)}
+                                alt={`Thumbnail ${idx + 1}`}
+                                onError={handleImageError}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
                   {userPermissions.canUpdate && (
                     <div style={{ marginBottom: "20px" }}>
                       <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px" }}>

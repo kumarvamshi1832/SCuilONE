@@ -75,6 +75,7 @@ export interface Property {
   building_name?: string;
   assigned_to_name?: string;
   primary_image_url?: string;
+  images?: PropertyImage[] | string[] | Array<{ url?: string; image_url?: string }>;
 }
 
 export interface PropertyCreate {

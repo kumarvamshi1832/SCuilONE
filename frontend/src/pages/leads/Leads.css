@@ -253,10 +253,19 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
   border: 1px solid #eaeaea;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
-.dashboard-wrapper.dark .leads-table-container {
+.dashboard-wrapper.dark .leads-table-container,
+body.dark .leads-table-container {
   background: #1f1f1f;
   border-color: #333;
+}
+
+.leads-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .leads-table {
@@ -618,7 +627,11 @@
     width: 100%;
   }
   .leads-table-container {
+    overflow: hidden;
+  }
+  .leads-table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .leads-table {
     min-width: 800px;

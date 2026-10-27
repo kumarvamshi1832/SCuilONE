@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "./Pagination.css";
 
 export interface PaginationProps {
@@ -8,6 +8,7 @@ export interface PaginationProps {
   onPageChange: (newPage: number) => void;
   entityName?: string;
   className?: string;
+  showPageIndicator?: boolean;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({
@@ -17,9 +18,19 @@ export const Pagination: React.FC<PaginationProps> = ({
   onPageChange,
   entityName = "items",
   className = "",
+  showPageIndicator = false,
 }) => {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  // If currentPage becomes invalid, automatically notify parent with the last valid page
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages >= 1) {
+      onPageChange(totalPages);
+    } else if (currentPage < 1) {
+      onPageChange(1);
+    }
+  }, [currentPage, totalPages, onPageChange]);
 
   const startItem = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, totalItems);
@@ -67,88 +78,107 @@ export const Pagination: React.FC<PaginationProps> = ({
     return null;
   }
 
+  // Singular / plural entity label
+  const entityLabel =
+    totalItems === 1 && entityName.endsWith("s")
+      ? entityName.slice(0, -1)
+      : entityName;
+
   return (
-    <div className={`pagination-container ${className}`}>
+    <div
+      className={`pagination-container ${className}`.trim()}
+      role="navigation"
+      aria-label="Pagination"
+    >
       <div className="pagination-info">
-        Showing <strong>{startItem}</strong>–<strong>{endItem}</strong> of{" "}
-        <strong>{totalItems}</strong> {entityName}
-        {totalPages > 1 && (
+        Showing <strong>{startItem}–{endItem}</strong> of{" "}
+        <strong>{totalItems}</strong> {entityLabel}
+        {showPageIndicator && totalPages > 1 && (
           <span className="pagination-page-indicator">
             (Page {safePage} of {totalPages})
           </span>
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className="pagination-nav">
-          <button
-            type="button"
-            className="pagination-btn pagination-prev"
-            onClick={handlePrev}
-            disabled={safePage <= 1}
-            aria-label="Previous page"
+      <nav className="pagination-nav" aria-label="Pagination Navigation">
+        <button
+          type="button"
+          className="pagination-btn pagination-prev"
+          onClick={handlePrev}
+          disabled={safePage <= 1}
+          aria-label="Previous page"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            width="14"
+            height="14"
+            aria-hidden="true"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              width="14"
-              height="14"
-            >
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            <span>Previous</span>
-          </button>
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span>Previous</span>
+        </button>
 
-          <div className="pagination-pages">
-            {pages.map((p, idx) => {
-              if (p === "...") {
-                return (
-                  <span key={`ellipsis-${idx}`} className="pagination-ellipsis">
-                    …
-                  </span>
-                );
-              }
-
-              const pageNum = Number(p);
-              const isActive = pageNum === safePage;
-
+        <div className="pagination-pages" role="group" aria-label="Page numbers">
+          {pages.map((p, idx) => {
+            if (p === "...") {
               return (
-                <button
-                  key={`page-${pageNum}`}
-                  type="button"
-                  className={`pagination-page-btn ${isActive ? "active" : ""}`}
-                  onClick={() => onPageChange(pageNum)}
-                  aria-current={isActive ? "page" : undefined}
+                <span
+                  key={`ellipsis-${idx}`}
+                  className="pagination-ellipsis"
+                  aria-hidden="true"
                 >
-                  {pageNum}
-                </button>
+                  …
+                </span>
               );
-            })}
-          </div>
+            }
 
-          <button
-            type="button"
-            className="pagination-btn pagination-next"
-            onClick={handleNext}
-            disabled={safePage >= totalPages}
-            aria-label="Next page"
-          >
-            <span>Next</span>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              width="14"
-              height="14"
-            >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
+            const pageNum = Number(p);
+            const isActive = pageNum === safePage;
+
+            return (
+              <button
+                key={`page-${pageNum}`}
+                type="button"
+                className={`pagination-page-btn ${isActive ? "active" : ""}`}
+                onClick={() => onPageChange(pageNum)}
+                aria-label={
+                  isActive
+                    ? `Page ${pageNum}, current page`
+                    : `Go to page ${pageNum}`
+                }
+                aria-current={isActive ? "page" : undefined}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
         </div>
-      )}
+
+        <button
+          type="button"
+          className="pagination-btn pagination-next"
+          onClick={handleNext}
+          disabled={safePage >= totalPages}
+          aria-label="Next page"
+        >
+          <span>Next</span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            width="14"
+            height="14"
+            aria-hidden="true"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </nav>
     </div>
   );
 };
