@@ -9,6 +9,7 @@ import {
   getMatchesForRequirement,
   autoMatchProperties,
   getPotentialMatches,
+  createPropertyMatch,
 } from "../../services/propertyMatchService";
 import {
   getProperties,
@@ -28,7 +29,7 @@ import {
   BUYER_REQUIREMENT_STATUSES,
 } from "../../types/buyerRequirement";
 import { PROPERTY_TYPES, AREA_UNITS } from "../../types/property";
-import type { PropertyMatch } from "../../types/propertyMatch";
+import type { PropertyMatch, PropertyMatchCreate } from "../../types/propertyMatch";
 import type { Property, PropertyImage } from "../../types/property";
 import type { Lead } from "../../types/lead";
 import type { Contact } from "../../types/contact";
@@ -77,6 +78,13 @@ export default function BuyerRequirements() {
   const [propertyImagesMap, setPropertyImagesMap] = useState<Record<string, PropertyImage[]>>({});
   const [viewingPropertyDetail, setViewingPropertyDetail] = useState<Property | null>(null);
   const [viewTab, setViewTab] = useState<"overview" | "matches">("overview");
+
+  // Manual Matching State & Filters
+  const [manualSearch, setManualSearch] = useState("");
+  const [manualTypeFilter, setManualTypeFilter] = useState("");
+  const [manualBhkFilter, setManualBhkFilter] = useState("");
+  const [manualOnlyUnmatched, setManualOnlyUnmatched] = useState(false);
+  const [matchingActionLoading, setMatchingActionLoading] = useState<string | null>(null);
 
   // Stable refs to prevent re-render dependency cycles and visual blinking
   const resolvedPropertiesRef = useRef<Record<string, Property>>({});
@@ -140,13 +148,34 @@ export default function BuyerRequirements() {
         : Array.isArray(parsed.role_permissions)
         ? parsed.role_permissions
         : [];
-      const role = String(parsed.role?.name || parsed.role || "").toUpperCase();
+      let roleName = "";
+      if (typeof parsed.role === "string") {
+        roleName = parsed.role.toUpperCase();
+      } else if (parsed.role && typeof parsed.role.name === "string") {
+        roleName = parsed.role.name.toUpperCase();
+      } else if (typeof parsed.role_name === "string") {
+        roleName = parsed.role_name.toUpperCase();
+      }
+
+      if (!roleName) {
+        try {
+          const token = sessionStorage.getItem("access_token");
+          if (token) {
+            const parts = token.split(".");
+            if (parts.length === 3 && parts[1]) {
+              const payload = JSON.parse(atob(parts[1]));
+              if (payload.role) roleName = String(payload.role).toUpperCase();
+            }
+          }
+        } catch {}
+      }
+
       const isSuperOrAdmin =
-        role.includes("ADMIN") ||
-        role.includes("MANAGER") ||
-        role === "TENANT ADMIN" ||
-        role === "TENANT_OWNER" ||
-        role === "SUPER ADMIN";
+        roleName.includes("ADMIN") ||
+        roleName.includes("MANAGER") ||
+        roleName.includes("OWNER") ||
+        roleName.includes("SUPER") ||
+        !roleName;
 
       const has = (p: string) =>
         isSuperOrAdmin ||
@@ -407,6 +436,11 @@ export default function BuyerRequirements() {
       setIsAutoMatching(false);
       setViewTab("overview");
       setViewingPropertyDetail(null);
+      setManualSearch("");
+      setManualTypeFilter("");
+      setManualBhkFilter("");
+      setManualOnlyUnmatched(false);
+      setMatchingActionLoading(null);
     }
   }, [viewingRequirementId]);
 
@@ -485,6 +519,145 @@ export default function BuyerRequirements() {
     setViewTab("matches");
     await handleAutoMatch(req);
   };
+
+  // Available properties filtered for this requirement's listing type (Buy -> Sale, Rent -> Rent)
+  const availablePropertiesForRequirement = useMemo(() => {
+    if (!viewingRequirement) return [];
+    const expectedListing =
+      viewingRequirement.requirement_type === "Buy" ? "Sale" : "Rent";
+    return properties.filter(
+      (p) => p.status === "Available" && p.listing_type === expectedListing
+    );
+  }, [viewingRequirement, properties]);
+
+  // Filtered available properties based on user manual search & filters
+  const filteredAvailableProperties = useMemo(() => {
+    if (!viewingRequirement) return [];
+    return availablePropertiesForRequirement.filter((p) => {
+      const isMatched = activeMatches.some((m) => m.property_id === p.id);
+      if (manualOnlyUnmatched && isMatched) return false;
+
+      if (manualTypeFilter && p.property_type !== manualTypeFilter) return false;
+      if (manualBhkFilter) {
+        if (manualBhkFilter === "4") {
+          if (!p.bedrooms || p.bedrooms < 4) return false;
+        } else if (String(p.bedrooms) !== manualBhkFilter) {
+          return false;
+        }
+      }
+
+      if (manualSearch) {
+        const q = manualSearch.toLowerCase();
+        const inName = p.name?.toLowerCase().includes(q);
+        const inCity = p.city?.toLowerCase().includes(q);
+        const inAddr = p.address?.toLowerCase().includes(q);
+        const inUnit = p.unit_number?.toLowerCase().includes(q);
+        const inType = p.property_type?.toLowerCase().includes(q);
+        if (!inName && !inCity && !inAddr && !inUnit && !inType) return false;
+      }
+      return true;
+    });
+  }, [
+    viewingRequirement,
+    availablePropertiesForRequirement,
+    activeMatches,
+    manualOnlyUnmatched,
+    manualTypeFilter,
+    manualBhkFilter,
+    manualSearch,
+  ]);
+
+  // Preload property images for candidate available properties
+  useEffect(() => {
+    if (viewTab === "matches" && viewingRequirement) {
+      const candidateIds = filteredAvailableProperties.slice(0, 15).map((p) => p.id);
+      candidateIds.forEach((propId) => {
+        if (!propertyImagesMapRef.current[propId]) {
+          getPropertyImages(propId)
+            .then((imgs) => {
+              if (imgs && imgs.length > 0) {
+                setPropertyImagesMap((prev) => {
+                  const updated = { ...prev, [propId]: imgs };
+                  propertyImagesMapRef.current = updated;
+                  return updated;
+                });
+              }
+            })
+            .catch(() => {});
+        }
+      });
+    }
+  }, [viewTab, viewingRequirement, filteredAvailableProperties]);
+
+  // Manually match a property to the current buyer requirement
+  const handleManualMatch = async (property: Property) => {
+    if (!viewingRequirement) return;
+    if (!userPermissions.canMatch) {
+      const permMsg = "You don't have permission to match properties.";
+      setMatchError(permMsg);
+      showToast(permMsg, "error");
+      return;
+    }
+    if (viewingRequirement.status === "Closed") {
+      const closedMsg = "Closed requirements cannot be matched.";
+      setMatchError(closedMsg);
+      showToast(closedMsg, "error");
+      return;
+    }
+
+    setMatchingActionLoading(property.id);
+    setMatchError(null);
+
+    try {
+      const payload: PropertyMatchCreate = {
+        buyer_requirement_id: viewingRequirement.id,
+        property_id: property.id,
+        assigned_to: viewingRequirement.assigned_to || property.assigned_to || null,
+      };
+
+      await createPropertyMatch(payload);
+
+      // Re-fetch existing and potential matches
+      const [existingData, potentialData] = await Promise.all([
+        getMatchesForRequirement(viewingRequirement.id).catch(() => []),
+        getPotentialMatches(viewingRequirement.id).catch(() => []),
+      ]);
+
+      setActiveMatches(existingData);
+      setPotentialMatches(potentialData);
+
+      // Resolve full property details and images
+      await resolvePropertyDetailsAndImages(existingData, potentialData);
+
+      // Update requirement status if it was New / Qualified
+      if (viewingRequirement.status !== "Closed") {
+        setRequirements((prev) =>
+          prev.map((r) =>
+            r.id === viewingRequirement.id && r.status !== "Closed"
+              ? { ...r, status: "Matched" }
+              : r
+          )
+        );
+        setViewingRequirement((prev) =>
+          prev && prev.status !== "Closed" ? { ...prev, status: "Matched" } : prev
+        );
+      }
+
+      showToast(`Property "${property.name}" matched successfully!`, "success");
+    } catch (err: any) {
+      console.error("Manual match error:", err);
+      const detail = err?.response?.data?.detail;
+      const msg =
+        typeof detail === "string"
+          ? detail
+          : "Failed to match property. It may already be matched or unavailable.";
+      setMatchError(msg);
+      showToast(msg, "error");
+    } finally {
+      setMatchingActionLoading(null);
+    }
+  };
+
 
 
   // Save Buyer Requirement
@@ -952,6 +1125,7 @@ export default function BuyerRequirements() {
 
             return (
               <div key={r.id} className="requirement-card">
+                <div className="card-top-accent" />
                 <div className="requirement-card-top">
                   <div className="buyer-pill">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
@@ -963,63 +1137,132 @@ export default function BuyerRequirements() {
                   <span className={`badge ${statusClass}`}>{r.status}</span>
                 </div>
 
-                <h3 className="buyer-name-title">{buyerName}</h3>
+                <div className="requirement-lead-info">
+                  <h3 className="buyer-name-title" title={buyerName}>{buyerName}</h3>
 
-                <div className="requirement-meta-row">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                  </svg>
-                  <span>
-                    {r.preferred_city || "Any City"}
-                    {r.preferred_location ? ` • ${r.preferred_location}` : ""}
-                  </span>
+                  <div className="requirement-meta-row">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                    <span>
+                      {r.preferred_city || "Any City"}
+                      {r.preferred_location ? ` • ${r.preferred_location}` : ""}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="requirement-budget-box">
-                  <span className="budget-label">Budget</span>
+                  <div className="budget-meta">
+                    <span className="budget-badge-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                        <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path>
+                        <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path>
+                        <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path>
+                      </svg>
+                    </span>
+                    <span className="budget-label">Budget</span>
+                  </div>
                   <span className="budget-val">{formatBudget(r.min_budget, r.max_budget)}</span>
                 </div>
 
                 <div className="requirement-specs-grid">
-                  <div className="req-spec-item">
-                    <span className="label">Type</span>
-                    <span className="val">{r.requirement_type} • {r.property_type}</span>
+                  <div className="req-spec-item spec-type">
+                    <span className="label">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                      </svg>
+                      Type
+                    </span>
+                    <span className="val">
+                      <span className={`type-tag type-${(r.requirement_type || "").toLowerCase()}`}>
+                        {r.requirement_type}
+                      </span>
+                      <span className="type-sep">•</span>
+                      <span className="prop-val">{r.property_type}</span>
+                    </span>
                   </div>
-                  <div className="req-spec-item">
-                    <span className="label">Bedrooms</span>
-                    <span className="val">{r.bedrooms ? `${r.bedrooms} BHK` : "Any"}</span>
+                  <div className="req-spec-item spec-bhk">
+                    <span className="label">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
+                        <path d="M2 4v16"></path>
+                        <path d="M2 8h18a2 2 0 0 1 2 2v10"></path>
+                        <path d="M2 17h20"></path>
+                        <path d="M6 8v9"></path>
+                      </svg>
+                      Bedrooms
+                    </span>
+                    <span className="val bhk-val">{r.bedrooms ? `${r.bedrooms} BHK` : "Any"}</span>
                   </div>
-                  <div className="req-spec-item">
-                    <span className="label">Area</span>
+                  <div className="req-spec-item spec-area">
+                    <span className="label">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
+                        <path d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"></path>
+                        <polyline points="9 3 9 21"></polyline>
+                      </svg>
+                      Area
+                    </span>
                     <span className="val">{formatArea(r.min_area, r.max_area, r.area_unit)}</span>
                   </div>
-                  <div className="req-spec-item">
-                    <span className="label">Agent</span>
-                    <span className="val">
+                  <div className="req-spec-item spec-agent">
+                    <span className="label">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                      Agent
+                    </span>
+                    <span className="val agent-val" title={r.assigned_to ? userMap.get(r.assigned_to) || "Assigned" : "Unassigned"}>
                       {r.assigned_to ? userMap.get(r.assigned_to) || "Assigned" : "Unassigned"}
                     </span>
                   </div>
                 </div>
 
                 <div className="requirement-card-footer">
-                  <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                    Created: {new Date(r.created_at).toLocaleDateString()}
+                  <div className="card-created-meta" title={`Created on ${new Date(r.created_at).toLocaleDateString()}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>Created: {new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
 
                   <div className="action-buttons-group">
                     {userPermissions.canMatch && r.status !== "Closed" && (
-                      <button
-                        type="button"
-                        className="btn-auto-match-mini"
-                        title="Find Matching Properties"
-                        onClick={() => handleCardAutoMatch(r)}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
-                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                        </svg>
-                        <span>Auto Match</span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn-auto-match-mini"
+                          title="Find Matching Properties (Auto Match)"
+                          onClick={() => handleCardAutoMatch(r)}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                          </svg>
+                          <span>Auto Match</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-manual-match-mini"
+                          title="Manually Match Properties"
+                          onClick={() => {
+                            setViewingRequirement(r);
+                            setViewTab("matches");
+                            setTimeout(() => {
+                              const el = document.getElementById("manual-matching-section");
+                              if (el) el.scrollIntoView({ behavior: "smooth" });
+                            }, 120);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                          </svg>
+                          <span>Manual Match</span>
+                        </button>
+                      </>
                     )}
 
                     <button
@@ -1134,16 +1377,37 @@ export default function BuyerRequirements() {
                     <td>
                       <div className="action-buttons-group" style={{ justifyContent: "flex-end" }}>
                         {userPermissions.canMatch && r.status !== "Closed" && (
-                          <button
-                            type="button"
-                            className="btn-action-icon match"
-                            title="Find Matching Properties (Auto Match)"
-                            onClick={() => handleCardAutoMatch(r)}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                            </svg>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="btn-action-icon match"
+                              title="Find Matching Properties (Auto Match)"
+                              onClick={() => handleCardAutoMatch(r)}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                              </svg>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn-action-icon manual-match"
+                              title="Manually Match Properties"
+                              onClick={() => {
+                                setViewingRequirement(r);
+                                setViewTab("matches");
+                                setTimeout(() => {
+                                  const el = document.getElementById("manual-matching-section");
+                                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                                }, 120);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                              </svg>
+                            </button>
+                          </>
                         )}
 
                         <button
@@ -1595,28 +1859,47 @@ export default function BuyerRequirements() {
                           </p>
                         </div>
 
-                        {userPermissions.canMatch && viewingRequirement.status !== "Closed" && (
-                          <button
-                            type="button"
-                            className="btn-auto-match"
-                            disabled={isAutoMatching}
-                            onClick={() => handleAutoMatch(viewingRequirement)}
-                          >
-                            {isAutoMatching ? (
-                              <>
-                                <div className="spinner-sm"></div>
-                                <span>Finding matching properties...</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        <div className="matches-header-actions">
+                          {userPermissions.canMatch && viewingRequirement.status !== "Closed" && (
+                            <>
+                              <button
+                                type="button"
+                                className="btn-manual-match-header"
+                                onClick={() => {
+                                  const el = document.getElementById("manual-matching-section");
+                                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                                  <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
-                                <span>Find Matching Properties</span>
-                              </>
-                            )}
-                          </button>
-                        )}
+                                <span>Manually Match Property</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn-auto-match"
+                                disabled={isAutoMatching}
+                                onClick={() => handleAutoMatch(viewingRequirement)}
+                              >
+                                {isAutoMatching ? (
+                                  <>
+                                    <div className="spinner-sm"></div>
+                                    <span>Finding matching properties...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                    </svg>
+                                    <span>Find Matching Properties</span>
+                                  </>
+                                )}
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {/* Match Error Banner */}
@@ -1675,7 +1958,7 @@ export default function BuyerRequirements() {
                                 <p className="no-matches-secondary-text">
                                   {viewingRequirement.status === "Closed"
                                     ? "Closed requirements cannot be matched."
-                                    : "Click 'Find Matching Properties' above or review the potential near-budget matches below."}
+                                    : "Click 'Find Matching Properties' above or manually select available properties below."}
                                 </p>
                               </div>
                             ) : (
@@ -1743,6 +2026,124 @@ export default function BuyerRequirements() {
                                       matchLabel="Near Budget"
                                       formatPrice={formatPrice}
                                       onView={setViewingPropertyDetail}
+                                      onMatch={
+                                        userPermissions.canMatch && viewingRequirement.status !== "Closed"
+                                          ? handleManualMatch
+                                          : undefined
+                                      }
+                                      isMatching={matchingActionLoading === prop.id}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ─── 3. Manually Match Available Properties Section ─── */}
+                          <div id="manual-matching-section" className="matches-group-section manual-match-container" style={{ marginTop: "36px" }}>
+                            <div className="matches-section-header">
+                              <div className="matches-section-title-row">
+                                <span className="match-group-tag manual">Manual Match</span>
+                                <h4 className="matches-section-title">
+                                  Manually Match Available Properties ({filteredAvailableProperties.length})
+                                </h4>
+                              </div>
+                              <span className="matches-section-caption">
+                                Select and manually link any available {viewingRequirement.requirement_type === "Buy" ? "sale" : "rental"} property in your inventory directly to this requirement.
+                              </span>
+                            </div>
+
+                            {/* Manual match search & filters */}
+                            <div className="manual-match-toolbar">
+                              <div className="manual-search-box">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                  <circle cx="11" cy="11" r="8"></circle>
+                                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input
+                                  type="text"
+                                  placeholder="Search by property name, code, location, city..."
+                                  value={manualSearch}
+                                  onChange={(e) => setManualSearch(e.target.value)}
+                                />
+                                {manualSearch && (
+                                  <button
+                                    type="button"
+                                    className="btn-clear-search"
+                                    onClick={() => setManualSearch("")}
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="manual-filter-row">
+                                <select
+                                  value={manualTypeFilter}
+                                  onChange={(e) => setManualTypeFilter(e.target.value)}
+                                  className="manual-filter-select"
+                                >
+                                  <option value="">All Property Types</option>
+                                  {PROPERTY_TYPES.map((t) => (
+                                    <option key={t} value={t}>
+                                      {t}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <select
+                                  value={manualBhkFilter}
+                                  onChange={(e) => setManualBhkFilter(e.target.value)}
+                                  className="manual-filter-select"
+                                >
+                                  <option value="">All Bedrooms</option>
+                                  <option value="1">1 BHK</option>
+                                  <option value="2">2 BHK</option>
+                                  <option value="3">3 BHK</option>
+                                  <option value="4">4+ BHK</option>
+                                </select>
+
+                                <label className="manual-unmatched-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={manualOnlyUnmatched}
+                                    onChange={(e) => setManualOnlyUnmatched(e.target.checked)}
+                                  />
+                                  <span>Hide Already Matched</span>
+                                </label>
+                              </div>
+                            </div>
+
+                            {filteredAvailableProperties.length === 0 ? (
+                              <div className="no-matches-box">
+                                <p className="no-matches-primary-text">No available properties match your search.</p>
+                                <p className="no-matches-secondary-text">
+                                  {availablePropertiesForRequirement.length === 0
+                                    ? `There are currently no available properties listed for ${viewingRequirement.requirement_type === "Buy" ? "Sale" : "Rent"}.`
+                                    : "Try clearing search filters or uncheck 'Hide Already Matched'."}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="matched-properties-grid">
+                                {filteredAvailableProperties.map((prop) => {
+                                  const cardImages = propertyImagesMap[prop.id] || [];
+                                  const isAlreadyMatched = activeMatches.some((m) => m.property_id === prop.id);
+                                  return (
+                                    <PropertyCard
+                                      key={prop.id}
+                                      property={prop}
+                                      images={cardImages}
+                                      matchType={isAlreadyMatched ? "exact" : "manual"}
+                                      matchLabel={isAlreadyMatched ? "Matched" : "Available"}
+                                      formatPrice={formatPrice}
+                                      onView={setViewingPropertyDetail}
+                                      onMatch={
+                                        userPermissions.canMatch && viewingRequirement.status !== "Closed"
+                                          ? handleManualMatch
+                                          : undefined
+                                      }
+                                      isMatched={isAlreadyMatched}
+                                      isMatching={matchingActionLoading === prop.id}
                                     />
                                   );
                                 })}

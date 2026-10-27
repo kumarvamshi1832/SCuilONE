@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useCallback, useRef } from "react";
+import { ReactNode, useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
@@ -25,6 +25,7 @@ import {
 import "./DashboardLayout.css";
 
 import { getIndustryConfig, normalizeIndustrySlug } from "../../config/industryConfig";
+import { getIndustryDisplayName } from "../../utils/industryUtils";
 import GlobalSearch from "../search/GlobalSearch";
 
 interface DashboardLayoutProps {
@@ -136,6 +137,57 @@ export default function DashboardLayout({
   };
 
   const [tenant, setTenant] = useState<TenantDetails | null>(null);
+
+  const authenticatedIndustry = useMemo(() => {
+    // 1. From tenant state (fetched via getTenantDetails or updated)
+    if (tenant?.industry && typeof tenant.industry === "string" && tenant.industry.trim()) {
+      return tenant.industry.trim();
+    }
+
+    // 2. From sessionStorage 'tenant'
+    try {
+      const rawSessionTenant = sessionStorage.getItem("tenant");
+      if (rawSessionTenant) {
+        const parsed = JSON.parse(rawSessionTenant);
+        if (typeof parsed?.industry === "string" && parsed.industry.trim()) {
+          return parsed.industry.trim();
+        }
+      }
+    } catch {
+      // Ignore invalid JSON
+    }
+
+    // 3. From sessionStorage 'user'
+    try {
+      const rawSessionUser = sessionStorage.getItem("user");
+      if (rawSessionUser) {
+        const parsedUser = JSON.parse(rawSessionUser);
+        if (typeof parsedUser?.tenant?.industry === "string" && parsedUser.tenant.industry.trim()) {
+          return parsedUser.tenant.industry.trim();
+        }
+        if (typeof parsedUser?.industry === "string" && parsedUser.industry.trim()) {
+          return parsedUser.industry.trim();
+        }
+      }
+    } catch {
+      // Ignore invalid JSON
+    }
+
+    // 4. From route param if present
+    if (industry && typeof industry === "string" && industry.trim()) {
+      return industry.trim();
+    }
+
+    return null;
+  }, [tenant?.industry, industry]);
+
+  const industrySubtitle = useMemo(() => {
+    if (!authenticatedIndustry) {
+      return "CRM";
+    }
+    const displayName = getIndustryDisplayName(authenticatedIndustry);
+    return displayName ? displayName.toUpperCase() : "CRM";
+  }, [authenticatedIndustry]);
 
   const [user, setUser] = useState<{
 
@@ -1069,33 +1121,14 @@ export default function DashboardLayout({
           </div>
 
           <div
-
             className="brand-subtitle"
-
+            title={industrySubtitle}
             style={{
-
-              fontSize: "0.75rem",
-
-              color: "#a0aec0",
-
-              marginTop: "4px",
-
-              textAlign: "left",
-
-              width: "100%",
-
               paddingLeft:
-
                 currentIndustry === "education-consulting" ? "32px" : "0",
-
             }}
           >
-
-            {currentIndustry === "education-consulting"
-
-              ? "Education Consulting"
-
-              : "CRM"}
+            {industrySubtitle}
           </div>
         </div>
 

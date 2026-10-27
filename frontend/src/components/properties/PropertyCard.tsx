@@ -13,16 +13,20 @@ export interface PropertyCardProps {
   thumbUrl?: string;
   buildingName?: string | null;
   statusClass?: string;
-  matchType?: "exact" | "potential" | null;
+  matchType?: "exact" | "potential" | "manual" | null;
   matchLabel?: string;
   userPermissions?: {
     canUpdate?: boolean;
     canDelete?: boolean;
     canCreate?: boolean;
+    canMatch?: boolean;
   };
   onView?: (property: Property) => void;
   onEdit?: (property: Property) => void;
   onDelete?: (property: Property) => void;
+  onMatch?: (property: Property) => void;
+  isMatched?: boolean;
+  isMatching?: boolean;
   formatPrice?: (val: number | string, curr?: string) => string;
 }
 
@@ -39,6 +43,9 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
   onView,
   onEdit,
   onDelete,
+  onMatch,
+  isMatched = false,
+  isMatching = false,
   formatPrice,
 }) => {
   // Independent carousel state for this property card
@@ -111,6 +118,10 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
       ? "match-exact"
       : matchType === "potential"
       ? "match-potential"
+      : matchType === "manual" && isMatched
+      ? "match-exact"
+      : matchType === "manual"
+      ? "match-manual"
       : "";
 
   return (
@@ -268,9 +279,31 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           </div>
         )}
         {matchType === "potential" && (
-          <div className="property-match-indicator potential">
-            <span className="match-tag-pill potential">⚠ {matchLabel || "Near Budget"}</span>
-            <span className="match-note">±10% budget range</span>
+          <div className="property-match-indicator potential" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span className="match-tag-pill potential">⚠ {matchLabel || "Near Budget"}</span>
+              <span className="match-note">±10% budget range</span>
+            </div>
+            {onMatch && (
+              <button
+                type="button"
+                className="btn-card-match-pill"
+                disabled={isMatching || isMatched}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMatch(property);
+                }}
+              >
+                {isMatching ? "Matching..." : isMatched ? "✓ Matched" : "+ Match"}
+              </button>
+            )}
+          </div>
+        )}
+        {matchType === "manual" && (
+          <div className="property-match-indicator manual">
+            <span className={`match-tag-pill ${isMatched ? "exact" : "manual"}`}>
+              {isMatched ? "✓ Matched to Requirement" : "Available in Inventory"}
+            </span>
           </div>
         )}
 
@@ -278,6 +311,41 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           <span className="property-building-tag">{property.property_type}</span>
 
           <div className="action-buttons-group">
+            {onMatch && matchType !== "exact" && (
+              <button
+                type="button"
+                className={`btn-card-action-match ${isMatched ? "matched" : ""}`}
+                title={isMatched ? "Already Matched" : "Match Property to Requirement"}
+                disabled={isMatching || isMatched}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMatch(property);
+                }}
+              >
+                {isMatching ? (
+                  <>
+                    <span className="spinner-xs"></span>
+                    <span>Matching...</span>
+                  </>
+                ) : isMatched ? (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="13" height="13">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span>Matched</span>
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>Match</span>
+                  </>
+                )}
+              </button>
+            )}
+
             {onView && (
               <button
                 type="button"

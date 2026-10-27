@@ -1102,9 +1102,8 @@ export default function Payments() {
       <div className="payments-summary-grid">
         <div className="kpi-card blue">
           <div className="kpi-icon-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23"></line>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 3h12M6 8h12M6 13l8.5 8M6 13h3a4 4 0 0 0 0-8" />
             </svg>
           </div>
           <div className="kpi-text-box">
