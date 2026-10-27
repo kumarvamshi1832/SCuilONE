@@ -1,4 +1,7 @@
+
+from datetime import datetime
 from uuid import UUID
+
 from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -17,6 +20,8 @@ from app.services.audit_service import log_audit
 
 router = APIRouter(prefix="/api/v1/property-matches", tags=["Property Matching"])
 
+MAX_AUTO_MATCHES = 20
+
 
 def get_db():
     db = SessionLocal()
@@ -28,17 +33,35 @@ def get_db():
 
 def get_tenant_and_user(current_user: dict):
     try:
-        return UUID(str(current_user["tenant_id"])), UUID(str(current_user["user_id"]))
+        return (
+            UUID(str(current_user["tenant_id"])),
+            UUID(str(current_user["user_id"])),
+        )
     except (KeyError, TypeError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user or tenant context.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user or tenant context.",
+        )
 
 
-def validate_assigned_user(db: Session, tenant_id: UUID, assigned_to: UUID | None):
+def validate_assigned_user(
+    db: Session,
+    tenant_id: UUID,
+    assigned_to: UUID | None,
+):
     if assigned_to is None:
         return
-    user = db.query(User).filter(User.id == assigned_to, User.tenant_id == tenant_id).first()
+
+    user = db.query(User).filter(
+        User.id == assigned_to,
+        User.tenant_id == tenant_id,
+    ).first()
+
     if not user or user.status != "Active":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assigned salesperson must be an active user in this tenant.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assigned salesperson must be an active user in this tenant.",
+        )
 
 
 def match_snapshot(record: PropertyMatch) -> dict:
@@ -47,12 +70,18 @@ def match_snapshot(record: PropertyMatch) -> dict:
         "tenant_id": str(record.tenant_id),
         "buyer_requirement_id": str(record.buyer_requirement_id),
         "property_id": str(record.property_id),
-        "assigned_to": str(record.assigned_to) if record.assigned_to else None,
+        "assigned_to": (
+            str(record.assigned_to) if record.assigned_to else None
+        ),
         "status": record.status,
     }
 
 
-@router.post("/", response_model=PropertyMatchResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PropertyMatchResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_property_match(
     payload: PropertyMatchCreate,
     db: Session = Depends(get_db),
@@ -65,27 +94,54 @@ def create_property_match(
         BuyerRequirement.id == payload.buyer_requirement_id,
         BuyerRequirement.tenant_id == tenant_id,
     ).first()
+
     if not requirement:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer requirement not found in this tenant.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Buyer requirement not found in this tenant.",
+        )
+
     if requirement.status == "Closed":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A closed buyer requirement cannot be matched.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A closed buyer requirement cannot be matched.",
+        )
 
     property_record = db.query(Property).filter(
         Property.id == payload.property_id,
         Property.tenant_id == tenant_id,
     ).first()
-    if not property_record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found in this tenant.")
-    if property_record.status != "Available":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only properties with Available status can be matched.")
 
-    expected_listing_type = "Sale" if requirement.requirement_type == "Buy" else "Rent"
+    if not property_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Property not found in this tenant.",
+        )
+
+    if property_record.status != "Available":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only properties with Available status can be matched.",
+        )
+
+    expected_listing_type = (
+        "Sale" if requirement.requirement_type == "Buy" else "Rent"
+    )
+
     if property_record.listing_type != expected_listing_type:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"This requirement is for {requirement.requirement_type}; the property listing type is {property_record.listing_type}.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"This requirement is for {requirement.requirement_type}; "
+                f"the property listing type is {property_record.listing_type}."
+            ),
+        )
 
     assigned_to = payload.assigned_to
+
     if assigned_to is None:
         assigned_to = requirement.assigned_to or property_record.assigned_to
+
     validate_assigned_user(db, tenant_id, assigned_to)
 
     existing = db.query(PropertyMatch).filter(
@@ -93,8 +149,12 @@ def create_property_match(
         PropertyMatch.buyer_requirement_id == requirement.id,
         PropertyMatch.property_id == property_record.id,
     ).first()
+
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This buyer requirement is already matched to this property.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This buyer requirement is already matched to this property.",
+        )
 
     record = PropertyMatch(
         tenant_id=tenant_id,
@@ -108,18 +168,31 @@ def create_property_match(
     try:
         db.add(record)
         db.flush()
+
         log_audit(
-            db, tenant_id=tenant_id, user_id=user_id, action="CREATE",
-            module="property_matches", record_id=record.id,
-            description=f"Matched buyer requirement to property {property_record.name}",
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="CREATE",
+            module="property_matches",
+            record_id=record.id,
+            description=(
+                f"Matched buyer requirement to property {property_record.name}"
+            ),
             after_data=match_snapshot(record),
         )
+
         db.commit()
         db.refresh(record)
         return record
+
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This buyer requirement is already matched to this property.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This buyer requirement is already matched to this property.",
+        )
+
     except Exception:
         db.rollback()
         raise
@@ -174,40 +247,61 @@ def auto_match_properties(
             == requirement.preferred_city.strip().lower()
         )
 
-    # Apply a separate location filter only when it differs from the city.
     location = (requirement.preferred_location or "").strip()
     city = (requirement.preferred_city or "").strip()
 
     if location and location.casefold() != city.casefold():
-        query = query.filter(Property.address.ilike(f"%{location}%"))
+        query = query.filter(
+            Property.address.ilike(f"%{location}%")
+        )
 
     if requirement.min_budget is not None:
-        query = query.filter(Property.price >= requirement.min_budget)
+        query = query.filter(
+            Property.price >= requirement.min_budget
+        )
 
     if requirement.max_budget is not None:
-        query = query.filter(Property.price <= requirement.max_budget)
+        query = query.filter(
+            Property.price <= requirement.max_budget
+        )
 
     if requirement.bedrooms is not None:
-        query = query.filter(Property.bedrooms == requirement.bedrooms)
+        query = query.filter(
+            Property.bedrooms == requirement.bedrooms
+        )
 
     if requirement.min_area is not None:
-        query = query.filter(Property.area >= requirement.min_area)
+        query = query.filter(
+            Property.area >= requirement.min_area
+        )
 
     if requirement.max_area is not None:
-        query = query.filter(Property.area <= requirement.max_area)
+        query = query.filter(
+            Property.area <= requirement.max_area
+        )
 
-    if requirement.min_area is not None or requirement.max_area is not None:
+    if (
+        requirement.min_area is not None
+        or requirement.max_area is not None
+    ):
         query = query.filter(
             func.lower(func.trim(Property.area_unit))
             == requirement.area_unit.strip().lower()
         )
 
-    candidates = query.order_by(Property.price.asc()).all()
+    candidates = (
+        query
+        .order_by(Property.price.asc(), Property.id.asc())
+        .limit(MAX_AUTO_MATCHES)
+        .all()
+    )
 
     if not candidates:
         return []
 
-    property_ids = [property_record.id for property_record in candidates]
+    property_ids = [
+        property_record.id for property_record in candidates
+    ]
 
     existing_matches = db.query(PropertyMatch).filter(
         PropertyMatch.tenant_id == tenant_id,
@@ -216,7 +310,8 @@ def auto_match_properties(
     ).all()
 
     existing_by_property = {
-        record.property_id: record for record in existing_matches
+        record.property_id: record
+        for record in existing_matches
     }
 
     results = []
@@ -233,7 +328,16 @@ def auto_match_properties(
             assigned_to = (
                 requirement.assigned_to or property_record.assigned_to
             )
-            validate_assigned_user(db, tenant_id, assigned_to)
+
+            if assigned_to is not None:
+                active_assignee = db.query(User.id).filter(
+                    User.id == assigned_to,
+                    User.tenant_id == tenant_id,
+                    User.status == "Active",
+                ).first()
+
+                if not active_assignee:
+                    continue
 
             record = PropertyMatch(
                 tenant_id=tenant_id,
@@ -255,13 +359,34 @@ def auto_match_properties(
                 module="property_matches",
                 record_id=record.id,
                 description=(
-                    f"Automatically matched buyer requirement "
+                    "Automatically matched buyer requirement "
                     f"to property {property_record.name}"
                 ),
                 after_data=match_snapshot(record),
             )
 
             results.append(record)
+
+        if results and requirement.status != "Matched":
+            previous_status = requirement.status
+            requirement.status = "Matched"
+
+            if hasattr(requirement, "updated_at"):
+                requirement.updated_at = datetime.utcnow()
+
+            log_audit(
+                db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                action="UPDATE",
+                module="buyer_requirements",
+                record_id=requirement.id,
+                description=(
+                    "Buyer requirement status updated after property matching."
+                ),
+                before_data={"status": previous_status},
+                after_data={"status": requirement.status},
+            )
 
         db.commit()
 
@@ -279,12 +404,16 @@ def auto_match_properties(
                 "Please retry the matching request."
             ),
         )
+
     except Exception:
         db.rollback()
         raise
 
 
-@router.get("/requirements/{requirement_id}", response_model=list[PropertyMatchResponse])
+@router.get(
+    "/requirements/{requirement_id}",
+    response_model=list[PropertyMatchResponse],
+)
 def list_matches_for_requirement(
     requirement_id: UUID,
     db: Session = Depends(get_db),
@@ -292,17 +421,28 @@ def list_matches_for_requirement(
     _permission=Depends(require_permission("property_match.view")),
 ):
     tenant_id, _ = get_tenant_and_user(current_user)
+
     requirement = db.query(BuyerRequirement.id).filter(
-        BuyerRequirement.id == requirement_id, BuyerRequirement.tenant_id == tenant_id,
+        BuyerRequirement.id == requirement_id,
+        BuyerRequirement.tenant_id == tenant_id,
     ).first()
+
     if not requirement:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer requirement not found in this tenant.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Buyer requirement not found in this tenant.",
+        )
+
     return db.query(PropertyMatch).filter(
-        PropertyMatch.tenant_id == tenant_id, PropertyMatch.buyer_requirement_id == requirement_id,
+        PropertyMatch.tenant_id == tenant_id,
+        PropertyMatch.buyer_requirement_id == requirement_id,
     ).order_by(PropertyMatch.created_at.desc()).all()
 
 
-@router.get("/properties/{property_id}", response_model=list[PropertyMatchResponse])
+@router.get(
+    "/properties/{property_id}",
+    response_model=list[PropertyMatchResponse],
+)
 def list_matches_for_property(
     property_id: UUID,
     db: Session = Depends(get_db),
@@ -310,15 +450,22 @@ def list_matches_for_property(
     _permission=Depends(require_permission("property_match.view")),
 ):
     tenant_id, _ = get_tenant_and_user(current_user)
-    property_exists = db.query(Property.id).filter(
-        Property.id == property_id, Property.tenant_id == tenant_id,
-    ).first()
-    if not property_exists:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found in this tenant.")
-    return db.query(PropertyMatch).filter(
-        PropertyMatch.tenant_id == tenant_id, PropertyMatch.property_id == property_id,
-    ).order_by(PropertyMatch.created_at.desc()).all()
 
+    property_exists = db.query(Property.id).filter(
+        Property.id == property_id,
+        Property.tenant_id == tenant_id,
+    ).first()
+
+    if not property_exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Property not found in this tenant.",
+        )
+
+    return db.query(PropertyMatch).filter(
+        PropertyMatch.tenant_id == tenant_id,
+        PropertyMatch.property_id == property_id,
+    ).order_by(PropertyMatch.created_at.desc()).all()
 
 
 @router.get(
@@ -377,7 +524,9 @@ def get_potential_matches(
         )
 
     if location and location.casefold() != city.casefold():
-        query = query.filter(Property.address.ilike(f"%{location}%"))
+        query = query.filter(
+            Property.address.ilike(f"%{location}%")
+        )
 
     if requirement.bedrooms is not None:
         query = query.filter(
@@ -385,10 +534,14 @@ def get_potential_matches(
         )
 
     if requirement.min_area is not None:
-        query = query.filter(Property.area >= requirement.min_area)
+        query = query.filter(
+            Property.area >= requirement.min_area
+        )
 
     if requirement.max_area is not None:
-        query = query.filter(Property.area <= requirement.max_area)
+        query = query.filter(
+            Property.area <= requirement.max_area
+        )
 
     if (
         requirement.min_area is not None
@@ -409,6 +562,7 @@ def get_potential_matches(
         if min_budget is not None
         else None
     )
+
     upper_limit = (
         max_budget * Decimal("1.10")
         if max_budget is not None
@@ -423,6 +577,7 @@ def get_potential_matches(
         within_lower_limit = (
             lower_limit is None or price >= lower_limit
         )
+
         within_upper_limit = (
             upper_limit is None or price <= upper_limit
         )
@@ -433,6 +588,7 @@ def get_potential_matches(
         inside_min_budget = (
             min_budget is None or price >= min_budget
         )
+
         inside_max_budget = (
             max_budget is None or price <= max_budget
         )
