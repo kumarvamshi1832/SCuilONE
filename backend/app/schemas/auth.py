@@ -111,7 +111,6 @@ class InvitationSetupRequest(BaseModel):
 
 class MFAEnrollmentStartRequest(BaseModel):
     mfa_token: str = Field(min_length=1)
-    reset: bool = False
 
 
 class MFAEnrollmentVerifyRequest(BaseModel):
@@ -122,4 +121,3 @@ class MFAEnrollmentVerifyRequest(BaseModel):
 class MFAVerifyRequest(BaseModel):
     mfa_token: str = Field(min_length=1)
     code: str = Field(min_length=6, max_length=32)
-    email: EmailStr | None = None

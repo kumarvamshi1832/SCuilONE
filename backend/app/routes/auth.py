@@ -38,7 +38,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.database.connection import SessionLocal, settings
+from app.database.connection import SessionLocal
 from app.models.otp import OTPVerification
 from app.models.password_reset import PasswordResetOTP
 from app.models.pending_registration import PendingRegistration
@@ -245,7 +245,6 @@ def complete_mfa_login(db: Session, user: User):
             "id": str(user.id),
             "name": user.full_name,
             "email": user.email,
-            "photo_url": user.photo_url,
             "status": user.status,
             "must_change_password": user.must_change_password,
             "profile_completed": user.profile_completed,
@@ -285,55 +284,37 @@ def start_mfa_enrollment(
             detail="MFA is already enabled",
         )
 
-    # Reuse existing pending secret if already generated for this user and not explicitly resetting,
-    # to prevent page reloads / component remounts from desynchronizing with scanned QR code
-    if not data.reset and mfa and not mfa.enabled and mfa.secret_encrypted:
-        try:
-            secret = decrypt_totp_secret(mfa.secret_encrypted)
-        except Exception:
-            secret = generate_totp_secret()
-            mfa.secret_encrypted = encrypt_totp_secret(secret)
-            db.commit()
+    secret = generate_totp_secret()
+    encrypted_secret = encrypt_totp_secret(secret)
+
+    if not mfa:
+        mfa = UserMFA(
+            user_id=user.id,
+            secret_encrypted=encrypted_secret,
+            enabled=False,
+            recovery_code_hashes=[],
+        )
+        db.add(mfa)
     else:
-        secret = generate_totp_secret()
-        encrypted_secret = encrypt_totp_secret(secret)
+        mfa.secret_encrypted = encrypted_secret
+        mfa.recovery_code_hashes = []
 
-        if not mfa:
-            mfa = UserMFA(
-                user_id=user.id,
-                secret_encrypted=encrypted_secret,
-                enabled=False,
-                recovery_code_hashes=[],
-            )
-            db.add(mfa)
-        else:
-            mfa.secret_encrypted = encrypted_secret
-            mfa.recovery_code_hashes = []
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start MFA enrollment",
+        )
 
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail="Unable to start MFA enrollment",
-            )
-
-    response_payload = {
+    return {
         "message": "Scan the authenticator setup QR code and verify it",
         "secret": secret,
         "otpauth_url": generate_totp_uri(secret, user.email),
         "issuer": "SCuilONE",
         "account": user.email,
     }
-
-    if settings.ENVIRONMENT.lower() == "development":
-        try:
-            response_payload["dev_code"] = pyotp.TOTP(secret).now()
-        except Exception:
-            pass
-
-    return response_payload
 
 
 
@@ -420,12 +401,6 @@ def verify_mfa_login(
         data.mfa_token,
         "mfa_challenge",
     )
-
-    if data.email and user.email.lower() != str(data.email).lower():
-        raise HTTPException(
-            status_code=401,
-            detail="MFA token does not match the provided email address",
-        )
 
     mfa = db.query(UserMFA).filter(
         UserMFA.user_id == user.id,
@@ -765,13 +740,10 @@ def login(
             else "MFA enrollment required"
         ),
         "mfa_required": True,
-        "requires_mfa": True,
         "mfa_setup_required": (
             mfa_token_purpose == "mfa_enrollment"
         ),
         "mfa_token": mfa_token,
-        "temp_token": mfa_token,
-        "email": user.email,
         "next_step": (
             "mfa_enrollment"
             if mfa_token_purpose == "mfa_enrollment"
@@ -1221,90 +1193,7 @@ def complete_profile(
     }
 
 
-@router.get("/invitation-details")
-@router.get("/validate-invitation")
-@router.get("/set-password")
-@limiter.limit("20/minute")
-def get_invitation_details(
-    request: Request,
-    response: Response,
-    token: str,
-    db: Session = Depends(get_db),
-):
-    if not token or len(token) < 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid invitation token",
-        )
-
-    token_hash = hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
-
-    invitation = db.query(UserInvitation).filter(
-        UserInvitation.token_hash == token_hash
-    ).first()
-
-    if not invitation:
-        raise HTTPException(
-            status_code=404,
-            detail="Invitation not found or link is invalid",
-        )
-
-    if invitation.used:
-        raise HTTPException(
-            status_code=400,
-            detail="This invitation link has already been used. Please log in or request a new invitation.",
-        )
-
-    now = datetime.now(timezone.utc)
-    expires_at = invitation.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-
-    if now >= expires_at:
-        raise HTTPException(
-            status_code=400,
-            detail="This invitation has expired. Ask your administrator for a new invitation.",
-        )
-
-    user = db.query(User).filter(
-        User.id == invitation.user_id
-    ).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="Invited user not found",
-        )
-
-    if user.status == "Active" and user.profile_completed:
-        raise HTTPException(
-            status_code=400,
-            detail="This account has already completed setup. Please log in.",
-        )
-
-    role = db.query(Role).join(
-        UserRole,
-        UserRole.role_id == Role.id,
-    ).filter(
-        UserRole.user_id == user.id
-    ).first()
-
-    tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
-
-    return {
-        "valid": True,
-        "email": user.email,
-        "full_name": user.full_name,
-        "role": role.name if role else "User",
-        "tenant_name": tenant.name if tenant else "SCuilONE",
-        "expires_at": invitation.expires_at.isoformat(),
-    }
-
-
 @router.post("/accept-invitation")
-@router.post("/set-password")
 @limiter.limit("5/minute")
 def accept_invitation(
     request: Request,
@@ -1320,16 +1209,10 @@ def accept_invitation(
         UserInvitation.token_hash == token_hash
     ).with_for_update().first()
 
-    if not invitation:
+    if not invitation or invitation.used:
         raise HTTPException(
             status_code=400,
-            detail="Invalid invitation token. Please check your invitation email.",
-        )
-
-    if invitation.used:
-        raise HTTPException(
-            status_code=400,
-            detail="This invitation has already been used. Please log in or request a new invitation.",
+            detail="Invalid or already used invitation",
         )
 
     now = datetime.now(timezone.utc)
@@ -1343,7 +1226,7 @@ def accept_invitation(
         db.commit()
         raise HTTPException(
             status_code=400,
-            detail="This invitation has expired. Please request a new invitation.",
+            detail="Invitation has expired. Ask your administrator for a new invitation.",
         )
 
     user = db.query(User).filter(
@@ -1392,22 +1275,52 @@ def accept_invitation(
         UserRole.user_id == user.id
     ).first()
 
-    onboarding_token = create_access_token(
+   
+    mfa = db.query(UserMFA).filter(
+        UserMFA.user_id == user.id
+    ).first()
+
+    if mfa and mfa.enabled:
+        onboarding_token = create_mfa_token(
+            {
+                "user_id": str(user.id),
+                "tenant_id": str(user.tenant_id),
+                "role": role.name if role else None,
+            },
+            purpose="mfa_challenge",
+        )
+
+        return {
+            "message": "Invitation accepted. Verify MFA to continue.",
+            "mfa_required": True,
+            "mfa_setup_required": False,
+            "mfa_token": onboarding_token,
+            "next_step": "mfa_verification",
+            "email": user.email,
+        }
+
+    onboarding_token = create_mfa_token(
         {
             "user_id": str(user.id),
             "tenant_id": str(user.tenant_id),
             "role": role.name if role else None,
-            "purpose": "onboarding",
-            "mfa_verified": True,
-        }
+        },
+        purpose="mfa_enrollment",
     )
 
     return {
-        "message": "Password created successfully. Please complete your profile.",
+        "message": "Invitation accepted. Set up MFA to continue.",
+        "mfa_required": True,
+        "mfa_setup_required": True,
+        "mfa_token": onboarding_token,
+        "next_step": "mfa_enrollment",
+        "email": user.email,
+    }
+
+    return {
+        "message": "Password created successfully. Complete your profile.",
         "access_token": onboarding_token,
         "token_type": "bearer",
         "email": user.email,
-        "full_name": user.full_name,
-        "role": role.name if role else None,
         "next_step": "complete_profile",
     }

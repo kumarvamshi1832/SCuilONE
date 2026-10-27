@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_active_user
@@ -114,21 +114,17 @@ def get_dashboard_summary(
         )
     ).count()
 
+    pending_tasks = tasks.filter(
+        ~func.lower(func.trim(Activity.status)).in_(
+            INACTIVE_TASK_STATUSES
+        )
+    ).count()
+
     overdue_tasks = tasks.filter(
         Activity.due_date < now,
         Activity.due_date.isnot(None),
         ~func.lower(func.trim(Activity.status)).in_(
             INACTIVE_TASK_STATUSES
-        ),
-    ).count()
-
-    pending_tasks = tasks.filter(
-        ~func.lower(func.trim(Activity.status)).in_(
-            INACTIVE_TASK_STATUSES
-        ),
-        or_(
-            Activity.due_date.is_(None),
-            Activity.due_date >= now
         ),
     ).count()
 

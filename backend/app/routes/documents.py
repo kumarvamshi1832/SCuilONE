@@ -6,7 +6,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import cloudinary.uploader
-from app.services.image_storage import save_document_file, delete_document_file
 from fastapi import (
     APIRouter,
     Depends,
@@ -99,8 +98,6 @@ def serialize_document(document: Document):
         "deleted_at": document.deleted_at.isoformat() if document.deleted_at else None,
         "created_at": document.created_at.isoformat() if document.created_at else None,
         "updated_at": document.updated_at.isoformat() if document.updated_at else None,
-        "file_url": document.file_url,
-        "download_url": document.file_url,
     }
 
 
@@ -303,17 +300,21 @@ async def upload_document(
     )
 
     try:
-        file_url, returned_public_id = save_document_file(
-            contents=contents,
-            tenant_id=str(tenant_id),
-            filename=filename,
-            content_type=content_type,
+        upload_result = cloudinary.uploader.upload(
+            io.BytesIO(contents),
             resource_type=resource_type,
-            tags=["scuilone", "document", str(tenant_id)],
+            type="authenticated",
+            public_id=storage_public_id,
+            overwrite=False,
+            use_filename=False,
+            unique_filename=False,
         )
 
+        file_url = upload_result.get("secure_url")
+        returned_public_id = upload_result.get("public_id")
+
         if not file_url or not returned_public_id:
-            raise RuntimeError("Failed to store document metadata")
+            raise RuntimeError("Cloudinary did not return document metadata")
 
         document = Document(
             tenant_id=tenant_id,
@@ -367,13 +368,13 @@ async def upload_document(
 
         if returned_public_id:
             try:
-                delete_document_file(
+                cloudinary.uploader.destroy(
                     returned_public_id,
-                    file_url=file_url if "file_url" in locals() else None,
                     resource_type=resource_type,
+                    invalidate=True,
                 )
             except Exception:
-                logger.exception("Document cleanup failed after database error")
+                logger.exception("Cloudinary cleanup failed after database error")
 
         raise HTTPException(
             status_code=502,
@@ -501,11 +502,17 @@ def delete_document(
     )
 
     try:
-        delete_document_file(
+        result = cloudinary.uploader.destroy(
             document.storage_public_id,
-            file_url=document.file_url,
             resource_type=resource_type,
+            invalidate=True,
         )
+
+        if result.get("result") not in {"ok", "not found"}:
+            raise HTTPException(
+                status_code=502,
+                detail="Cloudinary could not delete the document",
+            )
 
         document.is_deleted = True
         document.deleted_at = datetime.now(timezone.utc)

@@ -5,7 +5,6 @@ from io import BytesIO
 from uuid import uuid4
 
 import cloudinary.uploader
-from app.services.image_storage import save_image_file, delete_image_file
 from fastapi import (
     APIRouter,
     Depends,
@@ -304,12 +303,15 @@ async def upload_building_images(
 
             validate_image(contents, file.content_type)
 
-            image_url, public_id = save_image_file(
-                contents=contents,
-                folder="buildings",
-                tenant_id=str(tenant_id),
-                entity_id=str(building.id),
-                content_type=file.content_type or "image/jpeg",
+            result = cloudinary.uploader.upload(
+                BytesIO(contents),
+                resource_type="image",
+                public_id=(
+                    f"scuilone/buildings/{tenant_id}/"
+                    f"{building.id}/{uuid4().hex}"
+                ),
+                overwrite=False,
+                unique_filename=False,
                 tags=[
                     "scuilone",
                     "building-image",
@@ -318,10 +320,18 @@ async def upload_building_images(
                 ],
             )
 
-            if not public_id or not image_url:
-                raise RuntimeError("Failed to store building image.")
+            public_id = result.get("public_id")
+            image_url = result.get("secure_url")
 
-            uploaded_assets.append((public_id, image_url))
+            if not public_id or not image_url:
+                if public_id:
+                    uploaded_assets.append(public_id)
+
+                raise RuntimeError(
+                    "Cloudinary did not return the required image details."
+                )
+
+            uploaded_assets.append(public_id)
 
             image = BuildingImage(
                 tenant_id=tenant_id,
@@ -372,26 +382,36 @@ async def upload_building_images(
     except HTTPException:
         db.rollback()
 
-        for item in uploaded_assets:
-            pid = item[0] if isinstance(item, tuple) else item
-            url = item[1] if isinstance(item, tuple) else None
+        for public_id in uploaded_assets:
             try:
-                delete_image_file(pid, url)
+                cloudinary.uploader.destroy(
+                    public_id,
+                    resource_type="image",
+                    invalidate=True,
+                )
             except Exception:
-                logger.exception("Failed to clean up image %s", pid)
+                logger.exception(
+                    "Failed to clean up Cloudinary image %s",
+                    public_id,
+                )
 
         raise
 
     except Exception:
         db.rollback()
 
-        for item in uploaded_assets:
-            pid = item[0] if isinstance(item, tuple) else item
-            url = item[1] if isinstance(item, tuple) else None
+        for public_id in uploaded_assets:
             try:
-                delete_image_file(pid, url)
+                cloudinary.uploader.destroy(
+                    public_id,
+                    resource_type="image",
+                    invalidate=True,
+                )
             except Exception:
-                logger.exception("Failed to clean up image %s", pid)
+                logger.exception(
+                    "Failed to clean up Cloudinary image %s",
+                    public_id,
+                )
 
         logger.exception("Building image upload failed")
 
@@ -716,7 +736,17 @@ def delete_building_image(
         public_id = image.public_id
         was_primary = image.is_primary
 
-        delete_image_file(public_id, image.image_url)
+        result = cloudinary.uploader.destroy(
+            public_id,
+            resource_type="image",
+            invalidate=True,
+        )
+
+        if result.get("result") not in {"ok", "not found"}:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Cloudinary could not confirm image deletion.",
+            )
 
         db.delete(image)
         db.flush()

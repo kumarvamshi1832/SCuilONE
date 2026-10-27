@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.auth import router as auth_router
@@ -96,25 +96,19 @@ origins = [
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
-    "http://localhost:5175",
-    "http://127.0.0.1:5175",
-    "http://localhost:5176",
-    "http://127.0.0.1:5176",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
 
     "https://s-cuil-one.vercel.app",
     "https://s-cuil-one-git-backend-vamshi-kumarvamshi1832-7668s-projects.vercel.app",
     "https://s-cuil-gg9u5e3ah-kumarvamshi1832-7668s-projects.vercel.app",
+
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
 )
 
 app.include_router(auth_router)
@@ -151,19 +145,6 @@ app.include_router(payment_plans_router)
 app.include_router(payment_plans_router)
 app.include_router(global_collections_router)
 
-
-from fastapi.responses import FileResponse
-from pathlib import Path
-
-UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-@app.get("/uploads/{file_path:path}")
-def serve_uploaded_file(file_path: str):
-    safe_path = (UPLOAD_DIR / file_path).resolve()
-    if not str(safe_path).startswith(str(UPLOAD_DIR.resolve())) or not safe_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(safe_path)
 
 @app.get("/")
 def home():
