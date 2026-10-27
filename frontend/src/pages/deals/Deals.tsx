@@ -250,6 +250,15 @@ export default function Deals() {
     return filteredDeals.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredDeals, safePage]);
 
+  // If the current page becomes invalid after filtering/deleting records, automatically move to the last valid page
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    } else if (currentPage < 1) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
   // Collect unique values from data for filter dropdowns
   const uniqueStages = Array.from(new Set(deals.map((d) => d.stage).filter(Boolean))) as string[];
 
@@ -414,7 +423,7 @@ export default function Deals() {
       </div>
 
       {/* Main Content Area */}
-      <div className="leads-table-container" style={{ overflowX: 'auto' }}>
+      <div className="leads-table-container">
         {loading ? (
         <div className="leads-loading">
           <div className="leads-loading-spinner"></div>
@@ -454,7 +463,8 @@ export default function Deals() {
         </div>
       ) : (
         <>
-          <table className="leads-table">
+          <div className="leads-table-wrapper">
+            <table className="leads-table">
             <thead>
               <tr>
                 <th>Deal Name</th>
@@ -570,6 +580,7 @@ export default function Deals() {
               })}
             </tbody>
           </table>
+          </div>
           <Pagination
             currentPage={safePage}
             totalItems={filteredDeals.length}

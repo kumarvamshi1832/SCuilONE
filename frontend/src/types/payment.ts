@@ -15,6 +15,7 @@ export interface Payment {
   id: string;
   tenant_id: string;
   booking_id: string;
+  installment_id?: string | null;
   amount: number | string;
   payment_method: PaymentMethod | string;
   transaction_reference?: string | null;
@@ -33,6 +34,7 @@ export interface Payment {
 }
 
 export interface PaymentCreate {
+  installment_id?: string | null;
   amount: number;
   payment_method: PaymentMethod | string;
   transaction_reference?: string | null;

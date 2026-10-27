@@ -51,6 +51,9 @@ export interface Building {
   updated_at: string;
   // enriched fields if joined
   project_name?: string;
+  images?: (BuildingImage | string | { url?: string; image_url?: string })[];
+  image_url?: string;
+  primary_image_url?: string;
 }
 
 export interface BuildingCreate {

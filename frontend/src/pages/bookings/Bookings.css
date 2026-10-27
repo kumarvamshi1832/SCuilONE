@@ -1000,3 +1000,616 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PAYMENT PREFERENCES & INSTALLMENT PAYMENT PLAN STYLES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Badges */
+.badge-payment-pref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: capitalize;
+}
+
+.badge-payment-pref.full {
+  background: #f1f5f9;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.dashboard-wrapper.dark .badge-payment-pref.full {
+  background: rgba(3, 105, 161, 0.18);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.badge-payment-pref.installments {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.dashboard-wrapper.dark .badge-payment-pref.installments {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+/* Payment Preferences Section in Create Booking Modal */
+.payment-preferences-section {
+  background: rgba(248, 250, 252, 0.8);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+
+.dashboard-wrapper.dark .payment-preferences-section {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: #334155;
+}
+
+.payment-preferences-section .section-title-header {
+  margin-bottom: 12px;
+}
+
+.payment-preferences-section .section-title-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-wrapper.dark .payment-preferences-section .section-title-header h4 {
+  color: #f8fafc;
+}
+
+.payment-preferences-section .section-title-header .section-subtitle {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.dashboard-wrapper.dark .payment-preferences-section .section-title-header .section-subtitle {
+  color: #94a3b8;
+}
+
+.installment-notes-field {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.installment-notes-field textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.875rem;
+  background: #ffffff;
+  color: #0f172a;
+  outline: none;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-wrapper.dark .installment-notes-field textarea {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.installment-notes-field textarea:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+}
+
+.field-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.dashboard-wrapper.dark .field-hint {
+  color: #94a3b8;
+}
+
+/* Installment Request Banner in Viewing Booking Modal */
+.installment-request-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.dashboard-wrapper.dark .installment-request-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.installment-request-banner .banner-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.dashboard-wrapper.dark .installment-request-banner .banner-title-row {
+  color: #fbbf24;
+}
+
+.installment-request-banner .banner-notes-text {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: #92400e;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+.dashboard-wrapper.dark .installment-request-banner .banner-notes-text {
+  color: #fde68a;
+}
+
+/* Tabs inside Booking Details Modal */
+.booking-modal-tabs {
+  display: flex;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.dashboard-wrapper.dark .booking-modal-tabs {
+  border-bottom-color: #334155;
+}
+
+.booking-modal-tabs .tab-btn {
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-wrapper.dark .booking-modal-tabs .tab-btn {
+  color: #94a3b8;
+}
+
+.booking-modal-tabs .tab-btn:hover {
+  color: #06b6d4;
+}
+
+.booking-modal-tabs .tab-btn.active {
+  color: #0891b2;
+}
+
+.dashboard-wrapper.dark .booking-modal-tabs .tab-btn.active {
+  color: #22d3ee;
+}
+
+.booking-modal-tabs .tab-btn.active::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #06b6d4;
+  border-radius: 2px 2px 0 0;
+}
+
+/* Installment Plan Header Cards */
+.plan-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .plan-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.plan-stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.dashboard-wrapper.dark .plan-stat-card {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.plan-stat-card h6 {
+  margin: 0 0 4px;
+  font-size: 0.725rem;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.dashboard-wrapper.dark .plan-stat-card h6 {
+  color: #94a3b8;
+}
+
+.plan-stat-card .value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .plan-stat-card .value {
+  color: #f8fafc;
+}
+
+.plan-stat-card .value.collected {
+  color: #059669;
+}
+
+.plan-stat-card .value.outstanding {
+  color: #d97706;
+}
+
+/* Installment Plan Table */
+.installment-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.dashboard-wrapper.dark .installment-table-wrapper {
+  border-color: #334155;
+}
+
+.installment-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.installment-table th {
+  background: #f8fafc;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.dashboard-wrapper.dark .installment-table th {
+  background: #1e293b;
+  color: #cbd5e1;
+  border-bottom-color: #334155;
+}
+
+.installment-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+}
+
+.dashboard-wrapper.dark .installment-table td {
+  border-bottom-color: #334155;
+  color: #e2e8f0;
+}
+
+.installment-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Installment Status Badges */
+.inst-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.725rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.inst-badge.paid {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.dashboard-wrapper.dark .inst-badge.paid {
+  background: rgba(5, 150, 105, 0.2);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.inst-badge.partially_paid {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.dashboard-wrapper.dark .inst-badge.partially_paid {
+  background: rgba(217, 119, 6, 0.2);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.inst-badge.pending {
+  background: #f0f9ff;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.dashboard-wrapper.dark .inst-badge.pending {
+  background: rgba(2, 132, 199, 0.2);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.inst-badge.overdue {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.dashboard-wrapper.dark .inst-badge.overdue {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.inst-badge.cancelled {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.dashboard-wrapper.dark .inst-badge.cancelled {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* Quick Split Buttons Bar */
+.quick-split-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(6, 182, 212, 0.06);
+  border: 1px dashed rgba(6, 182, 212, 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.quick-split-bar .label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0891b2;
+}
+
+.dashboard-wrapper.dark .quick-split-bar .label {
+  color: #22d3ee;
+}
+
+.quick-split-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dashboard-wrapper.dark .quick-split-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.quick-split-btn:hover {
+  background: #06b6d4;
+  color: #ffffff;
+  border-color: #06b6d4;
+}
+
+/* Plan Balance Checker Banner */
+.plan-balance-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.plan-balance-banner.balanced {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.dashboard-wrapper.dark .plan-balance-banner.balanced {
+  background: rgba(4, 120, 87, 0.15);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.plan-balance-banner.unbalanced {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.dashboard-wrapper.dark .plan-balance-banner.unbalanced {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+/* Overdue Header Button */
+.btn-overdue-collections {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1px solid #fecdd3;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dashboard-wrapper.dark .btn-overdue-collections {
+  background: rgba(225, 29, 72, 0.15);
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+.btn-overdue-collections:hover {
+  background: #e11d48;
+  color: #ffffff;
+  border-color: #e11d48;
+}
+
+/* ─── Booking Details Spec Grid ─── */
+.booking-spec-overview-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.dashboard-wrapper.dark .booking-spec-overview-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.spec-overview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spec-label {
+  font-size: 0.725rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.dashboard-wrapper.dark .spec-label {
+  color: #94a3b8;
+}
+
+.spec-val {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .spec-val {
+  color: #f8fafc;
+}
+
+.spec-subval {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.dashboard-wrapper.dark .spec-subval {
+  color: #94a3b8;
+}
+
+.spec-val.highlight-cyan {
+  color: #0891b2;
+  font-weight: 700;
+}
+
+.dashboard-wrapper.dark .spec-val.highlight-cyan {
+  color: #22d3ee;
+}
+
+/* Full Payment Notice Card */
+.full-payment-notice-card {
+  padding: 36px 20px;
+  text-align: center;
+  background: rgba(100, 116, 139, 0.04);
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+}
+
+.dashboard-wrapper.dark .full-payment-notice-card {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: #475569;
+}
+
+.full-payment-notice-card h4 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .full-payment-notice-card h4 {
+  color: #f8fafc;
+}
+
+.full-payment-notice-card p {
+  margin: 0 auto;
+  color: #64748b;
+  font-size: 0.85rem;
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.dashboard-wrapper.dark .full-payment-notice-card p {
+  color: #94a3b8;
+}
+
+@media (min-width: 1200px) {
+  .plan-summary-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
