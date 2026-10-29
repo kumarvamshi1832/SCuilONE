@@ -1,10 +1,9 @@
-
 import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from app.core.industry_modules import require_enabled_module
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
@@ -16,6 +15,10 @@ from app.models.contact import Contact
 from app.models.account import Account
 from app.models.user import User
 from app.models.pipeline import Pipeline, PipelineStage
+from app.models.software_requirement import SoftwareRequirement
+from app.models.software_estimate import SoftwareEstimate
+from app.models.software_contract import SoftwareContract
+from app.models.software_project import SoftwareProject
 
 from app.schemas.deal import DealCreate, DealUpdate, DealResponse
 from app.services.notification_service import notify_assignment
@@ -27,7 +30,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/deals",
-    tags=["Deals"]
+    tags=["Deals"],
+    dependencies=[
+        Depends(require_enabled_module("deals")),
+    ],
 )
 
 
@@ -769,6 +775,34 @@ def delete_deal(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deal not found"
+        )
+
+    linked_to_software_workflow = any((
+        db.query(SoftwareRequirement.id).filter(
+            SoftwareRequirement.tenant_id == tenant_id,
+            SoftwareRequirement.deal_id == deal.id,
+        ).first(),
+        db.query(SoftwareEstimate.id).filter(
+            SoftwareEstimate.tenant_id == tenant_id,
+            SoftwareEstimate.deal_id == deal.id,
+        ).first(),
+        db.query(SoftwareContract.id).filter(
+            SoftwareContract.tenant_id == tenant_id,
+            SoftwareContract.deal_id == deal.id,
+        ).first(),
+        db.query(SoftwareProject.id).filter(
+            SoftwareProject.tenant_id == tenant_id,
+            SoftwareProject.deal_id == deal.id,
+        ).first(),
+    ))
+
+    if linked_to_software_workflow:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This deal is linked to the Software Services workflow. "
+                "Unlink or archive the related records before deleting it."
+            ),
         )
 
     try:

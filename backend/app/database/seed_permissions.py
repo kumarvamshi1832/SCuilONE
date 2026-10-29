@@ -3,6 +3,7 @@ from app.models.permission import Permission
 
 
 permissions = [
+    ("industry_config.update", "Update this tenant industry configuration"),
     ("lead.view", "View leads"),
     ("lead.create", "Create leads"),
     ("lead.update", "Update leads"),
@@ -103,6 +104,28 @@ permissions = [
 
     ("booking.refund.manage", "Manage booking refunds"),
     ("booking.sale.complete", "Complete property sales"),
+
+    ("software_requirement.view", "View software requirements"),
+    ("software_requirement.create", "Create software requirements"),
+    ("software_requirement.update", "Update software requirements"),
+    ("software_requirement.delete", "Delete software requirements"),
+
+    ("software_estimate.view", "View software estimates"),
+    ("software_estimate.create", "Create software estimates"),
+    ("software_estimate.update", "Update software estimates"),
+    ("software_estimate.delete", "Delete software estimates"),
+
+    ("software_contract.view", "View software contracts"),
+    ("software_contract.create", "Create software contracts"),
+    ("software_contract.update", "Update software contracts"),
+    ("software_contract.delete", "Delete software contracts"),
+
+    ("software_project.view", "View software projects"),
+    ("software_project.create", "Create software projects"),
+    ("software_project.update", "Update software projects"),
+    ("software_project.delete", "Delete software projects"),
+
+    
 
 
 

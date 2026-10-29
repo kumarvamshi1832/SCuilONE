@@ -1,11 +1,11 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import desc
 from uuid import UUID, uuid4
 import logging
 from app.services.notification_service import notify_assignment
-
+from app.core.industry_modules import require_enabled_module
 from app.services.lead_assignment import (
     assign_lead_automatically,
     assign_waiting_leads,
@@ -18,6 +18,13 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.lead import Lead
 from app.models.deal import Deal
+from app.models.activity import Activity
+from app.models.document import Document
+from app.models.booking import Booking
+from app.models.buyer_requirement import BuyerRequirement
+from app.models.software_requirement import SoftwareRequirement
+from app.models.software_estimate import SoftwareEstimate
+from app.models.software_contract import SoftwareContract
 from app.models.user import User
 from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse
 from app.models.lead_assignment_audit import LeadAssignmentAudit
@@ -30,9 +37,38 @@ from app.services.audit_service import log_audit
 
 logger = logging.getLogger(__name__)
 
+LEAD_DELETE_BLOCKERS = (
+    (Activity, "activity(ies)"),
+    (Document, "document(s)"),
+    (BuyerRequirement, "buyer requirement(s)"),
+    (Booking, "booking(s)"),
+    (SoftwareRequirement, "software requirement(s)"),
+    (SoftwareEstimate, "software estimate(s)"),
+    (SoftwareContract, "software contract(s)"),
+)
+
+
+def get_lead_delete_blockers(db: Session, tenant_id: UUID, lead_id: UUID):
+    blockers = []
+
+    for model, label in LEAD_DELETE_BLOCKERS:
+        count = db.query(model).filter(
+            model.tenant_id == tenant_id,
+            model.lead_id == lead_id,
+        ).count()
+
+        if count:
+            blockers.append(f"{count} {label}")
+
+    return blockers
+
+
 router = APIRouter(
     prefix="/api/v1/leads",
     tags=["Leads"],
+    dependencies=[
+        Depends(require_enabled_module("leads")),
+    ],
 )
 
 
@@ -859,6 +895,18 @@ def delete_lead(
             ),
         )
 
+    blockers = get_lead_delete_blockers(db, tenant_id, lead.id)
+
+    if blockers:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot delete this lead because it is linked to "
+                + ", ".join(blockers)
+                + ". Update the lead's status instead of deleting it."
+            ),
+        )
+
     try:
         log_audit(
             db=db,
@@ -881,6 +929,15 @@ def delete_lead(
         db.delete(lead)
         db.commit()
 
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This record is still referenced by other records "
+                "and cannot be deleted."
+            ),
+        )
     except Exception:
         db.rollback()
         raise

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import String, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.connection import Base
 
@@ -98,6 +98,14 @@ class Activity(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False
+    )
+
+    related_records: Mapped[list["ActivityLink"]] = relationship(
+        "ActivityLink",
+        back_populates="activity",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ActivityLink.created_at",
     )
 
     updated_at: Mapped[datetime] = mapped_column(

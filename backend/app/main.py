@@ -35,6 +35,14 @@ from app.routes.payment_plans import (
     router as payment_plans_router,
     global_router as global_collections_router,
 )
+from app.routes.software_requirements import (
+    router as software_requirements_router,
+)
+from app.routes.software_estimates import router as software_estimates_router
+from app.routes.software_contracts import router as software_contracts_router
+from app.routes.software_projects import router as software_projects_router
+from app.routes.software_sprints import router as software_sprints_router
+from app.routes.industry_config import router as industry_config_router
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -96,6 +104,7 @@ origins = [
     "http://127.0.0.1:5173",
     "http://localhost:5174",
     "http://127.0.0.1:5174",
+    "http://localhost:8000",
 
     "https://s-cuil-one.vercel.app",
     "https://s-cuil-one-git-backend-vamshi-kumarvamshi1832-7668s-projects.vercel.app",
@@ -119,31 +128,36 @@ app.include_router(contact_router)
 app.include_router(account_router)
 app.include_router(deals.router)
 app.include_router(activities_router)
-app.include_router(pipelines_router)
-app.include_router(form_templates_router)
-app.include_router(workflows_router)
-app.include_router(notifications_router)
-app.include_router(dashboard_router)
-app.include_router(reports_router)
-app.include_router(documents_router)
-app.include_router(search_router)
-app.include_router(import_export_router)
-app.include_router(import_export_extended_router)
-app.include_router(audit_logs_router)
-app.include_router(properties_router)
-app.include_router(property_images_router)
-app.include_router(projects_router)
-app.include_router(bulidings_router)
-app.include_router(building_images_router)
-app.include_router(buyer_requirements_router)
-app.include_router(property_matches_router)
-app.include_router(site_visits_router)
-app.include_router(bookings_router)
-app.include_router(payments_router)
-app.include_router(payment_refunds_router)
-app.include_router(payment_plans_router)
-app.include_router(payment_plans_router)
-app.include_router(global_collections_router)
+app.include_router(industry_config_router)
+# app.include_router(pipelines_router)
+# app.include_router(form_templates_router)
+# app.include_router(workflows_router)
+# app.include_router(notifications_router)
+# app.include_router(dashboard_router)
+# app.include_router(reports_router)
+# app.include_router(documents_router)
+# app.include_router(search_router)
+# app.include_router(import_export_router)
+# app.include_router(import_export_extended_router)
+# app.include_router(audit_logs_router)
+# app.include_router(properties_router)
+# app.include_router(property_images_router)
+# app.include_router(projects_router)
+# app.include_router(bulidings_router)
+# app.include_router(building_images_router)
+# app.include_router(buyer_requirements_router)
+# app.include_router(property_matches_router)
+# app.include_router(site_visits_router)
+# app.include_router(bookings_router)
+# app.include_router(payments_router)
+# app.include_router(payment_refunds_router)
+# app.include_router(payment_plans_router)
+# app.include_router(global_collections_router)
+app.include_router(software_requirements_router)
+app.include_router(software_estimates_router)
+app.include_router(software_contracts_router)
+app.include_router(software_projects_router)
+app.include_router(software_sprints_router)
 
 
 @app.get("/")

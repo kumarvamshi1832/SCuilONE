@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
-
+from app.core.industry_modules import require_enabled_module
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -19,9 +19,13 @@ from app.schemas.buyer_requirement import (
 )
 from app.services.audit_service import log_audit
 
+
 router = APIRouter(
     prefix="/api/v1/buyer-requirements",
     tags=["Buyer Requirements"],
+    dependencies=[
+        Depends(require_enabled_module("buyer_requirements")),
+    ],
 )
 
 
