@@ -2,18 +2,24 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-
+from sqlalchemy.exc import IntegrityError
+from app.core.industry_modules import require_enabled_module
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.project import Project
+from app.models.building import Building
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
 from app.services.audit_service import log_audit
+
 
 
 router = APIRouter(
     prefix="/api/v1/projects",
     tags=["Projects"],
+    dependencies=[
+        Depends(require_enabled_module("projects")),
+    ],
 )
 
 
@@ -276,6 +282,21 @@ def delete_project(
 
     before_data = project_snapshot(project)
 
+    building_count = db.query(Building).filter(
+        Building.tenant_id == tenant_id,
+        Building.project_id == project.id,
+    ).count()
+
+    if building_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This project has {building_count} building(s) and cannot "
+                "be deleted. Delete its buildings first, or change the "
+                "project status instead."
+            ),
+        )
+
     try:
         log_audit(
             db,
@@ -291,6 +312,15 @@ def delete_project(
         db.delete(project)
         db.commit()
 
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This record is still referenced by other records "
+                "and cannot be deleted."
+            ),
+        )
     except Exception:
         db.rollback()
         raise

@@ -4,11 +4,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
+from sqlalchemy.exc import IntegrityError
+from app.core.industry_modules import require_enabled_module
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.building import Building
+from app.models.property import Property
 from app.models.project import Project
 from app.schemas.building import (
     BuildingCreate,
@@ -18,8 +20,13 @@ from app.schemas.building import (
 from app.services.audit_service import log_audit
 
 
-router = APIRouter(prefix="/api/v1/buildings", tags=["Buildings"])
-
+router = APIRouter(
+    prefix="/api/v1/buildings",
+    tags=["Buildings"],
+    dependencies=[
+        Depends(require_enabled_module("buildings")),
+    ],
+)
 
 def get_db():
     db = SessionLocal()
@@ -300,6 +307,21 @@ def delete_building(
     building = get_building_or_404(db, building_id, tenant_id)
     before_data = building_snapshot(building)
 
+    property_count = db.query(Property).filter(
+        Property.tenant_id == tenant_id,
+        Property.building_id == building.id,
+    ).count()
+
+    if property_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This building has {property_count} propert"
+                f"{'y' if property_count == 1 else 'ies'} and cannot be "
+                "deleted. Delete or move its properties first."
+            ),
+        )
+
     try:
         log_audit(
             db,
@@ -315,6 +337,15 @@ def delete_building(
         db.delete(building)
         db.commit()
 
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This record is still referenced by other records "
+                "and cannot be deleted."
+            ),
+        )
     except Exception:
         db.rollback()
         raise

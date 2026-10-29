@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from app.services.notification_service import notify_assignment
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from app.core.industry_modules import require_enabled_module
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/accounts",
-    tags=["Accounts"]
+    tags=["Accounts"],
+    dependencies=[
+        Depends(require_enabled_module("accounts")),
+    ],
 )
 
 

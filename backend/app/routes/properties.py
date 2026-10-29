@@ -1,24 +1,34 @@
 from uuid import UUID
 
 import cloudinary.uploader
+import logging
 import app.core.cloudinary_config
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
+from app.core.industry_modules import require_enabled_module
 from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.property import Property
 from app.models.property_image import PropertyImage
+from app.models.booking import Booking
 from app.models.building import Building
 from app.models.user import User
 from app.schemas.property import PropertyCreate, PropertyUpdate, PropertyResponse
 from app.services.audit_service import log_audit
 
 
-router = APIRouter(prefix="/api/v1/properties", tags=["Properties"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/api/v1/properties",
+    tags=["Properties"],
+    dependencies=[
+        Depends(require_enabled_module("properties")),
+    ],
+)
 
 
 def get_db():
@@ -455,6 +465,20 @@ def delete_property(
             detail="Property not found.",
         )
 
+    booking_count = db.query(Booking).filter(
+        Booking.tenant_id == tenant_id,
+        Booking.property_id == property_record.id,
+    ).count()
+
+    if booking_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This property has {booking_count} booking(s) and cannot "
+                "be deleted. Set its status to Inactive instead."
+            ),
+        )
+
     before_data = property_snapshot(property_record)
 
     images = db.query(PropertyImage).filter(
@@ -462,23 +486,9 @@ def delete_property(
         PropertyImage.property_id == property_id,
     ).all()
 
+    image_public_ids = [image.public_id for image in images]
+
     try:
-        for image in images:
-            result = cloudinary.uploader.destroy(
-                image.public_id,
-                resource_type="image",
-                invalidate=True,
-            )
-
-            if result.get("result") not in {"ok", "not found"}:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=(
-                        "Cloudinary could not confirm deletion "
-                        "of a property image."
-                    ),
-                )
-
         for image in images:
             db.delete(image)
 
@@ -496,9 +506,34 @@ def delete_property(
         db.delete(property_record)
         db.commit()
 
-    except HTTPException:
+    except IntegrityError:
         db.rollback()
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This record is still referenced by other records "
+                "and cannot be deleted."
+            ),
+        )
     except Exception:
         db.rollback()
         raise
+
+    for public_id in image_public_ids:
+        try:
+            result = cloudinary.uploader.destroy(
+                public_id,
+                resource_type="image",
+                invalidate=True,
+            )
+
+            if result.get("result") not in {"ok", "not found"}:
+                logger.warning(
+                    "Cloudinary did not confirm deletion of %s: %s",
+                    public_id,
+                    result,
+                )
+        except Exception:
+            logger.exception(
+                "Could not delete Cloudinary image %s", public_id
+            )

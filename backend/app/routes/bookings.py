@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 from app.models.payment import Payment
+from app.core.industry_modules import require_enabled_module
 from app.models.payment_refund import PaymentRefund
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -25,7 +26,13 @@ from app.schemas.booking import (
 from app.services.audit_service import log_audit
 
 
-router = APIRouter(prefix="/api/v1/bookings", tags=["Bookings"])
+router = APIRouter(
+    prefix="/api/v1/bookings",
+    tags=["Bookings"],
+    dependencies=[
+        Depends(require_enabled_module("bookings")),
+    ],
+)
 
 ACTIVE_BOOKING_STATUSES = ("Pending", "Confirmed")
 

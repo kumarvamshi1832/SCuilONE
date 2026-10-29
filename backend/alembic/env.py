@@ -19,6 +19,7 @@ from app.models.contact import Contact
 from app.models.account import Account
 from app.models.deal import Deal
 from app.models.activity import Activity
+from app.models.activity_link import ActivityLink
 from app.models.pipeline import Pipeline
 from app.models.pipeline import PipelineStage
 from app.models.user_invitation import UserInvitation
@@ -26,7 +27,6 @@ from app.models.form_template import FormTemplate, FormField, CustomFormSubmissi
 from app.models.lead_assignment_audit import LeadAssignmentAudit
 from app.models.workflow import Workflow, WorkflowExecution
 from app.models.notification import Notification
-from app.models.refresh_session import RefreshSession
 from app.models.refresh_session import RefreshSession
 from app.models.user_mfa import UserMFA
 from app.models.document import Document
@@ -43,7 +43,14 @@ from app.models.booking import Booking
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
-
+from app.models.software_requirement import SoftwareRequirement
+from app.models.software_estimate import SoftwareEstimate
+from app.models.software_estimate_item import SoftwareEstimateItem
+from app.models.software_contract import SoftwareContract 
+from app.models.software_project import SoftwareProject  
+from app.models.software_sprint import SoftwareSprint
+from app.models.industry_pack import IndustryPack
+from app.models.tenant_industry_config import TenantIndustryConfig
 
 config = context.config
 

@@ -6,6 +6,7 @@ from app.models.role_permission import RolePermission
 
 role_permissions = {
     "Tenant Owner": [
+        "industry_config.update",
         "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
@@ -29,6 +30,18 @@ role_permissions = {
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
         "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
+
+        "software_requirement.view","software_requirement.create",
+        "software_requirement.update","software_requirement.delete",
+
+        "software_estimate.view","software_estimate.create",
+        "software_estimate.update","software_estimate.delete",
+
+        "software_contract.view","software_contract.create",
+        "software_contract.update","software_contract.delete",
+
+        "software_project.view","software_project.create",
+        "software_project.update","software_project.delete",
 
 
 
@@ -36,6 +49,7 @@ role_permissions = {
     ],
 
     "Tenant Admin": [
+        "industry_config.update",
         "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
@@ -59,6 +73,18 @@ role_permissions = {
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
         "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
+
+        "software_requirement.view","software_requirement.create",
+        "software_requirement.update","software_requirement.delete",
+
+        "software_estimate.view","software_estimate.create",
+        "software_estimate.update","software_estimate.delete",
+
+        "software_contract.view","software_contract.create",
+        "software_contract.update","software_contract.delete",
+
+        "software_project.view","software_project.create",
+        "software_project.update","software_project.delete",
 
 
     ],
@@ -88,6 +114,19 @@ role_permissions = {
         "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
+        "software_requirement.view","software_requirement.create",
+        "software_requirement.update","software_requirement.delete",
+
+        "software_estimate.view","software_estimate.create",
+        "software_estimate.update","software_estimate.delete",
+
+        "software_contract.view","software_contract.create",
+        "software_contract.update","software_contract.delete",
+
+        "software_project.view","software_project.create",
+        "software_project.update","software_project.delete",
+        
+
 
 
     ],
@@ -111,6 +150,16 @@ role_permissions = {
 
         "booking.view", "booking.create", "booking.update",
         "booking.payment.view", "booking.payment.create", "booking.payment_plan.view",
+
+        "software_requirement.view","software_requirement.create",
+        "software_requirement.update",
+
+        "software_estimate.view","software_estimate.create",
+        "software_estimate.update",
+
+        "software_contract.view","software_contract.create","software_contract.update",
+
+        "software_project.view","software_project.create","software_project.update",
 
 
 
@@ -138,6 +187,18 @@ role_permissions = {
         "booking.payment_plan.view",
         "booking.refund.manage", "booking.sale.complete",
 
+        "software_requirement.view","software_requirement.create",
+        "software_requirement.update",
+
+        "software_estimate.view","software_estimate.create",
+        "software_estimate.update",
+
+        "software_contract.view","software_contract.create","software_contract.update",
+
+        "software_project.view","software_project.create","software_project.update",
+        
+        
+
 
     ],
 
@@ -158,6 +219,12 @@ role_permissions = {
         "property_match.view",
         "site_visit.view",
         "booking.view", "booking.payment.view", "booking.payment_plan.view",
+        "software_requirement.view",
+
+        "software_estimate.view",
+        "software_contract.view",
+
+        "software_project.view",
     ],
 
     "Read-only / Auditor": [
@@ -178,6 +245,10 @@ role_permissions = {
         "property_match.view",
         "site_visit.view",
         "booking.view", "booking.payment.view", "booking.payment_plan.view",
+        "software_requirement.view",
+        "software_estimate.view",
+        "software_contract.view",
+        "software_project.view",
     ],
 }
 

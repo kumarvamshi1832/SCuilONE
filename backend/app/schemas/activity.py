@@ -8,44 +8,31 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 ActivityType = Literal["Task", "Call", "Meeting"]
 ActivityStatus = Literal["Pending", "In Progress", "Completed", "Cancelled"]
 ActivityPriority = Literal["Low", "Medium", "High"]
+ActivityLinkModule = Literal[
+    "property",
+    "building",
+    "real_estate_project",
+    "buyer_requirement",
+    "property_match",
+    "site_visit",
+    "booking",
+    "software_project",
+    "software_sprint",
+]
 
 
-def _normalize_type(v):
-    if isinstance(v, str):
-        c = v.strip().lower()
-        if c == "task":
-            return "Task"
-        if c == "call":
-            return "Call"
-        if c == "meeting":
-            return "Meeting"
-    return v
+class ActivityLinkInput(BaseModel):
+    module: ActivityLinkModule
+    record_id: UUID
 
 
-def _normalize_status(v):
-    if isinstance(v, str):
-        c = v.strip().lower()
-        if c == "pending":
-            return "Pending"
-        if c in ["in progress", "in_progress", "inprogress"]:
-            return "In Progress"
-        if c == "completed":
-            return "Completed"
-        if c in ["cancelled", "canceled"]:
-            return "Cancelled"
-    return v
+class ActivityLinkResponse(BaseModel):
+    id: UUID
+    module: ActivityLinkModule
+    record_id: UUID
+    created_at: datetime
 
-
-def _normalize_priority(v):
-    if isinstance(v, str):
-        c = v.strip().lower()
-        if c == "low":
-            return "Low"
-        if c == "medium":
-            return "Medium"
-        if c == "high":
-            return "High"
-    return v
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ActivityCreate(BaseModel):
@@ -60,21 +47,15 @@ class ActivityCreate(BaseModel):
     contact_id: UUID | None = None
     account_id: UUID | None = None
     deal_id: UUID | None = None
+    related_records: list[ActivityLinkInput] = Field(default_factory=list)
 
-    @field_validator("activity_type", mode="before")
+    @field_validator("title")
     @classmethod
-    def validate_type(cls, v):
-        return _normalize_type(v)
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def validate_status(cls, v):
-        return _normalize_status(v)
-
-    @field_validator("priority", mode="before")
-    @classmethod
-    def validate_priority(cls, v):
-        return _normalize_priority(v)
+    def title_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Activity title cannot be blank")
+        return value
 
 
 class ActivityUpdate(BaseModel):
@@ -89,21 +70,17 @@ class ActivityUpdate(BaseModel):
     contact_id: UUID | None = None
     account_id: UUID | None = None
     deal_id: UUID | None = None
+    related_records: list[ActivityLinkInput] | None = None
 
-    @field_validator("activity_type", mode="before")
+    @field_validator("title")
     @classmethod
-    def validate_type(cls, v):
-        return _normalize_type(v) if v is not None else v
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def validate_status(cls, v):
-        return _normalize_status(v) if v is not None else v
-
-    @field_validator("priority", mode="before")
-    @classmethod
-    def validate_priority(cls, v):
-        return _normalize_priority(v) if v is not None else v
+    def title_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Activity title cannot be blank")
+        return value
 
 
 class ActivityResponse(BaseModel):
@@ -120,6 +97,7 @@ class ActivityResponse(BaseModel):
     contact_id: UUID | None
     account_id: UUID | None
     deal_id: UUID | None
+    related_records: list[ActivityLinkResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
