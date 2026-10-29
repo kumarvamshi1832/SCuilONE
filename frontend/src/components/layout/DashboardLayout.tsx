@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext";
 
 import { getTenantDetails } from "../../services/dashboardService";
+import MyStoreDropdown from "./MyStoreDropdown";
 
 import { getMyProfile } from "../../services/profileService";
 
@@ -35,14 +36,85 @@ interface DashboardLayoutProps {
 }
 
 type NavItem = {
-
   label: string;
-
   path: string;
-
   icon: string;
-
 };
+
+interface MenuGroupConfig {
+  id: string;
+  title: string;
+  icon: string;
+  routes: string[];
+}
+
+const MENU_GROUPS: MenuGroupConfig[] = [
+  {
+    id: "sales-crm",
+    title: "Sales & CRM",
+    icon: "M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16",
+    routes: [
+      "/leads",
+      "/contacts",
+      "/accounts",
+      "/deals",
+      "/pipelines",
+      "/buyer-requirements",
+    ],
+  },
+  {
+    id: "property-management",
+    title: "Property Management",
+    icon: "M3 21h18 M3 7l9-4 9 4v14H3V7z M9 10v2 M9 16v2 M15 10v2 M15 16v2",
+    routes: [
+      "/projects",
+      "/buildings",
+      "/properties",
+    ],
+  },
+  {
+    id: "operations",
+    title: "Operations",
+    icon: "M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
+    routes: [
+      "/site-visits",
+      "/activities",
+      "/tasks",
+    ],
+  },
+  {
+    id: "transactions",
+    title: "Transactions",
+    icon: "M2 7h20v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M2 4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2H2V4z M4 12h4v2H4v-2z",
+    routes: [
+      "/bookings",
+      "/payments",
+      "/documents",
+    ],
+  },
+  {
+    id: "reports-automation",
+    title: "Reports & Automation",
+    icon: "M18 20V10 M12 20V4 M6 20v-4",
+    routes: [
+      "/reports",
+      "/workflows",
+    ],
+  },
+  {
+    id: "administration",
+    title: "Administration",
+    icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+    routes: [
+      "/users",
+      "/roles",
+      "/permissions",
+      "/settings",
+      "/form-builder",
+      "/audit-logs",
+    ],
+  },
+];
 
 export default function DashboardLayout({
 
@@ -1040,21 +1112,68 @@ export default function DashboardLayout({
   const navItems = getNavItems();
 
   const isActiveNavItem = (path: string): boolean => {
-
     if (path === "/") {
-
       return location.pathname === "/";
-
     }
-
     return (
-
       location.pathname === path ||
-
       location.pathname.startsWith(`${path}/`)
-
     );
+  };
 
+  // Standalone dashboard item
+  const dashboardItem = navItems.find((item) => item.path.endsWith("/dashboard"));
+
+  // Build the grouped items array based on permitted navItems in exact required order
+  const groupedMenu = useMemo(() => {
+    return MENU_GROUPS.map((group) => {
+      const items = group.routes
+        .map((routeSuffix) => navItems.find((item) => item.path.endsWith(routeSuffix)))
+        .filter((item): item is NavItem => Boolean(item));
+      return { group, items };
+    }).filter(({ items }) => items.length > 0);
+  }, [navItems]);
+
+  // Find extra items not in dashboard or any group (if any)
+  const extraItems = useMemo(() => {
+    return navItems.filter((item) => {
+      if (item.path.endsWith("/dashboard")) return false;
+      return !MENU_GROUPS.some((g) => g.routes.some((r) => item.path.endsWith(r)));
+    });
+  }, [navItems]);
+
+  // Collapsible dropdown state - auto-expanded for the active group
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    MENU_GROUPS.forEach((group) => {
+      const hasActive = group.routes.some(
+        (r) => location.pathname.endsWith(r) || location.pathname.includes(`${r}/`)
+      );
+      if (hasActive) {
+        initial[group.id] = true;
+      }
+    });
+    return initial;
+  });
+
+  // Automatically expand group matching active route on mount and navigation
+  useEffect(() => {
+    MENU_GROUPS.forEach((group) => {
+      const hasActive = group.routes.some((routeSuffix) => {
+        const item = navItems.find((n) => n.path.endsWith(routeSuffix));
+        return item && isActiveNavItem(item.path);
+      });
+      if (hasActive) {
+        setOpenGroups((prev) => (prev[group.id] ? prev : { ...prev, [group.id]: true }));
+      }
+    });
+  }, [location.pathname, navItems]);
+
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
   };
 
   return (
@@ -1116,7 +1235,8 @@ export default function DashboardLayout({
             )}
 
             <h2 style={{ margin: 0 }}>
-              <span className="text-blue">SCuilONE</span>
+              <span className="text-blue">SCuil</span>
+              <span className="text-white">ONE</span>
             </h2>
           </div>
 
@@ -1133,43 +1253,127 @@ export default function DashboardLayout({
         </div>
 
         <nav className="sidebar-nav">
-
-          {navItems.map((item) => (
+          {/* Standalone Dashboard Item */}
+          {dashboardItem && (
             <Link
-
-              key={item.path}
-
-              to={item.path}
-
-              className={`nav-item ${isActiveNavItem(item.path) ? "active" : ""
-
-                }`}
-
+              to={dashboardItem.path}
+              className={`nav-standalone-item ${
+                isActiveNavItem(dashboardItem.path) ? "active" : ""
+              }`}
               onClick={() => setIsSidebarOpen(false)}
-
             >
               <svg
-
                 className="nav-icon"
-
                 viewBox="0 0 24 24"
-
                 fill="none"
-
                 stroke="currentColor"
-
                 strokeWidth="2"
-
                 strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d={dashboardItem.icon} />
+              </svg>
+              <span>{dashboardItem.label}</span>
+            </Link>
+          )}
 
+          {/* Grouped Collapsible Sections */}
+          {groupedMenu.map(({ group, items }) => {
+            const isOpen = Boolean(openGroups[group.id]);
+            const hasActiveChild = items.some((item) =>
+              isActiveNavItem(item.path)
+            );
+
+            return (
+              <div key={group.id} className="nav-group-section">
+                <button
+                  type="button"
+                  className={`nav-group-header ${
+                    hasActiveChild ? "has-active" : ""
+                  }`}
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={isOpen}
+                >
+                  <svg
+                    className="nav-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d={group.icon} />
+                  </svg>
+                  <span className="nav-group-title">{group.title}</span>
+                  <svg
+                    className={`nav-group-chevron ${isOpen ? "open" : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+
+                {isOpen && (
+                  <div className="nav-group-children">
+                    {items.map((item) => {
+                      const active = isActiveNavItem(item.path);
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          className={`nav-subitem ${active ? "active" : ""}`}
+                          onClick={() => setIsSidebarOpen(false)}
+                        >
+                          <svg
+                            className="nav-subitem-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d={item.icon} />
+                          </svg>
+                          <span className="nav-subitem-label">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Fallback Extra Items (if any) */}
+          {extraItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`nav-standalone-item ${
+                isActiveNavItem(item.path) ? "active" : ""
+              }`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <svg
+                className="nav-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
                 strokeLinejoin="round"
               >
                 <path d={item.icon} />
               </svg>
-
-              {item.label}
+              <span>{item.label}</span>
             </Link>
-
           ))}
         </nav>
 
@@ -1264,37 +1468,10 @@ export default function DashboardLayout({
               </svg>
             </button>
 
-            <div className="tenant-selector">
-              <span>
-
-                {tenant
-
-                  ? tenant.name
-
-                  : currentIndustry === "education-consulting"
-
-                    ? "Education Consulting"
-
-                    : "Loading..."}
-              </span>
-
-              <svg
-
-                viewBox="0 0 24 24"
-
-                fill="none"
-
-                stroke="currentColor"
-
-                strokeWidth="2"
-
-                strokeLinecap="round"
-
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </div>
+            <MyStoreDropdown
+              tenant={tenant}
+              currentIndustry={currentIndustry}
+            />
 
             <GlobalSearch
               placeholder={

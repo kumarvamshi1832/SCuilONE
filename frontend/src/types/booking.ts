@@ -16,6 +16,8 @@ export interface Booking {
   id: string;
   tenant_id: string;
   property_id: string;
+  lead_id?: string | null;
+  buyer_requirement_id?: string | null;
   buyer_name: string;
   buyer_email?: string | null;
   buyer_phone?: string | null;
@@ -35,10 +37,13 @@ export interface Booking {
   property_unit?: string;
   property_city?: string;
   total_paid?: number;
+  lead_name?: string;
 }
 
 export interface BookingCreate {
   property_id: string;
+  lead_id?: string | null;
+  buyer_requirement_id?: string | null;
   buyer_name: string;
   buyer_email?: string | null;
   buyer_phone?: string | null;

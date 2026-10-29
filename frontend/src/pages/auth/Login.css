@@ -1,7 +1,7 @@
 /* ==========================================================================
    SCuilONE CRM - Premium Refined Login Page
    Exact Spacing, Typography, Alignment & 8px-Grid System
-   Enhanced 540–560px Glassmorphism Panel with Balanced Layout
+   Consistent 620px Login Card with Stable Height & Padding
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -317,7 +317,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: clamp(16px, 2.4vh, 24px) clamp(48px, 3.6vw, 56px);
+  padding: 20px 48px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -427,8 +427,9 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(24px, 4vw, 64px);
-  padding: 0 0 clamp(16px, 2.5vh, 28px) clamp(48px, 3.6vw, 56px);
+  gap: 36px;
+  padding: 0 48px 24px 48px;
+  min-height: 0;
   width: 100%;
   box-sizing: border-box;
 }
@@ -445,7 +446,7 @@ html, body, #root {
   justify-content: center;
   align-items: flex-start;
   text-align: left;
-  transform: translateY(-50px); /* Harmoniously centered with enlarged login card */
+  transform: translateY(-24px); /* Harmoniously centered with 620px login card */
 }
 
 .hero-typography-group {
@@ -588,29 +589,30 @@ html, body, #root {
 }
 
 /* ==========================================================================
-   3 & 4. LOGIN PANEL (540–560px Width, 4–5% Right Margin, Enhanced Presence)
+   3 & 4. LOGIN PANEL (Consistent 620px Desktop Width & Stable Height)
    ========================================================================== */
 .right-interactive-card-area {
-  flex: 0 0 550px;
-  max-width: 560px;
-  width: 100%;
+  flex: 0 0 620px;
+  width: 620px;
+  max-width: 100%;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-right: clamp(24px, 4.5vw, 64px);
+  margin-right: 16px;
   box-sizing: border-box;
 }
 
 .login-card-glassmorphism {
-  width: 100%;
-  max-width: 560px;
+  width: 620px;
+  max-width: calc(100vw - 32px);
+  min-height: 575px;
   background: var(--card-surface);
   backdrop-filter: var(--card-backdrop-blur);
   -webkit-backdrop-filter: var(--card-backdrop-blur);
   border-radius: 24px;
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
-  padding: clamp(30px, 3.8vh, 38px) clamp(34px, 2.6vw, 42px) clamp(24px, 3vh, 30px) clamp(34px, 2.6vw, 42px);
+  padding: 34px 40px 26px 40px;
   box-sizing: border-box;
   position: relative;
   display: flex;
@@ -710,6 +712,55 @@ html, body, #root {
 .input-box-container:focus-within {
   border-color: var(--input-focus-border);
   box-shadow: var(--input-focus-shadow);
+}
+
+.input-box-container.has-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25), 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.login-page-root.light .input-box-container.has-error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2), 0 0 8px rgba(220, 38, 38, 0.12);
+}
+
+/* Inline Field Validation Error */
+.field-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #fca5a5;
+  margin-top: 4px;
+  line-height: 1.3;
+  animation: fieldErrorFadeIn 0.18s ease-out;
+}
+
+@keyframes fieldErrorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.field-error-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: #f87171;
+}
+
+.login-page-root.light .field-inline-error {
+  color: #dc2626;
+}
+
+.login-page-root.light .field-error-icon {
+  color: #dc2626;
 }
 
 .input-leading-icon {
@@ -979,6 +1030,106 @@ html, body, #root {
   height: 14px;
 }
 
+/* Light Theme Error & Success Alert Enhancements */
+.login-page-root.light .auth-alert-message {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.login-page-root.light .alert-warning-icon {
+  color: #dc2626;
+}
+
+.login-page-root.light .alert-text {
+  color: #991b1b;
+  font-weight: 500;
+}
+
+.login-page-root.light .alert-close-btn {
+  color: #b91c1c;
+}
+
+.auth-alert-success-banner {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #6ee7b7 !important;
+  margin-bottom: 14px;
+}
+
+.auth-alert-success-banner .alert-warning-icon {
+  color: #34d399 !important;
+}
+
+.auth-alert-success-banner .alert-text {
+  color: #6ee7b7 !important;
+  font-weight: 500 !important;
+}
+
+.auth-alert-success-banner .alert-close-btn {
+  color: #6ee7b7 !important;
+}
+
+.login-page-root.light .auth-alert-success-banner {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+  color: #166534 !important;
+}
+
+.login-page-root.light .auth-alert-success-banner .alert-warning-icon {
+  color: #16a34a !important;
+}
+
+.login-page-root.light .auth-alert-success-banner .alert-text {
+  color: #166534 !important;
+}
+
+.login-page-root.light .auth-alert-success-banner .alert-close-btn {
+  color: #166534 !important;
+}
+
+/* Visible Focus States for Accessibility */
+.theme-toggle-pill:focus-visible {
+  outline: 2px solid var(--input-focus-border);
+  outline-offset: 3px;
+}
+
+.native-checkbox-hidden:focus-visible + .custom-checkbox-box {
+  outline: 2px solid var(--input-focus-border);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.35);
+}
+
+.input-trailing-reveal-btn:focus-visible {
+  outline: 2px solid var(--input-focus-border);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.forgot-password-link:focus-visible {
+  outline: 2px solid var(--input-focus-border);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.login-submit-button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.4), var(--btn-shadow);
+}
+
+.register-action-btn:focus-visible {
+  outline: 2px solid var(--input-focus-border);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.alert-close-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Submit CTA Button (100% Width) */
 .login-submit-button {
   width: 100%;
@@ -1210,53 +1361,49 @@ html, body, #root {
    ========================================================================== */
 @media (max-width: 1440px) {
   .left-branding-hero {
-    transform: translateY(-40px);
-  }
-  .right-interactive-card-area {
-    flex: 0 0 540px;
-    max-width: 550px;
-    margin-right: 3.5%;
+    transform: translateY(-20px);
   }
 }
 
 @media (max-width: 1280px) {
+  .login-top-navbar {
+    padding: 18px 36px;
+  }
+  .login-content-split {
+    padding: 0 36px 20px 36px;
+    gap: 30px;
+  }
   .left-branding-hero {
-    transform: translateY(-30px);
-    max-width: 480px;
+    max-width: 460px;
+    transform: translateY(-16px);
+  }
+  .features-grid-2x2 {
+    max-width: 460px;
+    column-gap: 20px;
   }
   .right-interactive-card-area {
-    flex: 0 0 510px;
-    max-width: 520px;
-    margin-right: 2.5%;
-  }
-  .login-card-glassmorphism {
-    padding: clamp(26px, 3.2vh, 32px) 32px clamp(20px, 2.5vh, 26px) 32px;
+    margin-right: 0;
   }
 }
 
 @media (max-width: 1080px) {
   .login-top-navbar {
-    padding: 16px 28px;
+    padding: 16px 24px;
   }
   .login-content-split {
-    padding: 0 28px 24px 28px;
-    gap: 28px;
+    padding: 0 24px 20px 24px;
+    gap: 24px;
   }
   .left-branding-hero {
-    max-width: 430px;
-    transform: translateY(-15px);
+    max-width: 380px;
+    transform: translateY(-12px);
   }
   .features-grid-2x2 {
-    max-width: 430px;
-    column-gap: 16px;
+    max-width: 380px;
+    column-gap: 14px;
   }
   .right-interactive-card-area {
-    flex: 0 0 470px;
-    max-width: 490px;
     margin-right: 0;
-  }
-  .login-card-glassmorphism {
-    padding: 24px 28px 20px 28px;
   }
 }
 
@@ -1270,7 +1417,7 @@ html, body, #root {
     flex-direction: column;
     justify-content: center;
     gap: 32px;
-    padding: 12px 20px 36px 20px;
+    padding: 16px 20px 36px 20px;
   }
   .left-branding-hero {
     max-width: 100%;
@@ -1293,33 +1440,35 @@ html, body, #root {
     text-align: center;
   }
   .features-grid-2x2 {
-    max-width: 480px;
+    max-width: 520px;
     margin: 0 auto;
     text-align: left;
   }
   .right-interactive-card-area {
-    flex: 0 0 100%;
-    max-width: 540px;
+    flex: 0 0 auto;
+    max-width: 620px;
     width: 100%;
     margin: 0 auto;
     justify-content: center;
   }
   .login-card-glassmorphism {
-    padding: 28px 26px 22px 26px;
-    max-width: 540px;
-    width: 100%;
+    width: 620px;
+    max-width: calc(100vw - 32px);
+    margin: 0 auto;
+    min-height: 575px;
+    padding: 34px 40px 26px 40px;
   }
 }
 
-@media (max-width: 580px) {
+@media (max-width: 640px) {
+  .login-card-glassmorphism {
+    padding: 24px 20px 20px 20px;
+    min-height: auto;
+  }
   .features-grid-2x2 {
     grid-template-columns: 1fr;
     row-gap: 16px;
     max-width: 360px;
-  }
-  .login-card-glassmorphism {
-    padding: 24px 18px 20px 18px;
-    border-radius: 20px;
   }
   .security-badges-footer {
     padding-top: 12px;

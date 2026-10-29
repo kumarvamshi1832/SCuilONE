@@ -1,6 +1,7 @@
 import { DashboardSummary, TenantDetails, Activity } from "../types/dashboard";
 import { apiClient } from "./authService";
 import { calculateTaskSummary } from "../utils/taskStatus";
+import { formatDateTime } from "../utils/dateFormatter";
 
 const DEFAULT_SUMMARY: DashboardSummary = {
   totalProperties: 0,
@@ -147,5 +148,24 @@ export const getTenantDetails = async (): Promise<TenantDetails> => {
 };
 
 export const getRecentActivities = async (): Promise<Activity[]> => {
-  return [];
+  try {
+    const token = sessionStorage.getItem("access_token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await apiClient.get<any[]>("/api/v1/activities/", { headers });
+    if (res.status === 200 && Array.isArray(res.data)) {
+      return res.data.slice(0, 5).map((a: any) => ({
+        id: String(a.id || Math.random()),
+        description: a.title
+          ? a.description
+            ? `${a.title}: ${a.description}`
+            : a.title
+          : a.description || "Activity",
+        timestamp: a.created_at ? formatDateTime(a.created_at) : (a.timestamp || ""),
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
 };
+

@@ -11,7 +11,7 @@ interface RecentUsersProps {
 export default function RecentUsers({ users }: RecentUsersProps) {
   const navigate = useNavigate();
   const { industry } = useParams();
-  
+
   const getBasePath = () => {
     if (industry) return `/${normalizeIndustry(industry)}`;
     const tenantStr = sessionStorage.getItem("tenant");
@@ -19,7 +19,7 @@ export default function RecentUsers({ users }: RecentUsersProps) {
       try {
         const t = JSON.parse(tenantStr);
         if (t?.industry) return `/${normalizeIndustry(t.industry)}`;
-      } catch(e) {}
+      } catch (e) {}
     }
     return "/real-estate";
   };
@@ -30,8 +30,11 @@ export default function RecentUsers({ users }: RecentUsersProps) {
     <div className="dashboard-section-card recent-users-card">
       <div className="section-header">
         <h3 className="section-title">Recent Users</h3>
-        <Link to={`${basePath}/users`} className="view-all-link">View All</Link>
+        <Link to={`${basePath}/users`} className="view-all-link">
+          View All
+        </Link>
       </div>
+
       <div className="table-responsive">
         <table className="recent-users-table">
           <thead>
@@ -45,37 +48,47 @@ export default function RecentUsers({ users }: RecentUsersProps) {
             </tr>
           </thead>
           <tbody>
-            {users.slice(0, 4).map((user) => (
+            {users.slice(0, 5).map((user) => (
               <tr key={user.id} className="recent-user-row">
                 <td className="td-user-name">
                   <div className="user-cell">
                     <ProfileAvatar
                       photoUrl={user.photo_url}
-                      name={user.full_name}
+                      name={user.full_name || user.email || "User"}
                       size={32}
                       className="avatar-small"
                     />
-                    <span className="user-full-name">{user.full_name}</span>
+                    <span className="user-full-name" title={user.full_name}>
+                      {user.full_name || "User"}
+                    </span>
                   </div>
                 </td>
-                <td className="td-user-email text-muted">{user.email}</td>
+                <td className="td-user-email text-muted" title={user.email}>
+                  {user.email || "—"}
+                </td>
                 <td className="td-user-role">
-                  <span className="role-badge">{user.role}</span>
+                  <span className="role-badge">{user.role || "User"}</span>
                 </td>
                 <td className="td-user-status">
-                  <span className={`status-badge ${user.status?.toLowerCase() === 'active' ? 'active' : 'inactive'}`}>
-                    {user.status || 'Inactive'}
+                  <span
+                    className={`status-badge ${
+                      (user.status || "").toLowerCase() === "active"
+                        ? "active"
+                        : "inactive"
+                    }`}
+                  >
+                    {user.status || "Inactive"}
                   </span>
                 </td>
                 <td className="td-user-date text-muted">
-                  {user.created_at ? formatDateTime(user.created_at) : 'N/A'}
+                  {user.created_at ? formatDateTime(user.created_at) : "—"}
                 </td>
                 <td className="td-user-action">
                   <button
                     type="button"
                     className="btn-user-action-dots"
-                    title={`Actions for ${user.full_name}`}
-                    aria-label={`Actions for ${user.full_name}`}
+                    title={`Actions for ${user.full_name || "User"}`}
+                    aria-label={`Actions for ${user.full_name || "User"}`}
                     onClick={() => navigate(`${basePath}/users`)}
                   >
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -100,4 +113,3 @@ export default function RecentUsers({ users }: RecentUsersProps) {
     </div>
   );
 }
-

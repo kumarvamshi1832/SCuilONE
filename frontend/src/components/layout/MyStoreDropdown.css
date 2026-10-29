@@ -1,0 +1,266 @@
+/* ─── MyStore Dropdown & Popover Component Styles ─── */
+
+.mystore-dropdown-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tenant-selector.mystore-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0F172A;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tenant-selector.mystore-btn:hover {
+  background-color: rgba(148, 163, 184, 0.12);
+}
+
+.tenant-selector.mystore-btn:focus-visible {
+  outline: 2px solid #0891B2;
+  outline-offset: 2px;
+}
+
+.tenant-selector.mystore-btn.active {
+  background-color: rgba(8, 145, 178, 0.1);
+  color: #0891B2;
+}
+
+.dashboard-wrapper.dark .tenant-selector.mystore-btn {
+  color: #F8FAFC;
+}
+
+.dashboard-wrapper.dark .tenant-selector.mystore-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-wrapper.dark .tenant-selector.mystore-btn:focus-visible {
+  outline-color: #06B6D4;
+}
+
+.dashboard-wrapper.dark .tenant-selector.mystore-btn.active {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #06B6D4;
+}
+
+.mystore-chevron {
+  width: 16px;
+  height: 16px;
+  color: #64748B;
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.mystore-chevron.open {
+  transform: rotate(180deg);
+  color: #0891B2;
+}
+
+.dashboard-wrapper.dark .mystore-chevron {
+  color: #94A3B8;
+}
+
+.dashboard-wrapper.dark .mystore-chevron.open {
+  color: #06B6D4;
+}
+
+/* ─── Compact Company Details Popover Card ─── */
+.mystore-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  padding: 16px 18px;
+  box-sizing: border-box;
+  z-index: 1050;
+  animation: mystoreFadeIn 0.15s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+@keyframes mystoreFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-wrapper.dark .mystore-popover {
+  background-color: #1E293B;
+  border-color: #334155;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}
+
+.mystore-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mystore-header-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748B;
+  margin: 0;
+}
+
+.dashboard-wrapper.dark .mystore-header-label {
+  color: #94A3B8;
+}
+
+.mystore-popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mystore-company-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .mystore-company-name {
+  color: #F8FAFC;
+}
+
+.mystore-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mystore-industry-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background-color: rgba(8, 145, 178, 0.1);
+  color: #0891B2;
+  border: 1px solid rgba(8, 145, 178, 0.2);
+}
+
+.dashboard-wrapper.dark .mystore-industry-badge {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #06B6D4;
+  border-color: rgba(6, 182, 212, 0.25);
+}
+
+.mystore-location-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: #475569;
+  line-height: 1.3;
+}
+
+.dashboard-wrapper.dark .mystore-location-row {
+  color: #CBD5E1;
+}
+
+.mystore-location-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #0891B2;
+}
+
+.dashboard-wrapper.dark .mystore-location-icon {
+  color: #06B6D4;
+}
+
+.mystore-location-text {
+  word-break: break-word;
+}
+
+.mystore-divider {
+  border: 0;
+  height: 1px;
+  background-color: #E2E8F0;
+  margin: 2px 0;
+}
+
+.dashboard-wrapper.dark .mystore-divider {
+  background-color: #334155;
+}
+
+.mystore-owner-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mystore-owner-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748B;
+}
+
+.dashboard-wrapper.dark .mystore-owner-label {
+  color: #94A3B8;
+}
+
+.mystore-owner-name {
+  font-size: 0.925rem;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .mystore-owner-name {
+  color: #F8FAFC;
+}
+
+
+
+.mystore-btn-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #0891B2;
+}
+
+.dashboard-wrapper.dark .mystore-btn-icon {
+  color: #06B6D4;
+}
+
+.mystore-chevron.active-nav {
+  color: #0891B2;
+  transform: translateX(2px);
+}
+
+.dashboard-wrapper.dark .mystore-chevron.active-nav {
+  color: #06B6D4;
+}

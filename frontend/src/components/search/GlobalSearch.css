@@ -26,20 +26,22 @@
 }
 
 .dashboard-wrapper.dark .global-search-box {
-  background-color: #1e293b;
+  background-color: #1E293B;
   border-color: #334155;
 }
 
+.global-search-box:focus-within,
 .global-search-box.focused {
   background-color: #ffffff;
   border-color: #06b6d4;
   box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
 }
 
+.dashboard-wrapper.dark .global-search-box:focus-within,
 .dashboard-wrapper.dark .global-search-box.focused {
-  background-color: #0f172a;
-  border-color: #22d3ee;
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.2);
+  background-color: #1E293B;
+  border-color: #06B6D4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
 }
 
 .search-icon-left {
@@ -48,10 +50,16 @@
   color: #64748b;
   flex-shrink: 0;
   margin-right: 8px;
+  transition: color 0.15s ease;
 }
 
 .dashboard-wrapper.dark .search-icon-left {
-  color: #94a3b8;
+  color: #94A3B8;
+}
+
+.dashboard-wrapper.dark .global-search-box:focus-within .search-icon-left,
+.dashboard-wrapper.dark .global-search-box.focused .search-icon-left {
+  color: #06B6D4;
 }
 
 .global-search-input {
@@ -66,12 +74,16 @@
 }
 
 .dashboard-wrapper.dark .global-search-input {
-  color: #f8fafc;
+  color: #F8FAFC;
 }
 
 .global-search-input::placeholder {
   color: #94a3b8;
   font-size: 0.85rem;
+}
+
+.dashboard-wrapper.dark .global-search-input::placeholder {
+  color: #94A3B8;
 }
 
 /* ─── Right Controls (Spinner & Clear) ─── */
@@ -145,7 +157,7 @@
 
 .dashboard-wrapper.dark .global-search-dropdown {
   background: #0f172a;
-  border-color: #1e293b;
+  border-color: #2A3A50;
   box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.5),
     0 8px 10px -4px rgba(0, 0, 0, 0.3);
 }
