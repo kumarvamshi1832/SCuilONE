@@ -63,6 +63,8 @@ import Deals from "../pages/deals/Deals";
 
 import MyProfile from "../pages/profile/MyProfile";
 
+import CompanyProfile from "../pages/company/CompanyProfile";
+
 import FormBuilder from "../pages/form-builder/FormBuilder";
 
 import Pipelines from "../pages/pipelines/Pipelines";
@@ -634,7 +636,27 @@ export default function AppRoutes() {
               </DashboardLayout>
             }
           />
+
+          <Route
+            path="/:industry/company"
+            element={
+              <DashboardLayout>
+                <CompanyProfile />
+              </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/mystore"
+            element={
+              <DashboardLayout>
+                <CompanyProfile />
+              </DashboardLayout>
+            }
+          />
         </Route>
+
+
 
         {/* Empty Route */}
         <Route path="/empty" element={<div />} />

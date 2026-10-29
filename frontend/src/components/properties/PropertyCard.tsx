@@ -83,6 +83,11 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
     }
   }, [statusClass, property.status]);
 
+  // Check if property is sold (supports "Sold", "sold", "SOLD", etc.)
+  const isSold = useMemo(() => {
+    return String(property.status || "").trim().toLowerCase() === "sold";
+  }, [property.status]);
+
   // Normalize valid image URLs from any provided image structure
   const validImages = useMemo(() => {
     return extractPropertyImageUrls(
@@ -125,7 +130,10 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
       : "";
 
   return (
-    <div className={`property-card ${cardMatchClass}`} data-testid={`property-card-${property.id}`}>
+    <div
+      className={`property-card ${cardMatchClass} ${isSold ? "is-sold" : ""}`.trim()}
+      data-testid={`property-card-${property.id}`}
+    >
       {/* ─── Image Area / Carousel ─── */}
       <div className="property-card-cover">
         {currentImageUrl ? (
@@ -143,6 +151,15 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
             <span>{property.property_type}</span>
+          </div>
+        )}
+
+        {/* SOLD OUT Stamp Overlay */}
+        {isSold && (
+          <div className="property-sold-stamp-overlay" aria-label="Sold Out" data-testid="sold-out-stamp">
+            <div className="property-sold-stamp">
+              <span className="property-sold-stamp-inner">SOLD OUT</span>
+            </div>
           </div>
         )}
 
@@ -202,9 +219,11 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
 
         {/* Badges */}
         <div className="property-badge-group">
-          <span className={`listing-badge ${property.listing_type === "Sale" ? "sale" : "rent"}`}>
-            {property.listing_type}
-          </span>
+          {!isSold && property.listing_type && (
+            <span className={`listing-badge ${property.listing_type === "Sale" ? "sale" : "rent"}`}>
+              {property.listing_type}
+            </span>
+          )}
           <span className={`badge ${activeStatusClass}`}>{property.status}</span>
           {matchType === "exact" && (
             <span className="badge badge-match-exact">✓ {matchLabel || "Matched"}</span>

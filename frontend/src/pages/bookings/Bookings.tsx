@@ -18,6 +18,8 @@ import {
   confirmManualRefund,
 } from "../../services/paymentRefundService";
 import { getProperties } from "../../services/propertyService";
+import { getLeads } from "../../services/leadService";
+import type { Lead } from "../../types/lead";
 import type {
   Booking,
   BookingCreate,
@@ -68,6 +70,15 @@ export default function Bookings() {
   const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Leads for Create Booking
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string>("");
+  const [buyerName, setBuyerName] = useState<string>("");
+  const [buyerEmail, setBuyerEmail] = useState<string>("");
+  const [buyerPhone, setBuyerPhone] = useState<string>("");
 
   // Payment Preference for Create Booking
   const [createPaymentPref, setCreatePaymentPref] = useState<PaymentPreference>("Full Payment");
@@ -219,18 +230,40 @@ export default function Bookings() {
     }
   }, []);
 
+  // Fetch Leads
+  const fetchLeads = useCallback(async () => {
+    setLoadingLeads(true);
+    setLeadsError(null);
+    try {
+      const data = await getLeads();
+      setLeads(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error("Failed to load leads:", err);
+      setLeadsError("Failed to load leads. You can still enter buyer details manually.");
+    } finally {
+      setLoadingLeads(false);
+    }
+  }, []);
+
   // Initial datasets
   useEffect(() => {
     getProperties({ limit: 100 })
       .then(setProperties)
       .catch(console.error);
-  }, []);
+    fetchLeads();
+  }, [fetchLeads]);
 
   const propertyMap = useMemo(() => {
     const map = new Map<string, Property>();
     properties.forEach((p) => map.set(p.id, p));
     return map;
   }, [properties]);
+
+  const leadMap = useMemo(() => {
+    const map = new Map<string, Lead>();
+    leads.forEach((l) => map.set(l.id, l));
+    return map;
+  }, [leads]);
 
   // Available sale properties for new bookings
   const availableSaleProperties = useMemo(() => {
@@ -364,20 +397,23 @@ export default function Bookings() {
         const prop = propertyMap.get(b.property_id);
         const propName = prop?.name?.toLowerCase() || "";
         const city = prop?.city?.toLowerCase() || "";
+        const lead = b.lead_id ? leadMap.get(b.lead_id) : undefined;
+        const leadName = lead?.full_name?.toLowerCase() || "";
 
         if (
           !buyer.includes(q) &&
           !email.includes(q) &&
           !phone.includes(q) &&
           !propName.includes(q) &&
-          !city.includes(q)
+          !city.includes(q) &&
+          !leadName.includes(q)
         ) {
           return false;
         }
       }
       return true;
     });
-  }, [bookings, searchQuery, propertyMap]);
+  }, [bookings, searchQuery, propertyMap, leadMap]);
 
   // Financial calculations for viewing booking
   const financialSummary = useMemo(() => {
@@ -420,6 +456,36 @@ export default function Bookings() {
     };
   }, [viewingBooking, bookingPayments, paymentsRefundsMap]);
 
+  // Handle Lead Selection in Create Booking Modal
+  const handleLeadChange = (newLeadId: string) => {
+    setSelectedLeadId(newLeadId);
+    if (!newLeadId) {
+      setBuyerName("");
+      setBuyerEmail("");
+      setBuyerPhone("");
+      return;
+    }
+
+    const lead = leads.find((l) => l.id === newLeadId);
+    if (lead) {
+      setBuyerName(lead.full_name || "");
+      setBuyerEmail(lead.email || "");
+      setBuyerPhone(lead.phone || "");
+    }
+  };
+
+  // Close Create Modal and Reset State
+  const handleCloseCreateModal = () => {
+    setIsCreateOpen(false);
+    setSelectedLeadId("");
+    setBuyerName("");
+    setBuyerEmail("");
+    setBuyerPhone("");
+    setFormError(null);
+    setCreatePaymentPref("Full Payment");
+    setCreateInstallmentNotes("");
+  };
+
   // Create Booking Submit
   const handleCreateBooking = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -428,13 +494,14 @@ export default function Bookings() {
 
     const formData = new FormData(e.currentTarget);
     const property_id = String(formData.get("property_id") || "");
-    const buyer_name = String(formData.get("buyer_name") || "").trim();
-    const buyer_email = String(formData.get("buyer_email") || "").trim() || null;
-    const buyer_phone = String(formData.get("buyer_phone") || "").trim() || null;
+    const finalBuyerName = (buyerName || String(formData.get("buyer_name") || "")).trim();
+    const finalBuyerEmail = (buyerEmail || String(formData.get("buyer_email") || "")).trim() || null;
+    const finalBuyerPhone = (buyerPhone || String(formData.get("buyer_phone") || "")).trim() || null;
     const booking_amount = Number(formData.get("booking_amount") || 0);
     const agreed_price = formData.get("agreed_price")
       ? Number(formData.get("agreed_price"))
       : null;
+    const lead_id = selectedLeadId.trim() ? selectedLeadId.trim() : null;
 
     const payment_preference = createPaymentPref;
     const installment_request_notes =
@@ -442,7 +509,7 @@ export default function Bookings() {
         ? createInstallmentNotes.trim()
         : null;
 
-    if (!property_id || !buyer_name || booking_amount < 0) {
+    if (!property_id || !finalBuyerName || booking_amount < 0) {
       setFormError("Please select a Property, enter Buyer Name, and valid Booking Amount.");
       setSubmitting(false);
       return;
@@ -451,9 +518,10 @@ export default function Bookings() {
     try {
       const payload: BookingCreate = {
         property_id,
-        buyer_name,
-        buyer_email,
-        buyer_phone,
+        lead_id,
+        buyer_name: finalBuyerName,
+        buyer_email: finalBuyerEmail,
+        buyer_phone: finalBuyerPhone,
         booking_amount,
         payment_preference,
         installment_request_notes,
@@ -462,9 +530,7 @@ export default function Bookings() {
       const created = await createBooking(payload);
       setBookings((prev) => [created, ...prev]);
       showToast("Booking created successfully!");
-      setIsCreateOpen(false);
-      setCreatePaymentPref("Full Payment");
-      setCreateInstallmentNotes("");
+      handleCloseCreateModal();
 
       // Refresh properties list because property is now Reserved
       getProperties({ limit: 100 }).then(setProperties).catch(console.error);
@@ -1048,9 +1114,16 @@ export default function Bookings() {
               className="btn-create-booking"
               onClick={() => {
                 setFormError(null);
+                setSelectedLeadId("");
+                setBuyerName("");
+                setBuyerEmail("");
+                setBuyerPhone("");
                 setCreatePaymentPref("Full Payment");
                 setCreateInstallmentNotes("");
                 setIsCreateOpen(true);
+                if (leads.length === 0) {
+                  fetchLeads();
+                }
               }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
@@ -1216,7 +1289,16 @@ export default function Bookings() {
               className="btn-create-booking"
               onClick={() => {
                 setFormError(null);
+                setSelectedLeadId("");
+                setBuyerName("");
+                setBuyerEmail("");
+                setBuyerPhone("");
+                setCreatePaymentPref("Full Payment");
+                setCreateInstallmentNotes("");
                 setIsCreateOpen(true);
+                if (leads.length === 0) {
+                  fetchLeads();
+                }
               }}
             >
               Create Booking
@@ -1238,6 +1320,11 @@ export default function Bookings() {
                     <div className="booking-buyer-contact">
                       {b.buyer_email || b.buyer_phone || "Contact not provided"}
                     </div>
+                    {b.lead_id && leadMap.get(b.lead_id) && (
+                      <div style={{ fontSize: "0.72rem", color: "#0891b2", marginTop: "3px", fontWeight: 500 }}>
+                        Lead: {leadMap.get(b.lead_id)?.full_name}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
                     <span className={`badge ${badgeClass}`}>{b.status}</span>
@@ -1373,6 +1460,11 @@ export default function Bookings() {
                       <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
                         {b.buyer_email || b.buyer_phone || "No contact info"}
                       </div>
+                      {b.lead_id && leadMap.get(b.lead_id) && (
+                        <div style={{ fontSize: "0.7rem", color: "#0891b2", marginTop: "2px", fontWeight: 500 }}>
+                          Lead: {leadMap.get(b.lead_id)?.full_name}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontWeight: 500 }}>
@@ -1461,11 +1553,11 @@ export default function Bookings() {
 
       {/* ─── Create Booking Modal ─── */}
       {isCreateOpen && (
-        <div className="modal-overlay" onClick={() => setIsCreateOpen(false)}>
+        <div className="modal-overlay" onClick={handleCloseCreateModal}>
           <div className="modal-card" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Create Property Booking</h2>
-              <button className="modal-close-btn" onClick={() => setIsCreateOpen(false)}>
+              <button className="modal-close-btn" onClick={handleCloseCreateModal}>
                 &times;
               </button>
             </div>
@@ -1496,10 +1588,53 @@ export default function Bookings() {
                 </div>
 
                 <div className="form-group">
+                  <label>Related Lead</label>
+                  <select
+                    name="lead_id"
+                    value={selectedLeadId}
+                    onChange={(e) => handleLeadChange(e.target.value)}
+                    disabled={submitting || loadingLeads}
+                  >
+                    <option value="">Select Lead</option>
+                    {loadingLeads && <option value="" disabled>Loading leads...</option>}
+                    {leadsError && <option value="" disabled>Error loading leads</option>}
+                    {!loadingLeads && leads.length === 0 && !leadsError && (
+                      <option value="" disabled>No leads available</option>
+                    )}
+                    {leads.map((l) => {
+                      const details = [
+                        l.email,
+                        l.phone,
+                        l.status ? `[${l.status}]` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" • ");
+                      return (
+                        <option key={l.id} value={l.id}>
+                          {l.full_name}{details ? ` — ${details}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {loadingLeads && (
+                    <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px", display: "block" }}>
+                      Loading leads from CRM...
+                    </span>
+                  )}
+                  {leadsError && (
+                    <span style={{ fontSize: "0.75rem", color: "#ef4444", marginTop: "4px", display: "block" }}>
+                      {leadsError}
+                    </span>
+                  )}
+                </div>
+
+                <div className="form-group">
                   <label>Buyer Full Name *</label>
                   <input
                     type="text"
                     name="buyer_name"
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
                     placeholder="e.g. Anand Kulkarni"
                     required
                   />
@@ -1511,6 +1646,8 @@ export default function Bookings() {
                     <input
                       type="email"
                       name="buyer_email"
+                      value={buyerEmail}
+                      onChange={(e) => setBuyerEmail(e.target.value)}
                       placeholder="e.g. anand@example.com"
                     />
                   </div>
@@ -1519,6 +1656,8 @@ export default function Bookings() {
                     <input
                       type="tel"
                       name="buyer_phone"
+                      value={buyerPhone}
+                      onChange={(e) => setBuyerPhone(e.target.value)}
                       placeholder="e.g. +91 9876543210"
                     />
                   </div>
@@ -1597,7 +1736,7 @@ export default function Bookings() {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setIsCreateOpen(false)}
+                  onClick={handleCloseCreateModal}
                   disabled={submitting}
                 >
                   Cancel
@@ -1661,6 +1800,17 @@ export default function Bookings() {
                     )}
                   </span>
                 </div>
+                {viewingBooking.lead_id && (
+                  <div className="spec-overview-item">
+                    <span className="spec-label">Related Lead</span>
+                    <span className="spec-val">
+                      <strong>{leadMap.get(viewingBooking.lead_id)?.full_name || "Linked Lead"}</strong>
+                      {leadMap.get(viewingBooking.lead_id)?.email && (
+                        <span className="spec-subval">{leadMap.get(viewingBooking.lead_id)?.email}</span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="spec-overview-item">
                   <span className="spec-label">Property</span>
                   <span className="spec-val">

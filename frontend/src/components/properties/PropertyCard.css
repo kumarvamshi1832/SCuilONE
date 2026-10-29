@@ -3,27 +3,34 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 .property-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%);
+  border: 1px solid #ccfbf1;
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
   display: flex;
   flex-direction: column;
   position: relative;
 }
 
 .property-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
+  border-color: #14b8a6;
+  box-shadow: 0 12px 28px rgba(20, 184, 166, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .dashboard-wrapper.dark .property-card,
 .dark .property-card {
-  background: #1e293b;
-  border-color: #334155;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(180deg, #182438 0%, #101c2b 100%);
+  border-color: #1e3a47;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.dashboard-wrapper.dark .property-card:hover,
+.dark .property-card:hover {
+  border-color: rgba(20, 184, 166, 0.55);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 16px rgba(20, 184, 166, 0.14);
 }
 
 /* ─── Match Borders ─── */
@@ -37,25 +44,25 @@
 
 .dashboard-wrapper.dark .property-card.match-exact,
 .dark .property-card.match-exact {
-  border-color: rgba(34, 197, 94, 0.4);
+  border-color: rgba(34, 197, 94, 0.5);
 }
 
 .dashboard-wrapper.dark .property-card.match-potential,
 .dark .property-card.match-potential {
-  border-color: rgba(234, 179, 8, 0.4);
+  border-color: rgba(234, 179, 8, 0.5);
 }
 
 /* ─── Property Card Cover ─── */
 .property-card-cover {
   position: relative;
   height: 180px;
-  background: #f8fafc;
+  background: #e6fffa;
   overflow: hidden;
 }
 
 .dashboard-wrapper.dark .property-card-cover,
 .dark .property-card-cover {
-  background: #0f172a;
+  background: #0b1220;
 }
 
 .property-card-cover img,
@@ -79,6 +86,96 @@
   }
 }
 
+/* ─── Sold Property Grayscale Effect & SOLD OUT Stamp ─── */
+.property-card.is-sold .property-card-cover img,
+.property-card.is-sold .property-carousel-image {
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+}
+
+.property-card.is-sold .property-card-placeholder {
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+}
+
+.property-sold-stamp-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.property-sold-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px;
+  border: 3px solid #e53935;
+  border-radius: 6px;
+  background: rgba(254, 242, 242, 0.55);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+  color: #e53935;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  text-transform: uppercase;
+  transform: rotate(-12deg);
+  box-shadow:
+    0 0 0 2px rgba(229, 57, 53, 0.35),
+    0 4px 12px rgba(0, 0, 0, 0.25);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  user-select: none;
+  line-height: 1;
+  max-width: 85%;
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.property-sold-stamp-inner {
+  display: block;
+  padding: 4px 10px;
+  border: 1.5px dashed rgba(229, 57, 53, 0.7);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.property-card:hover .property-sold-stamp {
+  transform: rotate(-12deg) scale(1.03);
+}
+
+/* Dark mode theme support for sold stamp & badge */
+.dashboard-wrapper.dark .property-sold-stamp,
+.dark .property-sold-stamp {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(15, 23, 42, 0.65);
+  box-shadow:
+    0 0 0 2px rgba(239, 68, 68, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.dashboard-wrapper.dark .property-sold-stamp-inner,
+.dark .property-sold-stamp-inner {
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.dashboard-wrapper.dark .badge.badge-sold,
+.dark .badge.badge-sold {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
 /* ─── Property Carousel Navigation ─── */
 .carousel-btn {
   position: absolute;
@@ -94,7 +191,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 4;
+  z-index: 5;
   padding: 0;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -236,28 +333,61 @@
 }
 
 .badge.badge-available {
-  background: #dcfce7;
-  color: #15803d;
+  background: #ccfbf1;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
 }
 
 .badge.badge-reserved {
   background: #fef9c3;
   color: #a16207;
+  border: 1px solid #fde047;
 }
 
 .badge.badge-sold {
   background: #fee2e2;
   color: #b91c1c;
+  border: 1px solid #fca5a5;
 }
 
 .badge.badge-rented {
   background: #e0e7ff;
   color: #4338ca;
+  border: 1px solid #c7d2fe;
 }
 
 .badge.badge-inactive {
   background: #f1f5f9;
   color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.dashboard-wrapper.dark .badge.badge-available,
+.dark .badge.badge-available {
+  background: rgba(20, 184, 166, 0.18);
+  color: #2dd4bf;
+  border: 1px solid rgba(20, 184, 166, 0.35);
+}
+
+.dashboard-wrapper.dark .badge.badge-reserved,
+.dark .badge.badge-reserved {
+  background: rgba(234, 179, 8, 0.18);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+.dashboard-wrapper.dark .badge.badge-rented,
+.dark .badge.badge-rented {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+.dashboard-wrapper.dark .badge.badge-inactive,
+.dark .badge.badge-inactive {
+  background: #334155;
+  color: #94a3b8;
+  border: 1px solid #475569;
 }
 
 /* Match Badges on Image */
@@ -280,19 +410,23 @@
   position: absolute;
   bottom: 10px;
   right: 10px;
-  background: rgba(15, 23, 42, 0.85);
-  color: #ffffff;
-  padding: 4px 10px;
-  border-radius: 6px;
+  background: rgba(11, 18, 32, 0.92);
+  color: #2dd4bf;
+  border: 1px solid rgba(20, 184, 166, 0.5);
+  padding: 4px 11px;
+  border-radius: 8px;
   font-size: 0.95rem;
-  font-weight: 700;
-  backdrop-filter: blur(4px);
+  font-weight: 800;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 3;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  letter-spacing: 0.02em;
 }
 
 /* ─── Body ─── */
 .property-card-body {
-  padding: 16px;
+  padding: 16px 18px 14px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -311,7 +445,15 @@
   font-weight: 700;
   color: #0f172a;
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s ease;
+}
+
+.property-card:hover .property-card-title {
+  color: #0d9488;
 }
 
 .dashboard-wrapper.dark .property-card-title,
@@ -319,55 +461,78 @@
   color: #f8fafc;
 }
 
+.dashboard-wrapper.dark .property-card:hover .property-card-title,
+.dark .property-card:hover .property-card-title {
+  color: #2dd4bf;
+}
+
 .property-location {
   font-size: 0.8rem;
-  color: #64748b;
+  font-weight: 500;
+  color: #0d9488;
   margin-bottom: 12px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .property-location svg {
   width: 13px;
   height: 13px;
   flex-shrink: 0;
+  color: #0d9488;
 }
 
 .dashboard-wrapper.dark .property-location,
 .dark .property-location {
-  color: #94a3b8;
+  color: #2dd4bf;
+}
+
+.dashboard-wrapper.dark .property-location svg,
+.dark .property-location svg {
+  color: #14b8a6;
 }
 
 .property-specs-pills {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
-  background: #f8fafc;
-  border-radius: 8px;
+  gap: 14px;
+  padding: 8px 12px;
+  background: #e6fffa;
+  border: 1px solid #b2f5ea;
+  border-radius: 10px;
   margin-bottom: 12px;
   font-size: 0.8rem;
-  color: #334155;
+  color: #134e4a;
   flex-wrap: wrap;
 }
 
 .dashboard-wrapper.dark .property-specs-pills,
 .dark .property-specs-pills {
-  background: #0f172a;
-  color: #cbd5e1;
+  background: #111b2c;
+  border-color: rgba(20, 184, 166, 0.18);
+  color: #e2e8f0;
 }
 
 .property-spec-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  font-weight: 600;
 }
 
 .property-spec-item svg {
   width: 14px;
   height: 14px;
-  color: #64748b;
+  color: #0d9488;
+}
+
+.dashboard-wrapper.dark .property-spec-item svg,
+.dark .property-spec-item svg {
+  color: #14b8a6;
 }
 
 /* ─── Match Status Indicator Pill in Card Body ─── */
@@ -453,27 +618,29 @@
   align-items: center;
   margin-top: auto;
   padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #e2e8f0;
 }
 
 .dashboard-wrapper.dark .property-footer-row,
 .dark .property-footer-row {
-  border-top-color: #334155;
+  border-top-color: #1f3348;
 }
 
 .property-building-tag {
   font-size: 0.725rem;
   font-weight: 600;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #ccfbf1;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
 }
 
 .dashboard-wrapper.dark .property-building-tag,
 .dark .property-building-tag {
-  background: rgba(37, 99, 235, 0.15);
-  color: #93c5fd;
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
+  border: 1px solid rgba(20, 184, 166, 0.3);
 }
 
 .action-buttons-group {
@@ -485,15 +652,15 @@
 .btn-action-icon {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #475569;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }
 
 .btn-action-icon svg {
@@ -502,28 +669,32 @@
 }
 
 .btn-action-icon:hover {
-  background: #f1f5f9;
-  color: #0f172a;
-  border-color: #cbd5e1;
+  background: #ccfbf1;
+  color: #0f766e;
+  border-color: #5eead4;
+  transform: translateY(-1px);
 }
 
 .btn-action-icon.delete:hover {
   background: #fee2e2;
   color: #b91c1c;
   border-color: #fca5a5;
+  transform: translateY(-1px);
 }
 
 .dashboard-wrapper.dark .btn-action-icon,
 .dark .btn-action-icon {
-  background: #1e293b;
-  border-color: #334155;
+  background: #182438;
+  border-color: #2a3d56;
   color: #94a3b8;
 }
 
 .dashboard-wrapper.dark .btn-action-icon:hover,
 .dark .btn-action-icon:hover {
-  background: #334155;
-  color: #f8fafc;
+  background: rgba(20, 184, 166, 0.18);
+  color: #2dd4bf;
+  border-color: rgba(20, 184, 166, 0.45);
+  transform: translateY(-1px);
 }
 
 .dashboard-wrapper.dark .btn-action-icon.delete:hover,
@@ -531,6 +702,7 @@
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
   border-color: rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
 }
 
 /* ─── Match Actions & Badges in Property Card ─── */

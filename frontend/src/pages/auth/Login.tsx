@@ -12,12 +12,17 @@ export default function Login() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  // Email field initializes empty per requirements
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Email field initializes with remembered email if rememberMe was active, otherwise empty
   const [rememberMe, setRememberMe] = useState(() => {
     return localStorage.getItem("scuilone_remember_me") === "true";
   });
+  const [email, setEmail] = useState(() => {
+    const isRemembered = localStorage.getItem("scuilone_remember_me") === "true";
+    return isRemembered ? (localStorage.getItem("scuilone_remember_email") || "") : "";
+  });
+  const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(() => {
     const locState = location.state as any;
@@ -36,18 +41,72 @@ export default function Login() {
     }
   }, [rememberMe, email]);
 
+  const validateEmail = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      return "Please enter your email address.";
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return "Please enter a valid email address (e.g., name@company.com).";
+    }
+    return "";
+  };
+
+  const validatePassword = (val: string): string => {
+    if (!val) {
+      return "Please enter your password.";
+    }
+    return "";
+  };
+
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    setError("");
+    if (fieldErrors.email) {
+      setFieldErrors((prev) => ({ ...prev, email: validateEmail(val) }));
+    }
+  };
+
+  const handleEmailBlur = () => {
+    setTouched((prev) => ({ ...prev, email: true }));
+    setFieldErrors((prev) => ({ ...prev, email: validateEmail(email) }));
+  };
+
+  const handlePasswordChange = (val: string) => {
+    setPassword(val);
+    setError("");
+    if (fieldErrors.password) {
+      setFieldErrors((prev) => ({ ...prev, password: validatePassword(val) }));
+    }
+  };
+
+  const handlePasswordBlur = () => {
+    setTouched((prev) => ({ ...prev, password: true }));
+    setFieldErrors((prev) => ({ ...prev, password: validatePassword(password) }));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
     setError("");
 
-    if (!email.trim()) {
-      setError("Please enter your email address.");
+    const emailErr = validateEmail(email);
+    const passwordErr = validatePassword(password);
+
+    setTouched({ email: true, password: true });
+
+    if (emailErr || passwordErr) {
+      setFieldErrors({ email: emailErr, password: passwordErr });
+      if (emailErr) {
+        document.getElementById("login-email-input")?.focus();
+      } else if (passwordErr) {
+        document.getElementById("login-password-input")?.focus();
+      }
       return;
     }
-    if (!password) {
-      setError("Please enter your password.");
-      return;
-    }
+
+    setFieldErrors({});
 
     try {
       setLoading(true);
@@ -147,7 +206,8 @@ export default function Login() {
         apiError.status === 0 ||
         (apiError.message &&
           (apiError.message.includes("Unable to reach") ||
-            apiError.message.includes("Network Error")))
+            apiError.message.includes("Network Error") ||
+            apiError.message.includes("Failed to fetch")))
       ) {
         setError("Unable to reach the server. Please check your internet connection.");
       } else {
@@ -315,7 +375,7 @@ export default function Login() {
                     <label htmlFor="login-email-input" className="input-field-label">
                       Email
                     </label>
-                    <div className="input-box-container">
+                    <div className={`input-box-container ${fieldErrors.email ? "has-error" : ""}`}>
                       <span className="input-leading-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect width="20" height="16" x="2" y="4" rx="2" />
@@ -328,15 +388,26 @@ export default function Login() {
                         className="styled-input-control"
                         placeholder="name@company.com"
                         value={email}
-                        onChange={(e) => {
-                          setEmail(e.target.value);
-                          setError("");
-                        }}
+                        onChange={(e) => handleEmailChange(e.target.value)}
+                        onBlur={handleEmailBlur}
                         disabled={loading}
                         autoComplete="username"
+                        aria-required="true"
+                        aria-invalid={Boolean(fieldErrors.email)}
+                        aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
                         required
                       />
                     </div>
+                    {fieldErrors.email && (
+                      <div id="login-email-error" className="field-inline-error" role="alert">
+                        <svg className="field-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>{fieldErrors.email}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Password Field */}
@@ -344,7 +415,7 @@ export default function Login() {
                     <label htmlFor="login-password-input" className="input-field-label">
                       Password
                     </label>
-                    <div className="input-box-container">
+                    <div className={`input-box-container ${fieldErrors.password ? "has-error" : ""}`}>
                       <span className="input-leading-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
@@ -357,19 +428,23 @@ export default function Login() {
                         className="styled-input-control with-trailing-action"
                         placeholder="Enter your password"
                         value={password}
-                        onChange={(e) => {
-                          setPassword(e.target.value);
-                          setError("");
-                        }}
+                        onChange={(e) => handlePasswordChange(e.target.value)}
+                        onBlur={handlePasswordBlur}
                         disabled={loading}
                         autoComplete="current-password"
+                        aria-required="true"
+                        aria-invalid={Boolean(fieldErrors.password)}
+                        aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
                         required
                       />
                       <button
                         type="button"
                         className="input-trailing-reveal-btn"
                         onClick={() => setShowPassword(!showPassword)}
+                        disabled={loading}
                         aria-label={showPassword ? "Hide password" : "Show password"}
+                        aria-pressed={showPassword}
+                        title={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? (
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -386,11 +461,21 @@ export default function Login() {
                         )}
                       </button>
                     </div>
+                    {fieldErrors.password && (
+                      <div id="login-password-error" className="field-inline-error" role="alert">
+                        <svg className="field-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>{fieldErrors.password}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Remember Me and Forgot Password */}
                   <div className="login-options-row">
-                    <label className="checkbox-label-wrapper">
+                    <label className="checkbox-label-wrapper" htmlFor="remember-me-toggle">
                       <input
                         type="checkbox"
                         id="remember-me-toggle"
@@ -398,6 +483,7 @@ export default function Login() {
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
                         disabled={loading}
+                        aria-label="Remember me"
                       />
                       <span className="custom-checkbox-box" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -411,6 +497,7 @@ export default function Login() {
                       type="button"
                       onClick={() => navigate("/forgot-password")}
                       className="forgot-password-link"
+                      disabled={loading}
                     >
                       Forgot Password?
                     </button>
@@ -419,14 +506,8 @@ export default function Login() {
                   {/* Activation Success Banner */}
                   {successMessage && (
                     <div
-                      className="auth-alert-message"
+                      className="auth-alert-message auth-alert-success-banner"
                       role="status"
-                      style={{
-                        backgroundColor: "rgba(22, 163, 74, 0.12)",
-                        borderColor: "rgba(22, 163, 74, 0.3)",
-                        color: "#16a34a",
-                        marginBottom: "16px",
-                      }}
                     >
                       <div className="alert-content-left">
                         <svg
@@ -437,11 +518,10 @@ export default function Login() {
                           strokeWidth="2.5"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          style={{ color: "#16a34a" }}
                         >
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        <span className="alert-text" style={{ color: "#16a34a", fontWeight: 500 }}>
+                        <span className="alert-text">
                           {successMessage}
                         </span>
                       </div>
@@ -463,7 +543,7 @@ export default function Login() {
                   {error && (
                     <div className="auth-alert-message" role="alert" aria-live="assertive">
                       <div className="alert-content-left">
-                        <svg className="alert-warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg className="alert-warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" />
                           <line x1="12" y1="8" x2="12" y2="12" />
                           <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -493,7 +573,7 @@ export default function Login() {
                   >
                     {loading ? (
                       <span className="button-spinner-state">
-                        <svg className="spinner-animation" viewBox="0 0 24 24" fill="none">
+                        <svg className="spinner-animation" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
                         </svg>
                         <span>Logging In...</span>
@@ -522,6 +602,7 @@ export default function Login() {
                   type="button"
                   className="register-action-btn"
                   onClick={() => navigate("/register")}
+                  disabled={loading}
                 >
                   Create Account
                 </button>
