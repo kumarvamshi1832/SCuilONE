@@ -43,6 +43,22 @@ role_permissions = {
         "software_project.view","software_project.create",
         "software_project.update","software_project.delete",
 
+        "software_time.view","software_time.create",
+        "software_time.update","software_time.delete",
+        "software_time.approve",
+
+        
+        "software_invoice.view","software_invoice.create",
+        "software_invoice.update","software_invoice.delete",
+        "software_invoice.send","software_invoice.payment.view",
+        "software_invoice.payment.create","software_invoice.cancel",
+
+
+                
+        "software_sprint.view","software_sprint.create","software_sprint.update",
+        "software_sprint.delete","software_sprint.manage_tasks","software_sprint.start",
+        "software_sprint.complete",
+
 
 
 
@@ -86,6 +102,20 @@ role_permissions = {
         "software_project.view","software_project.create",
         "software_project.update","software_project.delete",
 
+        "software_sprint.view","software_sprint.create","software_sprint.update",
+        "software_sprint.delete","software_sprint.manage_tasks","software_sprint.start",
+        "software_sprint.complete",
+
+        "software_time.view","software_time.create",
+        "software_time.update","software_time.delete",
+        "software_time.approve",
+
+        
+        "software_invoice.view","software_invoice.create",
+        "software_invoice.update","software_invoice.delete",
+        "software_invoice.send","software_invoice.payment.view",
+        "software_invoice.payment.create","software_invoice.cancel",
+
 
     ],
 
@@ -125,6 +155,20 @@ role_permissions = {
 
         "software_project.view","software_project.create",
         "software_project.update","software_project.delete",
+
+        "software_sprint.view","software_sprint.create","software_sprint.update",
+        "software_sprint.delete","software_sprint.manage_tasks","software_sprint.start",
+        "software_sprint.complete",
+
+        "software_time.view","software_time.create",
+        "software_time.update","software_time.delete",
+        "software_time.approve",
+
+        
+        "software_invoice.view","software_invoice.create",
+        "software_invoice.update","software_invoice.delete",
+        "software_invoice.send","software_invoice.payment.view",
+        "software_invoice.payment.create","software_invoice.cancel",
         
 
 
@@ -161,6 +205,8 @@ role_permissions = {
 
         "software_project.view","software_project.create","software_project.update",
 
+        "software_sprint.view","software_invoice.view",
+
 
 
     ],
@@ -196,7 +242,10 @@ role_permissions = {
         "software_contract.view","software_contract.create","software_contract.update",
 
         "software_project.view","software_project.create","software_project.update",
-        
+
+        "software_sprint.view","software_sprint.manage_tasks",
+
+        "software_time.view","software_time.create","software_time.update",
         
 
 
@@ -225,6 +274,8 @@ role_permissions = {
         "software_contract.view",
 
         "software_project.view",
+        "software_sprint.view",
+        "software_invoice.view","software_invoice.payment.view",
     ],
 
     "Read-only / Auditor": [
@@ -249,6 +300,8 @@ role_permissions = {
         "software_estimate.view",
         "software_contract.view",
         "software_project.view",
+        "software_sprint.view",
+        "software_time.view","software_invoice.view","software_invoice.payment.view",
     ],
 }
 

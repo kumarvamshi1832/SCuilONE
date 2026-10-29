@@ -127,6 +127,11 @@ class SoftwareProjectResponse(BaseModel):
 
     status: SoftwareProjectStatus
     priority: SoftwareProjectPriority
+    progress_percentage: int = Field(
+    default=0,
+    ge=0,
+    le=100,
+)
 
     budget: Decimal
     currency: str

@@ -43,6 +43,16 @@ from app.routes.software_contracts import router as software_contracts_router
 from app.routes.software_projects import router as software_projects_router
 from app.routes.software_sprints import router as software_sprints_router
 from app.routes.industry_config import router as industry_config_router
+from app.routes.software_time_entries import router as software_time_entries_router
+from app.routes.software_delivery_reports import (
+    router as software_delivery_reports_router,
+)
+from app.routes.software_invoices import router as software_invoices_router
+from app.routes.support_tickets import router as support_tickets_router
+from app.routes.customer_portal import router as customer_portal_router
+
+
+
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -129,35 +139,41 @@ app.include_router(account_router)
 app.include_router(deals.router)
 app.include_router(activities_router)
 app.include_router(industry_config_router)
-# app.include_router(pipelines_router)
-# app.include_router(form_templates_router)
-# app.include_router(workflows_router)
-# app.include_router(notifications_router)
-# app.include_router(dashboard_router)
-# app.include_router(reports_router)
-# app.include_router(documents_router)
-# app.include_router(search_router)
-# app.include_router(import_export_router)
-# app.include_router(import_export_extended_router)
-# app.include_router(audit_logs_router)
-# app.include_router(properties_router)
-# app.include_router(property_images_router)
-# app.include_router(projects_router)
-# app.include_router(bulidings_router)
-# app.include_router(building_images_router)
-# app.include_router(buyer_requirements_router)
-# app.include_router(property_matches_router)
-# app.include_router(site_visits_router)
-# app.include_router(bookings_router)
-# app.include_router(payments_router)
-# app.include_router(payment_refunds_router)
-# app.include_router(payment_plans_router)
-# app.include_router(global_collections_router)
+app.include_router(pipelines_router)
+app.include_router(form_templates_router)
+app.include_router(workflows_router)
+app.include_router(notifications_router)
+app.include_router(dashboard_router)
+app.include_router(reports_router)
+app.include_router(documents_router)
+app.include_router(search_router)
+app.include_router(import_export_router)
+app.include_router(import_export_extended_router)
+app.include_router(audit_logs_router)
+app.include_router(properties_router)
+app.include_router(property_images_router)
+app.include_router(projects_router)
+app.include_router(bulidings_router)
+app.include_router(building_images_router)
+app.include_router(buyer_requirements_router)
+app.include_router(property_matches_router)
+app.include_router(site_visits_router)
+app.include_router(bookings_router)
+app.include_router(payments_router)
+app.include_router(payment_refunds_router)
+app.include_router(payment_plans_router)
+app.include_router(global_collections_router)
 app.include_router(software_requirements_router)
 app.include_router(software_estimates_router)
 app.include_router(software_contracts_router)
 app.include_router(software_projects_router)
 app.include_router(software_sprints_router)
+app.include_router(software_time_entries_router)
+app.include_router(software_delivery_reports_router)
+app.include_router(software_invoices_router)
+app.include_router(support_tickets_router)
+app.include_router(customer_portal_router)
+
 
 
 @app.get("/")

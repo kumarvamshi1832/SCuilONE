@@ -324,6 +324,11 @@ def ensure_estimate_update_allowed(
 def estimate_snapshot(estimate: SoftwareEstimate):
     return {
         "estimate_number": estimate.estimate_number,
+        "revision_number": estimate.revision_number,
+        "parent_estimate_id": (
+            str(estimate.parent_estimate_id)
+            if estimate.parent_estimate_id else None
+        ),
         "title": estimate.title,
         "status": estimate.status,
         "currency": estimate.currency,
@@ -536,6 +541,17 @@ def update_estimate(
 
     ensure_estimate_update_allowed(estimate, changes)
 
+    if changes.get("status") == "Accepted":
+        has_revision = db.query(SoftwareEstimate.id).filter(
+            SoftwareEstimate.tenant_id == tenant_id,
+            SoftwareEstimate.parent_estimate_id == estimate.id,
+        ).first()
+        if has_revision:
+            raise HTTPException(
+                status_code=409,
+                detail="This estimate has been superseded by a newer revision and cannot be accepted.",
+            )
+
     if "title" in changes and changes["title"] is None:
         raise HTTPException(status_code=422, detail="Title cannot be null")
 
@@ -651,6 +667,119 @@ def update_estimate(
     return get_estimate(db, tenant_id, estimate.id)
 
 
+@router.post(
+    "/{estimate_id}/revisions",
+    response_model=SoftwareEstimateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_estimate_revision(
+    estimate_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_active_user),
+    _permission=Depends(require_permission("software_estimate.create")),
+):
+    """Create a new draft revision while preserving the source estimate."""
+    tenant_id, user_id = get_tenant_and_user(current_user)
+    require_software_industry(db, tenant_id)
+
+    source = get_estimate(db, tenant_id, estimate_id)
+
+    if source.status in {"Draft", "Accepted"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Only a sent, rejected, expired, or withdrawn estimate can be revised. "
+                "Edit a Draft directly; an Accepted estimate is immutable."
+            ),
+        )
+
+    existing_child = db.query(SoftwareEstimate.id).filter(
+        SoftwareEstimate.tenant_id == tenant_id,
+        SoftwareEstimate.parent_estimate_id == source.id,
+    ).first()
+    if existing_child:
+        raise HTTPException(
+            status_code=409,
+            detail="A revision already exists for this estimate. Create the next revision from the latest revision instead.",
+        )
+
+    requirement = get_requirement(db, tenant_id, source.software_requirement_id)
+    revision_number = source.revision_number + 1
+    estimate_number = generate_estimate_number()
+    source_before = estimate_snapshot(source)
+
+    item_payloads = [
+        {
+            "item_name": item.item_name,
+            "description": item.description,
+            "quantity": item.quantity,
+            "unit_price": item.unit_price,
+            "discount_percent": item.discount_percent,
+            "tax_percent": item.tax_percent,
+            "sort_order": item.sort_order,
+        }
+        for item in source.items
+    ]
+    calculation = calculate_items(item_payloads)
+    totals = calculate_totals(calculation, Decimal(str(source.discount_amount)))
+
+    revision = SoftwareEstimate(
+        tenant_id=tenant_id,
+        created_by=user_id,
+        software_requirement_id=requirement.id,
+        parent_estimate_id=source.id,
+        revision_number=revision_number,
+        deal_id=source.deal_id,
+        lead_id=source.lead_id,
+        account_id=source.account_id,
+        contact_id=source.contact_id,
+        assigned_to=source.assigned_to,
+        estimate_number=estimate_number,
+        title=source.title,
+        description=source.description,
+        currency=source.currency,
+        issue_date=date.today(),
+        expiry_date=None,
+        status="Draft",
+        terms_and_conditions=source.terms_and_conditions,
+        notes=source.notes,
+        **totals,
+    )
+
+    try:
+        db.add(revision)
+        db.flush()
+        add_items(db, tenant_id, revision.id, calculation["items"])
+
+        if source.status == "Sent":
+            source.status = "Withdrawn"
+            source.updated_at = datetime.utcnow()
+
+        log_audit(
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action="create_revision",
+            module="software_estimate",
+            record_id=revision.id,
+            description=(
+                f"Created estimate revision {revision_number} "
+                f"from {source.estimate_number}"
+            ),
+            before_data=source_before,
+            after_data={
+                **estimate_snapshot(revision),
+                "source_estimate_id": str(source.id),
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return get_estimate(db, tenant_id, revision.id)
+
+
 @router.delete(
     "/{estimate_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -678,6 +807,16 @@ def delete_estimate(
                 f"This estimate has contract {contract.contract_number} "
                 "and cannot be deleted."
             ),
+        )
+
+    has_revision = db.query(SoftwareEstimate.id).filter(
+        SoftwareEstimate.tenant_id == tenant_id,
+        SoftwareEstimate.parent_estimate_id == estimate.id,
+    ).first()
+    if has_revision:
+        raise HTTPException(
+            status_code=409,
+            detail="An estimate with revisions cannot be deleted because it is part of proposal history.",
         )
 
     if estimate.status != "Draft":

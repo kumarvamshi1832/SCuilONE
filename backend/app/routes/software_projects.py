@@ -20,6 +20,10 @@ from app.schemas.software_project import (
     SoftwareProjectUpdate,
 )
 from app.services.audit_service import log_audit
+from sqlalchemy import func
+
+from app.models.activity import Activity
+from app.models.activity_link import ActivityLink
 
 
 router = APIRouter(
@@ -180,6 +184,72 @@ def get_project_or_404(
     return project
 
 
+def get_project_progress(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+) -> int:
+    filters = [
+        Activity.tenant_id == tenant_id,
+        ActivityLink.tenant_id == tenant_id,
+        ActivityLink.module == "software_project",
+        ActivityLink.record_id == project_id,
+        Activity.activity_type == "Task",
+    ]
+
+    total_tasks = (
+        db.query(func.count(func.distinct(Activity.id)))
+        .join(
+            ActivityLink,
+            ActivityLink.activity_id == Activity.id,
+        )
+        .filter(
+            *filters,
+            Activity.status != "Cancelled",
+        )
+        .scalar()
+        or 0
+    )
+
+    if total_tasks == 0:
+        return 0
+
+    completed_tasks = (
+        db.query(func.count(func.distinct(Activity.id)))
+        .join(
+            ActivityLink,
+            ActivityLink.activity_id == Activity.id,
+        )
+        .filter(
+            *filters,
+            Activity.status == "Completed",
+        )
+        .scalar()
+        or 0
+    )
+
+    return round((completed_tasks / total_tasks) * 100)
+
+
+def project_response_with_progress(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project: SoftwareProject,
+) -> dict:
+    response = SoftwareProjectResponse.model_validate(
+        project
+    ).model_dump()
+
+    response["progress_percentage"] = get_project_progress(
+        db,
+        tenant_id,
+        project.id,
+    )
+
+    return response
+
+
+
 @router.post(
     "",
     response_model=SoftwareProjectResponse,
@@ -328,7 +398,11 @@ def create_software_project(
 
         db.commit()
         db.refresh(project)
-        return project
+        return project_response_with_progress(
+            db,
+            tenant_id,
+            project,
+            )
 
     except IntegrityError:
         db.rollback()
@@ -410,13 +484,18 @@ def list_software_projects(
             | SoftwareProject.project_number.ilike(term)
             | SoftwareProject.description.ilike(term)
         )
-
-    return (
+        
+    projects = (
         query.order_by(SoftwareProject.created_at.desc())
         .offset(offset)
         .limit(limit)
         .all()
     )
+    
+    return [
+        project_response_with_progress(db, tenant_id, project)
+        for project in projects
+        ]
 
 
 @router.get(
@@ -434,7 +513,17 @@ def get_software_project(
     tenant_id, _ = get_tenant_and_user(current_user)
     require_software_industry(db, tenant_id)
 
-    return get_project_or_404(db, tenant_id, project_id)
+    project = get_project_or_404(
+        db,
+        tenant_id,
+        project_id,
+    )
+    
+    return project_response_with_progress(
+        db,
+        tenant_id,
+        project,
+        )
 
 
 @router.patch(
@@ -457,7 +546,11 @@ def update_software_project(
     changes = payload.model_dump(exclude_unset=True)
 
     if not changes:
-        return project
+        return project_response_with_progress(
+            db,
+            tenant_id,
+            project,
+        )
 
     if "project_manager_id" in changes:
         validate_project_manager(
@@ -535,7 +628,11 @@ def update_software_project(
 
         db.commit()
         db.refresh(project)
-        return project
+        return project_response_with_progress(
+            db,
+            tenant_id,
+            project,
+        )
 
     except Exception:
         db.rollback()

@@ -125,6 +125,31 @@ permissions = [
     ("software_project.update", "Update software projects"),
     ("software_project.delete", "Delete software projects"),
 
+   
+    ("software_sprint.view", "View software sprints"),
+    ("software_sprint.create", "Create software sprints"),
+    ("software_sprint.update", "Update software sprints"),
+    ("software_sprint.delete", "Delete software sprints"),
+    ("software_sprint.manage_tasks", "Add or remove tasks from software sprints"),
+    ("software_sprint.start", "Start software sprints"),
+    ("software_sprint.complete", "Complete software sprints"),
+
+    ("software_time.view", "View software time entries and time reports"),
+    ("software_time.create", "Create manual time entries and start timers"),
+    ("software_time.update", "Update or stop own time entries"),
+    ("software_time.delete", "Delete software time entries"),
+    ("software_time.approve", "Approve or reject time entries for billing"),
+
+    
+    ("software_invoice.view", "View software invoices"),
+    ("software_invoice.create", "Create software invoices"),
+    ("software_invoice.update", "Update draft software invoices"),
+    ("software_invoice.delete", "Delete eligible draft software invoices"),
+    ("software_invoice.send", "Mark invoices as sent"),
+    ("software_invoice.payment.view", "View invoice payment records"),
+    ("software_invoice.payment.create", "Record invoice payments"),
+    ("software_invoice.cancel", "Cancel eligible software invoices"),
+
     
 
 
