@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -57,6 +58,20 @@ class SoftwareEstimate(Base):
         UUID(as_uuid=True),
         ForeignKey("software_requirements.id"),
         nullable=False,
+    )
+
+    revision_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+
+    parent_estimate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("software_estimates.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     deal_id: Mapped[uuid.UUID | None] = mapped_column(

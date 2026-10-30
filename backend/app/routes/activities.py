@@ -36,6 +36,13 @@ from app.services.notification_service import notify_assignment
 from app.services.audit_service import log_audit
 
 
+TASK_STATUS_TRANSITIONS = {
+    "Pending": {"In Progress", "Cancelled"},
+    "In Progress": {"Pending", "Completed", "Cancelled"},
+    "Completed": set(),
+    "Cancelled": set(),
+}
+
 router = APIRouter(
     prefix="/api/v1/activities",
     tags=["Activities & Tasks"],
@@ -439,6 +446,26 @@ def update_activity(
     before_data = activity_audit_data(activity)
 
     changes = data.model_dump(exclude_unset=True)
+    requested_status = changes.get("status")
+    if (
+        activity.activity_type == "Task"
+        and requested_status is not None
+        and requested_status != activity.status
+        ):
+        allowed = TASK_STATUS_TRANSITIONS.get(
+            activity.status,
+            set(),
+            )
+
+    if requested_status not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot change task status from "
+                f"'{activity.status}' to '{requested_status}'."
+            ),
+        )
+
     requested_links = None
     links_were_supplied = "related_records" in changes
     if links_were_supplied:

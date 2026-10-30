@@ -150,6 +150,8 @@ class SoftwareEstimateResponse(BaseModel):
     tenant_id: UUID
     created_by: UUID | None
     software_requirement_id: UUID
+    revision_number: int = 1
+    parent_estimate_id: UUID | None = None
     deal_id: UUID | None = None
     lead_id: UUID | None
     account_id: UUID | None

@@ -13,7 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.connection import Base
 
@@ -188,6 +188,13 @@ class SoftwareContract(Base):
         nullable=False,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
+    )
+
+
+    payment_milestones: Mapped[list["SoftwareContractMilestone"]] = relationship(
+        "SoftwareContractMilestone",
+        cascade="all, delete-orphan",
+        order_by="SoftwareContractMilestone.sequence",
     )
 
     __table_args__ = (

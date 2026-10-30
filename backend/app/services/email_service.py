@@ -156,3 +156,30 @@ SCuilONE Team
             recipient_email
         )
         raise
+
+
+async def send_customer_portal_invitation_email(
+    recipient_email: str, full_name: str, invitation_token: str, tenant_id: str
+):
+    from urllib.parse import quote
+
+    invitation_url = (
+        f"{settings.FRONTEND_URL.rstrip('/')}"
+        f"/customer-portal/activate?token={quote(invitation_token)}&tenant_id={quote(tenant_id)}"
+    )
+    message = EmailMessage()
+    message["From"] = settings.SMTP_FROM_EMAIL
+    message["To"] = recipient_email
+    message["Subject"] = "Your SCuilONE customer portal invitation"
+    message.set_content(
+        f"Hello {full_name},\n\n"
+        "You have been invited to access your company’s SCuilONE customer support portal.\n\n"
+        "Activate your account using this one-time link (expires in 48 hours):\n"
+        f"{invitation_url}\n\n"
+        "If you were not expecting this invitation, please ignore this email.\n\n"
+        "Regards,\nSCuilONE Team\n"
+    )
+    await aiosmtplib.send(
+        message, hostname=settings.SMTP_HOST, port=settings.SMTP_PORT,
+        username=settings.SMTP_USERNAME, password=settings.SMTP_PASSWORD, start_tls=True
+    )
