@@ -30,6 +30,40 @@ CurrencyCode = Annotated[
 ]
 
 
+class SoftwareContractMilestoneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    percentage: Decimal = Field(gt=0, le=100, max_digits=5, decimal_places=2)
+    trigger_description: str | None = None
+
+
+class SoftwareContractMilestoneResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    contract_id: UUID
+    invoice_id: UUID | None
+    sequence: int
+    name: str
+    percentage: Decimal
+    amount: Decimal
+    trigger_description: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SoftwareContractMilestoneReadyRequest(BaseModel):
+    # Explicit confirmation that the real-world milestone has been reached.
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class SoftwareContractMilestoneInvoiceRequest(BaseModel):
+    invoice_number: str | None = Field(default=None, min_length=1, max_length=50)
+    due_date: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
 class SoftwareContractCreate(BaseModel):
     software_estimate_id: UUID
 
@@ -56,8 +90,17 @@ class SoftwareContractCreate(BaseModel):
     assumptions: str | None = None
     acceptance_criteria: str | None = None
     payment_terms: str | None = None
+    payment_milestones: list[SoftwareContractMilestoneCreate] = Field(default_factory=list, max_length=20)
     terms_and_conditions: str | None = None
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_milestone_percentages(self):
+        if self.payment_milestones:
+            total = sum((item.percentage for item in self.payment_milestones), Decimal("0.00"))
+            if total != Decimal("100.00"):
+                raise ValueError("Payment milestone percentages must total exactly 100%")
+        return self
 
     @model_validator(mode="after")
     def validate_dates(self):
@@ -147,6 +190,7 @@ class SoftwareContractResponse(BaseModel):
     acceptance_criteria: str | None
     payment_terms: str | None
     terms_and_conditions: str | None
+    payment_milestones: list[SoftwareContractMilestoneResponse] = Field(default_factory=list)
 
     estimate_snapshot: dict[str, Any] | None
     notes: str | None

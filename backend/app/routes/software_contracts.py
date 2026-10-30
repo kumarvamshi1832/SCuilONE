@@ -1,6 +1,6 @@
 import uuid
-from datetime import date
-from decimal import Decimal
+from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +10,8 @@ from app.core.industry_modules import require_enabled_module
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.software_contract import SoftwareContract
+from app.models.software_contract_milestone import SoftwareContractMilestone
+from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem
 from app.models.software_estimate import SoftwareEstimate
 from app.models.software_estimate_item import SoftwareEstimateItem
 from app.models.tenant import Tenant
@@ -18,6 +20,9 @@ from app.schemas.software_contract import (
     SoftwareContractCreate,
     SoftwareContractResponse,
     SoftwareContractUpdate,
+    SoftwareContractMilestoneReadyRequest,
+    SoftwareContractMilestoneInvoiceRequest,
+    SoftwareContractMilestoneResponse,
 )
 from app.services.audit_service import log_audit
 
@@ -302,6 +307,28 @@ def create_software_contract(
         db.add(contract)
         db.flush()
 
+        # Convert percentages into fixed contract amounts. The final milestone
+        # absorbs any rounding cent so all milestone amounts equal the contract.
+        running_amount = Decimal("0.00")
+        milestone_inputs = payload.payment_milestones
+        for index, item in enumerate(milestone_inputs, start=1):
+            if index == len(milestone_inputs):
+                milestone_amount = Decimal(str(contract.contract_value)) - running_amount
+            else:
+                milestone_amount = (
+                    Decimal(str(contract.contract_value)) * item.percentage / Decimal("100")
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                running_amount += milestone_amount
+            if milestone_amount <= 0:
+                raise HTTPException(status_code=422, detail="Each payment milestone must have a positive calculated amount")
+            contract.payment_milestones.append(SoftwareContractMilestone(
+                tenant_id=tenant_id, sequence=index, name=item.name.strip(),
+                percentage=item.percentage, amount=milestone_amount,
+                trigger_description=item.trigger_description, status="Pending",
+            ))
+
+        db.flush()
+
         log_audit(
             db=db,
             tenant_id=tenant_id,
@@ -469,6 +496,11 @@ def update_software_contract(
     for field, value in changes.items():
         setattr(contract, field, value)
 
+    if changes.get("status") in {"Signed", "Active"} and contract.payment_milestones:
+        first_milestone = min(contract.payment_milestones, key=lambda item: item.sequence)
+        if first_milestone.status == "Pending":
+            first_milestone.status = "Ready"
+
     try:
         db.flush()
 
@@ -499,6 +531,112 @@ def update_software_contract(
     except Exception:
         db.rollback()
         raise
+
+@router.post(
+    "/{contract_id}/milestones/{milestone_id}/ready",
+    response_model=SoftwareContractMilestoneResponse,
+    dependencies=[Depends(require_permission("software_contract.update"))],
+)
+def mark_contract_milestone_ready(
+    contract_id: uuid.UUID, milestone_id: uuid.UUID,
+    payload: SoftwareContractMilestoneReadyRequest,
+    current_user: dict = Depends(require_active_user), db: Session = Depends(get_db),
+):
+    tenant_id, user_id = get_tenant_and_user(current_user)
+    require_software_industry(db, tenant_id)
+    contract = get_contract_or_404(db, tenant_id, contract_id)
+    milestone = db.query(SoftwareContractMilestone).filter(
+        SoftwareContractMilestone.id == milestone_id,
+        SoftwareContractMilestone.contract_id == contract.id,
+        SoftwareContractMilestone.tenant_id == tenant_id,
+    ).with_for_update().first()
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Contract payment milestone not found")
+    if contract.status not in {"Signed", "Active"}:
+        raise HTTPException(status_code=409, detail="A contract must be Signed or Active before billing milestones can be activated")
+    if milestone.status != "Pending":
+        raise HTTPException(status_code=409, detail=f"Only Pending milestones can be activated; current status is '{milestone.status}'")
+    previous = db.query(SoftwareContractMilestone).filter(
+        SoftwareContractMilestone.tenant_id == tenant_id,
+        SoftwareContractMilestone.contract_id == contract.id,
+        SoftwareContractMilestone.sequence < milestone.sequence,
+    ).order_by(SoftwareContractMilestone.sequence.desc()).first()
+    if previous and previous.status != "Paid":
+        raise HTTPException(status_code=409, detail=f"Previous milestone '{previous.name}' must be fully paid before this milestone can be activated")
+    milestone.status = "Ready"
+    log_audit(db, tenant_id, user_id, "milestone_ready", "software_contracts", milestone.id,
+              f"Payment milestone '{milestone.name}' marked Ready",
+              after_data={"status": milestone.status, "percentage": str(milestone.percentage), "amount": str(milestone.amount), "notes": payload.notes})
+    db.commit()
+    db.refresh(milestone)
+    return milestone
+
+
+@router.post(
+    "/{contract_id}/milestones/{milestone_id}/invoice",
+    response_model=SoftwareContractMilestoneResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("software_contract.create"))],
+)
+def create_invoice_for_contract_milestone(
+    contract_id: uuid.UUID, milestone_id: uuid.UUID,
+    payload: SoftwareContractMilestoneInvoiceRequest,
+    current_user: dict = Depends(require_active_user), db: Session = Depends(get_db),
+):
+    tenant_id, user_id = get_tenant_and_user(current_user)
+    require_software_industry(db, tenant_id)
+    contract = get_contract_or_404(db, tenant_id, contract_id)
+    milestone = db.query(SoftwareContractMilestone).filter(
+        SoftwareContractMilestone.id == milestone_id,
+        SoftwareContractMilestone.contract_id == contract.id,
+        SoftwareContractMilestone.tenant_id == tenant_id,
+    ).with_for_update().first()
+    if not milestone:
+        raise HTTPException(status_code=404, detail="Contract payment milestone not found")
+    if milestone.status != "Ready" or milestone.invoice_id is not None:
+        raise HTTPException(status_code=409, detail="Only a Ready milestone without an existing invoice can be invoiced")
+    project = db.query(SoftwareProject).filter(
+        SoftwareProject.tenant_id == tenant_id,
+        SoftwareProject.software_contract_id == contract.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=409, detail="Create the software project linked to this contract before generating milestone invoices")
+    issue_date = date.today()
+    if payload.due_date and payload.due_date < issue_date:
+        raise HTTPException(status_code=422, detail="due_date cannot be before the invoice issue date")
+    invoice_number = (payload.invoice_number or f"SINV-{date.today():%Y%m%d}-{uuid.uuid4().hex[:8].upper()}").strip()
+    if not invoice_number:
+        raise HTTPException(status_code=422, detail="invoice_number cannot be blank")
+    invoice = SoftwareInvoice(
+        tenant_id=tenant_id, project_id=project.id, software_contract_id=contract.id,
+        created_by=user_id, invoice_number=invoice_number, currency=contract.currency,
+        issue_date=issue_date, due_date=payload.due_date, status="Draft",
+        subtotal=milestone.amount, tax_total=Decimal("0.00"), total_amount=milestone.amount,
+        notes=payload.notes or f"Payment milestone: {milestone.name} ({milestone.percentage}%)",
+    )
+    invoice.items.append(SoftwareInvoiceItem(
+        tenant_id=tenant_id, description=f"{milestone.name} - {milestone.percentage}% milestone",
+        quantity=Decimal("1.0000"), unit_price=milestone.amount, tax_percent=Decimal("0.00"),
+        line_subtotal=milestone.amount, line_tax=Decimal("0.00"), line_total=milestone.amount,
+    ))
+    milestone.status = "Invoiced"
+    try:
+        db.add(invoice)
+        db.flush()
+        milestone.invoice_id = invoice.id
+        log_audit(db, tenant_id, user_id, "milestone_invoice_created", "software_contracts", milestone.id,
+                  f"Created invoice {invoice.invoice_number} for milestone '{milestone.name}'",
+                  after_data={"invoice_id": str(invoice.id), "invoice_number": invoice.invoice_number, "amount": str(milestone.amount)})
+        db.commit()
+        db.refresh(milestone)
+        return milestone
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Invoice number already exists or this milestone has already been invoiced") from exc
+    except Exception:
+        db.rollback()
+        raise
+
 
 @router.delete(
     "/{contract_id}",

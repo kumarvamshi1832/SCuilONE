@@ -46,7 +46,9 @@ from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.models.software_requirement import SoftwareRequirement
 from app.models.software_estimate import SoftwareEstimate
 from app.models.software_estimate_item import SoftwareEstimateItem
-from app.models.software_contract import SoftwareContract 
+from app.models.software_contract import SoftwareContract
+from app.models.software_contract_milestone import SoftwareContractMilestone
+
 from app.models.software_project import SoftwareProject  
 from app.models.software_sprint import SoftwareSprint
 from app.models.industry_pack import IndustryPack

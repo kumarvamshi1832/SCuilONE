@@ -3,6 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -11,6 +12,7 @@ from app.core.industry_modules import require_enabled_module
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.software_contract import SoftwareContract
+from app.models.software_contract_milestone import SoftwareContractMilestone
 from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment
 from app.models.software_project import SoftwareProject
 from app.models.software_time_entry import SoftwareTimeEntry
@@ -209,6 +211,14 @@ def update_invoice_status(invoice_id: uuid.UUID, data: SoftwareInvoiceStatusUpda
     invoice.status = data.status
     if data.status == "Sent":
         invoice.sent_at = datetime.utcnow()
+    if data.status == "Void":
+        linked_milestone = db.query(SoftwareContractMilestone).filter(
+            SoftwareContractMilestone.tenant_id == tenant_id,
+            SoftwareContractMilestone.invoice_id == invoice.id,
+        ).with_for_update().first()
+        if linked_milestone:
+            linked_milestone.invoice_id = None
+            linked_milestone.status = "Ready"
     log_audit(db, tenant_id, user_id, "status_change", "software_invoice", invoice.id,
               f"Invoice status changed from {old_status} to {data.status}",
               before_data={"status": old_status}, after_data={"status": data.status})
@@ -229,21 +239,58 @@ def record_invoice_payment(invoice_id: uuid.UUID, data: SoftwareInvoicePaymentCr
     amount = money(Decimal(data.amount))
     if amount > balance:
         raise HTTPException(status_code=400, detail=f"Payment exceeds outstanding balance of {balance}")
+
+    payment_method = data.payment_method.strip()
+    if not payment_method:
+        raise HTTPException(status_code=422, detail="payment_method cannot be blank")
+
+    
+    transaction_reference = (data.transaction_reference or "").strip() or None
+    if transaction_reference:
+        duplicate_reference = db.query(SoftwareInvoicePayment.id).filter(
+            SoftwareInvoicePayment.tenant_id == tenant_id,
+            func.lower(func.btrim(SoftwareInvoicePayment.transaction_reference))
+            == transaction_reference.lower(),
+        ).first()
+        if duplicate_reference:
+            raise HTTPException(
+                status_code=409,
+                detail="This transaction reference has already been recorded for this tenant",
+            )
+
     payment = SoftwareInvoicePayment(
         tenant_id=tenant_id, invoice_id=invoice.id, created_by=user_id, amount=amount,
-        payment_method=data.payment_method.strip(), transaction_reference=data.transaction_reference,
+        payment_method=payment_method, transaction_reference=transaction_reference,
         payment_date=data.payment_date or date.today(), notes=data.notes,
     )
     db.add(payment)
     paid_after = paid_before + amount
     old_status = invoice.status
     invoice.status = "Paid" if paid_after == Decimal(str(invoice.total_amount)) else "Partially Paid"
+    if invoice.status == "Paid":
+        linked_milestone = db.query(SoftwareContractMilestone).filter(
+            SoftwareContractMilestone.tenant_id == tenant_id,
+            SoftwareContractMilestone.invoice_id == invoice.id,
+        ).with_for_update().first()
+        if linked_milestone:
+            linked_milestone.status = "Paid"
     log_audit(db, tenant_id, user_id, "payment_recorded", "software_invoice", invoice.id,
               "Recorded invoice payment", before_data={"amount_paid": paid_before, "status": old_status},
               after_data={"payment_amount": amount, "amount_paid": paid_after, "status": invoice.status,
-                          "payment_method": data.payment_method, "transaction_reference": data.transaction_reference})
+                          "payment_method": payment_method, "transaction_reference": transaction_reference})
     try:
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # The unique database index is the final guard against concurrent
+        # requests that both pass the application-level duplicate check.
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_software_invoice_payments_tenant_reference":
+            raise HTTPException(
+                status_code=409,
+                detail="This transaction reference has already been recorded for this tenant",
+            ) from exc
+        raise
     except Exception:
         db.rollback()
         raise

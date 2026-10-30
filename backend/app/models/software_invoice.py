@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint, Date, DateTime, ForeignKey, Index, Numeric, String, Text,
-    UniqueConstraint,
+    UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -73,6 +73,18 @@ class SoftwareInvoicePayment(Base):
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_software_invoice_payments_amount_positive"),
         Index("ix_software_invoice_payments_tenant_invoice", "tenant_id", "invoice_id"),
+        # A non-empty transaction reference must be unique across all invoices
+        # for one tenant. Empty/NULL references remain allowed for methods that
+        # do not provide a bank/provider transaction identifier.
+        Index(
+            "uq_software_invoice_payments_tenant_reference",
+            "tenant_id",
+            text("lower(btrim(transaction_reference))"),
+            unique=True,
+            postgresql_where=text(
+                "transaction_reference IS NOT NULL AND btrim(transaction_reference) <> ''"
+            ),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
