@@ -52,6 +52,7 @@ export default function Pipelines() {
   const showError = (err: unknown, fallback: string) => {
     const problem = err as {
       response?: {
+        status?: number;
         data?: {
           detail?: string;
           message?: string;
@@ -59,6 +60,13 @@ export default function Pipelines() {
       };
       message?: string;
     };
+
+    if (problem?.response?.status === 404) {
+      setError(
+        "Pipelines service is currently unavailable. The backend pipelines endpoint (/api/v1/pipelines) is not registered."
+      );
+      return;
+    }
 
     setError(
       problem?.response?.data?.detail ||

@@ -63,6 +63,21 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     ],
   },
   {
+    id: "software-delivery",
+    title: "Software Delivery",
+    icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
+    routes: [
+      "/software-requirements",
+      "/software-estimates",
+      "/software-contracts",
+      "/software-projects",
+      "/software-sprints",
+      "/software-time-tracking",
+      "/software-delivery-reports",
+      "/software-invoices",
+    ],
+  },
+  {
     id: "property-management",
     title: "Property Management",
     icon: "M3 21h18 M3 7l9-4 9 4v14H3V7z M9 10v2 M9 16v2 M15 10v2 M15 16v2",
@@ -90,6 +105,15 @@ const MENU_GROUPS: MenuGroupConfig[] = [
       "/bookings",
       "/payments",
       "/documents",
+    ],
+  },
+  {
+    id: "customer-support",
+    title: "Customer Support",
+    icon: "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z",
+    routes: [
+      "/support-tickets",
+      "/customer-portal-users",
     ],
   },
   {
@@ -132,37 +156,61 @@ export default function DashboardLayout({
 
   const tenantStr = sessionStorage.getItem("tenant");
 
-  let tenantIndustry = "real-estate";
+  let tenantIndustry = "";
 
   if (tenantStr) {
-
     try {
-
       const tenantData = JSON.parse(tenantStr);
-
-      if (typeof tenantData?.industry === "string") {
-
-        tenantIndustry = tenantData.industry
-
-          .toLowerCase()
-
-          .replace(/\s+/g, "-");
-
+      if (typeof tenantData?.industry === "string" && tenantData.industry.trim()) {
+        tenantIndustry = normalizeIndustrySlug(tenantData.industry);
       }
-
     } catch {
-
       // Ignore invalid tenant data.
-
     }
-
   }
 
-  const currentIndustry = normalizeIndustrySlug(industry || tenantIndustry);
+  if (!tenantIndustry) {
+    const userStr = sessionStorage.getItem("user");
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        if (userData?.tenant?.industry) {
+          tenantIndustry = normalizeIndustrySlug(userData.tenant.industry);
+        } else if (userData?.industry) {
+          tenantIndustry = normalizeIndustrySlug(userData.industry);
+        }
+      } catch {
+        // Ignore invalid user data.
+      }
+    }
+  }
+
+  const isSoftwareRoute =
+    industry === "software-company" ||
+    industry === "software_company" ||
+    location.pathname.startsWith("/software-company") ||
+    location.pathname.startsWith("/software-");
+
+  const isRealEstateRoute =
+    industry === "real-estate" ||
+    location.pathname.startsWith("/real-estate") ||
+    location.pathname.startsWith("/buyer-requirements");
+
+  const currentIndustry = isSoftwareRoute
+    ? "software-company"
+    : isRealEstateRoute
+    ? "real-estate"
+    : industry
+    ? normalizeIndustrySlug(industry)
+    : tenantIndustry
+    ? normalizeIndustrySlug(tenantIndustry)
+    : "real-estate";
 
   const industryConfig = getIndustryConfig(currentIndustry);
 
   const basePath = `/${currentIndustry}`;
+
+  const isSoftware = currentIndustry === "software-company" || currentIndustry === "software_company";
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
@@ -208,7 +256,32 @@ export default function DashboardLayout({
     }
   };
 
-  const [tenant, setTenant] = useState<TenantDetails | null>(null);
+  const [tenant, setTenant] = useState<TenantDetails | null>(() => {
+    try {
+      const stored =
+        sessionStorage.getItem("tenant") || localStorage.getItem("tenant");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+      const userStr =
+        sessionStorage.getItem("user") || localStorage.getItem("user");
+      if (userStr) {
+        const parsedUser = JSON.parse(userStr);
+        if (parsedUser?.tenant && typeof parsedUser.tenant === "object") {
+          return parsedUser.tenant;
+        }
+        if (parsedUser?.company) {
+          return {
+            id: parsedUser.tenant_id || "",
+            name: parsedUser.company,
+            industry: parsedUser.industry || "",
+          };
+        }
+      }
+    } catch {}
+    return null;
+  });
 
   const authenticatedIndustry = useMemo(() => {
     // 1. From tenant state (fetched via getTenantDetails or updated)
@@ -254,12 +327,13 @@ export default function DashboardLayout({
   }, [tenant?.industry, industry]);
 
   const industrySubtitle = useMemo(() => {
-    if (!authenticatedIndustry) {
-      return "CRM";
+    const targetInd = industry || currentIndustry || authenticatedIndustry || tenantIndustry;
+    if (targetInd) {
+      const displayName = getIndustryDisplayName(targetInd);
+      return displayName ? displayName.toUpperCase() : "CRM";
     }
-    const displayName = getIndustryDisplayName(authenticatedIndustry);
-    return displayName ? displayName.toUpperCase() : "CRM";
-  }, [authenticatedIndustry]);
+    return "CRM";
+  }, [industry, currentIndustry, authenticatedIndustry, tenantIndustry]);
 
   const [user, setUser] = useState<{
 
@@ -383,28 +457,36 @@ export default function DashboardLayout({
 
     let isMounted = true;
 
-    getTenantDetails()
+    const syncTenant = () => {
+      getTenantDetails()
+        .then((details) => {
+          if (isMounted) {
+            setTenant(details);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setTenant(null);
+          }
+        });
+    };
 
-      .then((details) => {
+    void syncTenant();
 
-        if (isMounted) {
+    window.addEventListener("storage", syncTenant);
+    window.addEventListener("crm:tenant-updated", syncTenant);
+    window.addEventListener("crm:account-switched", syncTenant);
 
-          setTenant(details);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("storage", syncTenant);
+      window.removeEventListener("crm:tenant-updated", syncTenant);
+      window.removeEventListener("crm:account-switched", syncTenant);
+    };
 
-        }
+  }, [location.pathname, industry]);
 
-      })
-
-      .catch(() => {
-
-        if (isMounted) {
-
-          setTenant(null);
-
-        }
-
-      });
-
+  useEffect(() => {
     const storedUser = sessionStorage.getItem("user");
 
     if (storedUser) {
@@ -464,12 +546,6 @@ export default function DashboardLayout({
       });
 
     }
-
-    return () => {
-
-      isMounted = false;
-
-    };
 
   }, []);
 
@@ -800,6 +876,17 @@ export default function DashboardLayout({
       "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8";
 
     const isRealEstate = currentIndustry === "real-estate";
+    const isSoftware = currentIndustry === "software-company" || currentIndustry === "software_company";
+    const softwareRequirementIcon = "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8";
+    const softwareEstimateIcon = "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z";
+    const softwareContractIcon = "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8";
+    const softwareProjectIcon = "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z";
+    const softwareSprintIcon = "M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83";
+    const softwareTimeIcon = "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 10.5V7a1 1 0 0 0-2 0v6a1 1 0 0 0 .5.87l4.5 2.6a1 1 0 0 0 1-1.74z";
+    const softwareReportIcon = "M18 20V10 M12 20V4 M6 20v-4";
+    const softwareInvoiceIcon = "M2 7h20v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M2 4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2H2V4z M4 12h4v2H4v-2z";
+    const supportTicketIcon = "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z";
+    const customerPortalIcon = "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75";
 
     const pipelineItem: NavItem = {
       label: industryConfig.pipelineLabel,
@@ -832,6 +919,19 @@ export default function DashboardLayout({
           { label: "Site Visits", path: `${basePath}/site-visits`, icon: siteVisitIcon },
           { label: "Bookings", path: `${basePath}/bookings`, icon: bookingIcon },
           { label: "Payments", path: `${basePath}/payments`, icon: paymentIcon },
+        );
+      }
+
+      if (isSoftware) {
+        managerNav.push(
+          { label: "Requirements", path: `${basePath}/software-requirements`, icon: softwareRequirementIcon },
+          { label: "Estimates", path: `${basePath}/software-estimates`, icon: softwareEstimateIcon },
+          { label: "Contracts", path: `${basePath}/software-contracts`, icon: softwareContractIcon },
+          { label: "Projects", path: `${basePath}/software-projects`, icon: softwareProjectIcon },
+          { label: "Sprints", path: `${basePath}/software-sprints`, icon: softwareSprintIcon },
+          { label: "Time Tracking", path: `${basePath}/software-time-tracking`, icon: softwareTimeIcon },
+          { label: "Delivery Reports", path: `${basePath}/software-delivery-reports`, icon: softwareReportIcon },
+          { label: "Invoices & Billing", path: `${basePath}/software-invoices`, icon: softwareInvoiceIcon },
         );
       }
 
@@ -1052,11 +1152,54 @@ export default function DashboardLayout({
         customNav.push({ label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon });
       }
 
+      if (hasPermission("support_ticket.view") || isSupport || isManager) {
+        customNav.push({ label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon });
+      }
+      if (hasPermission("customer_portal.invite") || isSupport || isManager) {
+        customNav.push({ label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon });
+      }
+
       if (isSupport && hasPermission("settings")) {
         customNav.push({ label: "Settings", path: `${basePath}/settings`, icon: settingsIcon });
       }
 
       return customNav;
+    }
+
+    if (isSoftware) {
+      return [
+        { label: "Dashboard", path: `${basePath}/dashboard`, icon: dashboardIcon },
+        { label: "Leads", path: `${basePath}/leads`, icon: peopleIcon },
+        { label: "Contacts", path: `${basePath}/contacts`, icon: peopleIcon },
+        { label: "Accounts", path: `${basePath}/accounts`, icon: accountIcon },
+        { label: "Deals", path: `${basePath}/deals`, icon: dealIcon },
+        { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
+        { label: "Requirements", path: `${basePath}/software-requirements`, icon: softwareRequirementIcon },
+        { label: "Estimates", path: `${basePath}/software-estimates`, icon: softwareEstimateIcon },
+        { label: "Contracts", path: `${basePath}/software-contracts`, icon: softwareContractIcon },
+        { label: "Projects", path: `${basePath}/software-projects`, icon: softwareProjectIcon },
+        { label: "Sprints", path: `${basePath}/software-sprints`, icon: softwareSprintIcon },
+        { label: "Time Tracking", path: `${basePath}/software-time-tracking`, icon: softwareTimeIcon },
+        { label: "Delivery Reports", path: `${basePath}/software-delivery-reports`, icon: softwareReportIcon },
+        { label: "Invoices & Billing", path: `${basePath}/software-invoices`, icon: softwareInvoiceIcon },
+        { label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon },
+        { label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon },
+        { label: "Reports & Analytics", path: `${basePath}/reports`, icon: reportIcon },
+        { label: "Users", path: `${basePath}/users`, icon: userIcon },
+        { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
+        {
+          label: "Permissions",
+          path: `${basePath}/permissions`,
+          icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
+        },
+        { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
+        {
+          label: "Form Builder",
+          path: `${basePath}/form-builder`,
+          icon: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
+        },
+        { label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon },
+      ];
     }
 
     const defaultNav: NavItem[] = [
@@ -1080,7 +1223,24 @@ export default function DashboardLayout({
       );
     }
 
+    if (isSoftware) {
+      defaultNav.push(
+        { label: "Requirements", path: `${basePath}/software-requirements`, icon: softwareRequirementIcon },
+        { label: "Estimates", path: `${basePath}/software-estimates`, icon: softwareEstimateIcon },
+        { label: "Contracts", path: `${basePath}/software-contracts`, icon: softwareContractIcon },
+        { label: "Projects", path: `${basePath}/software-projects`, icon: softwareProjectIcon },
+        { label: "Sprints", path: `${basePath}/software-sprints`, icon: softwareSprintIcon },
+        { label: "Time Tracking", path: `${basePath}/software-time-tracking`, icon: softwareTimeIcon },
+        { label: "Delivery Reports", path: `${basePath}/software-delivery-reports`, icon: softwareReportIcon },
+        { label: "Invoices & Billing", path: `${basePath}/software-invoices`, icon: softwareInvoiceIcon },
+        { label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon },
+        { label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon },
+      );
+    }
+
     defaultNav.push(
+      { label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon },
+      { label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon },
       { label: "Documents", path: `${basePath}/documents`, icon: documentIcon },
       { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
       { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
@@ -1109,7 +1269,16 @@ export default function DashboardLayout({
 
   };
 
-  const navItems = getNavItems();
+  const navItems = useMemo(() => getNavItems(), [
+    currentIndustry,
+    isManager,
+    isSales,
+    isOps,
+    isSupport,
+    isAuditor,
+    industryConfig,
+    basePath,
+  ]);
 
   const isActiveNavItem = (path: string): boolean => {
     if (path === "/") {
@@ -1121,31 +1290,101 @@ export default function DashboardLayout({
     );
   };
 
+  // Dynamic menu groups based on active industry
+  const menuGroups: MenuGroupConfig[] = useMemo(() => {
+    if (isSoftware) {
+      return [
+        {
+          id: "sales-crm",
+          title: "Sales & CRM",
+          icon: "M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16",
+          routes: [
+            "/leads",
+            "/contacts",
+            "/accounts",
+            "/deals",
+            "/activities",
+          ],
+        },
+        {
+          id: "software-delivery",
+          title: "Software Delivery",
+          icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
+          routes: [
+            "/software-requirements",
+            "/software-estimates",
+            "/software-contracts",
+            "/software-projects",
+            "/software-sprints",
+            "/software-time-tracking",
+            "/software-delivery-reports",
+            "/software-invoices",
+          ],
+        },
+        {
+          id: "customer-support",
+          title: "Customer Support",
+          icon: "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z",
+          routes: [
+            "/support-tickets",
+            "/customer-portal-users",
+          ],
+        },
+        {
+          id: "administration",
+          title: "Administration",
+          icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+          routes: [
+            "/users",
+            "/roles",
+            "/permissions",
+            "/settings",
+            "/form-builder",
+            "/audit-logs",
+          ],
+        },
+      ];
+    }
+    return MENU_GROUPS;
+  }, [isSoftware]);
+
   // Standalone dashboard item
   const dashboardItem = navItems.find((item) => item.path.endsWith("/dashboard"));
 
+  // Standalone reports item
+  const reportsItem = useMemo(() => {
+    const item = navItems.find((item) => item.path.endsWith("/reports"));
+    if (item && isSoftware) {
+      return { ...item, label: "Reports & Analytics" };
+    }
+    return item;
+  }, [navItems, isSoftware]);
+
   // Build the grouped items array based on permitted navItems in exact required order
   const groupedMenu = useMemo(() => {
-    return MENU_GROUPS.map((group) => {
+    return menuGroups.map((group) => {
       const items = group.routes
         .map((routeSuffix) => navItems.find((item) => item.path.endsWith(routeSuffix)))
         .filter((item): item is NavItem => Boolean(item));
       return { group, items };
     }).filter(({ items }) => items.length > 0);
-  }, [navItems]);
+  }, [navItems, menuGroups]);
 
   // Find extra items not in dashboard or any group (if any)
   const extraItems = useMemo(() => {
     return navItems.filter((item) => {
-      if (item.path.endsWith("/dashboard")) return false;
-      return !MENU_GROUPS.some((g) => g.routes.some((r) => item.path.endsWith(r)));
+      if (item.path.endsWith("/dashboard") || (isSoftware && item.path.endsWith("/reports"))) return false;
+      return !menuGroups.some((g) => g.routes.some((r) => item.path.endsWith(r)));
     });
-  }, [navItems]);
+  }, [navItems, menuGroups, isSoftware]);
 
   // Collapsible dropdown state - auto-expanded for the active group
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    MENU_GROUPS.forEach((group) => {
+    const initial: Record<string, boolean> = {
+      "sales-crm": true,
+      "software-delivery": true,
+    };
+    menuGroups.forEach((group) => {
       const hasActive = group.routes.some(
         (r) => location.pathname.endsWith(r) || location.pathname.includes(`${r}/`)
       );
@@ -1156,27 +1395,101 @@ export default function DashboardLayout({
     return initial;
   });
 
-  // Automatically expand group matching active route on mount and navigation
-  useEffect(() => {
-    MENU_GROUPS.forEach((group) => {
-      const hasActive = group.routes.some((routeSuffix) => {
-        const item = navItems.find((n) => n.path.endsWith(routeSuffix));
-        return item && isActiveNavItem(item.path);
-      });
-      if (hasActive) {
-        setOpenGroups((prev) => (prev[group.id] ? prev : { ...prev, [group.id]: true }));
-      }
-    });
-  }, [location.pathname, navItems]);
+  const prevPathnameRef = useRef(location.pathname);
 
-  const toggleGroup = (groupId: string) => {
-    setOpenGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  };
+  // Automatically expand group matching active route ONLY on route navigation
+  useEffect(() => {
+    if (prevPathnameRef.current !== location.pathname) {
+      prevPathnameRef.current = location.pathname;
+      menuGroups.forEach((group) => {
+        const hasActive = group.routes.some((routeSuffix) => {
+          const item = navItems.find((n) => n.path.endsWith(routeSuffix));
+          return item && (location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+        });
+        if (hasActive) {
+          setOpenGroups((prev) => ({ ...prev, [group.id]: true }));
+        }
+      });
+    }
+  }, [location.pathname, navItems, menuGroups]);
+
+const toggleGroup = (groupId: string) => {
+  setOpenGroups((prev) => ({
+    ...prev,
+    [groupId]: !prev[groupId],
+  }));
+};
+
+const renderGroupSection = (group: MenuGroupConfig, items: NavItem[]) => {
+  const isOpen = Boolean(openGroups[group.id]);
+  const hasActiveChild = items.some((item) => isActiveNavItem(item.path));
 
   return (
+    <div key={group.id} className="nav-group-section">
+      <button
+        type="button"
+        className={`nav-group-header ${hasActiveChild ? "has-active" : ""}`}
+        onClick={() => toggleGroup(group.id)}
+        aria-expanded={isOpen}
+      >
+        <svg
+          className="nav-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d={group.icon} />
+        </svg>
+        <span className="nav-group-title">{group.title}</span>
+        <svg
+          className={`nav-group-chevron ${isOpen ? "open" : ""}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="nav-group-children">
+          {items.map((item) => {
+            const active = isActiveNavItem(item.path);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`nav-subitem ${active ? "active" : ""}`}
+                onClick={() => setIsSidebarOpen(false)}
+              >
+                <svg
+                  className="nav-subitem-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d={item.icon} />
+                </svg>
+                <span className="nav-subitem-label">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+return (
     <div className={`dashboard-wrapper ${theme}`}>
 
       {isSidebarOpen && (
@@ -1277,22 +1590,31 @@ export default function DashboardLayout({
             </Link>
           )}
 
-          {/* Grouped Collapsible Sections */}
-          {groupedMenu.map(({ group, items }) => {
-            const isOpen = Boolean(openGroups[group.id]);
-            const hasActiveChild = items.some((item) =>
-              isActiveNavItem(item.path)
-            );
+          {/* Navigation Items */}
+          {isSoftware ? (
+            <>
+              {/* Sales & CRM */}
+              {groupedMenu.find((g) => g.group.id === "sales-crm") &&
+                renderGroupSection(
+                  groupedMenu.find((g) => g.group.id === "sales-crm")!.group,
+                  groupedMenu.find((g) => g.group.id === "sales-crm")!.items
+                )}
 
-            return (
-              <div key={group.id} className="nav-group-section">
-                <button
-                  type="button"
-                  className={`nav-group-header ${
-                    hasActiveChild ? "has-active" : ""
+              {/* Software Delivery */}
+              {groupedMenu.find((g) => g.group.id === "software-delivery") &&
+                renderGroupSection(
+                  groupedMenu.find((g) => g.group.id === "software-delivery")!.group,
+                  groupedMenu.find((g) => g.group.id === "software-delivery")!.items
+                )}
+
+              {/* Standalone Reports & Analytics */}
+              {reportsItem && (
+                <Link
+                  to={reportsItem.path}
+                  className={`nav-standalone-item ${
+                    isActiveNavItem(reportsItem.path) ? "active" : ""
                   }`}
-                  onClick={() => toggleGroup(group.id)}
-                  aria-expanded={isOpen}
+                  onClick={() => setIsSidebarOpen(false)}
                 >
                   <svg
                     className="nav-icon"
@@ -1303,11 +1625,33 @@ export default function DashboardLayout({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d={group.icon} />
+                    <path d={reportsItem.icon} />
                   </svg>
-                  <span className="nav-group-title">{group.title}</span>
+                  <span>{reportsItem.label}</span>
+                </Link>
+              )}
+
+              {/* Administration */}
+              {groupedMenu.find((g) => g.group.id === "administration") &&
+                renderGroupSection(
+                  groupedMenu.find((g) => g.group.id === "administration")!.group,
+                  groupedMenu.find((g) => g.group.id === "administration")!.items
+                )}
+            </>
+          ) : (
+            <>
+              {groupedMenu.map(({ group, items }) => renderGroupSection(group, items))}
+              {extraItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`nav-standalone-item ${
+                    isActiveNavItem(item.path) ? "active" : ""
+                  }`}
+                  onClick={() => setIsSidebarOpen(false)}
+                >
                   <svg
-                    className={`nav-group-chevron ${isOpen ? "open" : ""}`}
+                    className="nav-icon"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1315,75 +1659,19 @@ export default function DashboardLayout({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <polyline points="9 18 15 12 9 6" />
+                    <path d={item.icon} />
                   </svg>
-                </button>
-
-                {isOpen && (
-                  <div className="nav-group-children">
-                    {items.map((item) => {
-                      const active = isActiveNavItem(item.path);
-                      return (
-                        <Link
-                          key={item.path}
-                          to={item.path}
-                          className={`nav-subitem ${active ? "active" : ""}`}
-                          onClick={() => setIsSidebarOpen(false)}
-                        >
-                          <svg
-                            className="nav-subitem-icon"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d={item.icon} />
-                          </svg>
-                          <span className="nav-subitem-label">{item.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Fallback Extra Items (if any) */}
-          {extraItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`nav-standalone-item ${
-                isActiveNavItem(item.path) ? "active" : ""
-              }`}
-              onClick={() => setIsSidebarOpen(false)}
-            >
-              <svg
-                className="nav-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d={item.icon} />
-              </svg>
-              <span>{item.label}</span>
-            </Link>
-          ))}
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </>
+          )}
         </nav>
 
         <div className="sidebar-bottom">
           <Link
-
-            to="/help"
-
-            className="nav-item"
-
+            to={`${basePath}/help`}
+            className={`nav-item ${location.pathname.endsWith("/help") ? "active" : ""}`}
             onClick={() => setIsSidebarOpen(false)}
           >
             <svg
@@ -1472,6 +1760,11 @@ export default function DashboardLayout({
               tenant={tenant}
               currentIndustry={currentIndustry}
             />
+            {location.pathname.endsWith("/dashboard") && (
+              <span className="breadcrumb-current-page">
+                Dashboard
+              </span>
+            )}
 
             <GlobalSearch
               placeholder={
@@ -1745,7 +2038,7 @@ export default function DashboardLayout({
 
         <div className="dashboard-content">{children}</div>
       </main>
-    </div>
+    </div >
 
   );
 

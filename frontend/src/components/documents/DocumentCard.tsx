@@ -19,14 +19,15 @@ export const formatFileSize = (bytes: number): string => {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 };
 
-export const getFileExtension = (filename: string): string => {
+export const getFileExtension = (filename?: string | null): string => {
+  if (!filename || typeof filename !== "string") return "FILE";
   const parts = filename.split(".");
   return parts.length > 1 ? parts.pop()!.toUpperCase() : "FILE";
 };
 
-export const getFileIcon = (filename: string, contentType?: string) => {
+export const getFileIcon = (filename?: string | null, contentType?: string | null) => {
   const ext = getFileExtension(filename).toLowerCase();
-  const type = (contentType || "").toLowerCase();
+  const type = String(contentType || "").toLowerCase();
 
   if (ext === "pdf" || type.includes("pdf")) {
     return {
@@ -121,8 +122,9 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
   onDownload,
   onDelete,
 }) => {
-  const fileMeta = getFileIcon(doc.filename, doc.content_type);
-  const formattedDate = doc.created_at
+  const safeFilename = doc?.filename || (doc as any)?.original_filename || (doc as any)?.name || "document.pdf";
+  const fileMeta = getFileIcon(safeFilename, doc?.content_type);
+  const formattedDate = doc?.created_at
     ? new Date(doc.created_at).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -140,7 +142,7 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
           <span className={`doc-format-badge ${fileMeta.badgeClass}`}>
             {fileMeta.label}
           </span>
-          {doc.is_confidential && (
+          {doc?.is_confidential && (
             <span className="doc-confidential-badge" title="Confidential document">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -153,11 +155,11 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
       </div>
 
       <div className="document-card-body">
-        <h4 className="document-title" title={doc.title}>
-          {doc.title}
+        <h4 className="document-title" title={doc?.title || safeFilename}>
+          {doc?.title || safeFilename}
         </h4>
-        <p className="document-filename" title={doc.filename}>
-          {doc.filename}
+        <p className="document-filename" title={safeFilename}>
+          {safeFilename}
         </p>
 
         <div className="document-metadata-grid">

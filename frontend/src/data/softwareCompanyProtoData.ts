@@ -1,111 +1,567 @@
-/**
- * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  PROTOTYPE DATA — FRONTEND ONLY                                     ║
- * ║                                                                      ║
- * ║  This file contains placeholder data for Software Company Dashboard  ║
- * ║  widgets where no backend API or data model exists yet.              ║
- * ║                                                                      ║
- * ║  Replace each export with real API calls when the corresponding      ║
- * ║  backend service becomes available.                                  ║
- * ║                                                                      ║
- * ║  Widgets using REAL API data (not from this file):                   ║
- * ║    - Active Clients  → accountService.getAccounts()                  ║
- * ║    - Open Tasks      → activityService.getActivities()              ║
- * ║    - Team Members    → userService.getUsers()                        ║
- * ║    - Revenue         → dealService.getDeals()                        ║
- * ║    - Recent Clients  → accountService.getAccounts()                  ║
- * ║    - Tasks & Activities → activityService.getActivities()            ║
- * ║    - Leads           → leadService.getLeads()                        ║
- * ╚══════════════════════════════════════════════════════════════════════╝
- */
+import type { SoftwareRequirement } from "../types/softwareRequirement";
+import type { SoftwareEstimate } from "../types/softwareEstimate";
+import type { SoftwareContract } from "../types/softwareContract";
+import type { SoftwareProject } from "../types/softwareProject";
+import type { SoftwareSprint } from "../types/softwareSprint";
 
-/* ─── Missing API: Projects ───
- * The CRM does not currently have a Projects module, API, or data model.
- * The following prototype data simulates project records.
- * Required backend: POST/GET /api/v1/projects/
- */
+/* ─── Seed Data aligned with UI screenshot metrics ─── */
 
+export const initialSoftwareRequirements: SoftwareRequirement[] = [
+  {
+    id: "req-sw-001",
+    tenant_id: "tenant-default",
+    title: "CRM with Analytics",
+    description: "Enterprise CRM platform with integrated customer journey analytics and automated pipeline insights.",
+    software_type: "Enterprise Software",
+    platforms: "Web, Cloud",
+    integrations: "PostgreSQL, Redis, Sendgrid",
+    min_budget: 700000,
+    max_budget: 1000000,
+    currency: "INR",
+    target_date: "2026-12-31",
+    priority: "High",
+    status: "Discovery",
+    account_id: "acc-abc",
+    notes: "Client: ABC Technologies",
+    created_at: "2026-10-01T10:00:00Z",
+    updated_at: "2026-10-02T10:00:00Z",
+  },
+  {
+    id: "req-sw-002",
+    tenant_id: "tenant-default",
+    title: "Mobile App for iOS/Android",
+    description: "Cross-platform customer loyalty and self-service mobile application with real-time push notifications.",
+    software_type: "Mobile Application",
+    platforms: "iOS, Android",
+    integrations: "Firebase, Stripe",
+    min_budget: 1000000,
+    max_budget: 1500000,
+    currency: "INR",
+    target_date: "2027-02-28",
+    priority: "Critical",
+    status: "Estimating",
+    account_id: "acc-xyz",
+    notes: "Client: XYZ Solutions",
+    created_at: "2026-10-03T10:00:00Z",
+    updated_at: "2026-10-04T10:00:00Z",
+  },
+  {
+    id: "req-sw-003",
+    tenant_id: "tenant-default",
+    title: "Website Revamp",
+    description: "Modern headless React & Next.js corporate portal with CMS integration and SEO optimization.",
+    software_type: "Website",
+    platforms: "Web",
+    integrations: "Strapi, Cloudflare",
+    min_budget: 300000,
+    max_budget: 450000,
+    currency: "INR",
+    target_date: "2026-11-30",
+    priority: "Medium",
+    status: "New",
+    account_id: "acc-pqr",
+    notes: "Client: PQR Ltd",
+    created_at: "2026-10-05T10:00:00Z",
+    updated_at: "2026-10-05T10:00:00Z",
+  },
+  {
+    id: "req-sw-004",
+    tenant_id: "tenant-default",
+    title: "Inventory Management",
+    description: "Centralized warehouse stock, purchase orders, barcode scanning, and supplier dispatch workflow.",
+    software_type: "Custom Software",
+    platforms: "Web, Tablet",
+    integrations: "ERP, SAP Connector",
+    min_budget: 500000,
+    max_budget: 750000,
+    currency: "INR",
+    target_date: "2027-01-15",
+    priority: "High",
+    status: "Proposal",
+    account_id: "acc-lmn",
+    notes: "Client: LMN Systems",
+    created_at: "2026-10-06T10:00:00Z",
+    updated_at: "2026-10-07T10:00:00Z",
+  },
+  {
+    id: "req-sw-005",
+    tenant_id: "tenant-default",
+    title: "Payment Gateway Integration",
+    description: "Secure multi-currency payment checkout module with automated reconciliation and webhook listeners.",
+    software_type: "API Development",
+    platforms: "Cloud, Microservices",
+    integrations: "Razorpay, Stripe, PayPal",
+    min_budget: 350000,
+    max_budget: 500000,
+    currency: "INR",
+    target_date: "2026-11-20",
+    priority: "Medium",
+    status: "Approved",
+    account_id: "acc-tech",
+    notes: "Client: Tech Corp",
+    created_at: "2026-10-08T10:00:00Z",
+    updated_at: "2026-10-09T10:00:00Z",
+  },
+  // Additional seed requirements to match 25 total requirements (New 8, Discovery 5, Estimating 4, Proposal 3, Approved 3, Others 2)
+  ...Array.from({ length: 20 }).map((_, i) => {
+    const statuses: Array<SoftwareRequirement["status"]> = [
+      "New", "New", "New", "New", "New", "New", "New",
+      "Discovery", "Discovery", "Discovery", "Discovery",
+      "Estimating", "Estimating", "Estimating",
+      "Proposal", "Proposal",
+      "Approved", "Approved",
+      "On Hold", "Converted"
+    ];
+    const st = statuses[i % statuses.length];
+    return {
+      id: `req-sw-seed-${i + 6}`,
+      tenant_id: "tenant-default",
+      title: `Software Requirement #${i + 6} - Module Expansion`,
+      description: `Requirement details for feature package #${i + 6}.`,
+      software_type: i % 2 === 0 ? "Web Application" : "Integration",
+      currency: "INR",
+      min_budget: 200000 + i * 20000,
+      max_budget: 350000 + i * 30000,
+      target_date: "2026-12-15",
+      priority: i % 3 === 0 ? "High" : "Medium",
+      status: (st || "Draft") as SoftwareEstimate["status"],
+      account_id: "acc-abc",
+      notes: "Auto-generated seed requirement",
+      created_at: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
+      updated_at: new Date(Date.now() - i * 86400000).toISOString(),
+    };
+  }),
+];
+
+export const initialSoftwareEstimates: SoftwareEstimate[] = [
+  {
+    id: "est-sw-001",
+    tenant_id: "tenant-default",
+    software_requirement_id: "req-sw-001",
+    estimate_number: "EST-2026-001",
+    title: "CRM with Analytics",
+    description: "Initial scoping and development estimate for CRM core and data warehouse pipeline.",
+    currency: "INR",
+    issue_date: "2026-10-01",
+    expiry_date: "2026-11-01",
+    subtotal: 800000,
+    discount_amount: 0,
+    tax_amount: 50000,
+    total_amount: 850000,
+    status: "Sent",
+    notes: "Sent to ABC Technologies",
+    created_at: "2026-10-01T11:00:00Z",
+    updated_at: "2026-10-02T11:00:00Z",
+    items: [
+      {
+        id: "item-1",
+        item_name: "Frontend Dashboard UI",
+        quantity: 1,
+        unit_price: 350000,
+        discount_percent: 0,
+        tax_percent: 5,
+        line_subtotal: 350000,
+        line_discount: 0,
+        line_tax: 17500,
+        line_total: 367500,
+        sort_order: 1,
+      },
+      {
+        id: "item-2",
+        item_name: "Backend Analytics API",
+        quantity: 1,
+        unit_price: 450000,
+        discount_percent: 0,
+        tax_percent: 5,
+        line_subtotal: 450000,
+        line_discount: 0,
+        line_tax: 22500,
+        line_total: 472500,
+        sort_order: 2,
+      },
+    ],
+  },
+  {
+    id: "est-sw-002",
+    tenant_id: "tenant-default",
+    software_requirement_id: "req-sw-002",
+    estimate_number: "EST-2026-002",
+    title: "Mobile App",
+    description: "Cross-platform mobile application MVP delivery phase 1.",
+    currency: "INR",
+    issue_date: "2026-10-03",
+    expiry_date: "2026-11-15",
+    subtotal: 1100000,
+    discount_amount: 0,
+    tax_amount: 100000,
+    total_amount: 1200000,
+    status: "Draft",
+    notes: "For XYZ Solutions",
+    created_at: "2026-10-03T11:00:00Z",
+    updated_at: "2026-10-04T11:00:00Z",
+    items: [
+      {
+        id: "item-3",
+        item_name: "React Native Mobile App Development",
+        quantity: 1,
+        unit_price: 1100000,
+        discount_percent: 0,
+        tax_percent: 9,
+        line_subtotal: 1100000,
+        line_discount: 0,
+        line_tax: 99000,
+        line_total: 1199000,
+        sort_order: 1,
+      },
+    ],
+  },
+  {
+    id: "est-sw-003",
+    tenant_id: "tenant-default",
+    software_requirement_id: "req-sw-003",
+    estimate_number: "EST-2026-003",
+    title: "Website Revamp",
+    description: "Complete design and development for responsive website.",
+    currency: "INR",
+    issue_date: "2026-10-05",
+    expiry_date: "2026-11-05",
+    subtotal: 350000,
+    discount_amount: 0,
+    tax_amount: 25000,
+    total_amount: 375000,
+    status: "Accepted",
+    notes: "Accepted by PQR Ltd",
+    created_at: "2026-10-05T11:00:00Z",
+    updated_at: "2026-10-06T11:00:00Z",
+    items: [
+      {
+        id: "item-4",
+        item_name: "Web Portal & CMS Setup",
+        quantity: 1,
+        unit_price: 350000,
+        discount_percent: 0,
+        tax_percent: 7,
+        line_subtotal: 350000,
+        line_discount: 0,
+        line_tax: 24500,
+        line_total: 374500,
+        sort_order: 1,
+      },
+    ],
+  },
+  {
+    id: "est-sw-004",
+    tenant_id: "tenant-default",
+    software_requirement_id: "req-sw-004",
+    estimate_number: "EST-2026-004",
+    title: "Inventory Module",
+    description: "Warehouse inventory tracking module & barcode scanner API.",
+    currency: "INR",
+    issue_date: "2026-10-06",
+    expiry_date: "2026-11-20",
+    subtotal: 580000,
+    discount_amount: 0,
+    tax_amount: 40000,
+    total_amount: 620000,
+    status: "Sent",
+    notes: "Sent to LMN Systems",
+    created_at: "2026-10-06T11:00:00Z",
+    updated_at: "2026-10-07T11:00:00Z",
+    items: [
+      {
+        id: "item-5",
+        item_name: "Inventory Workflow Engine",
+        quantity: 1,
+        unit_price: 580000,
+        discount_percent: 0,
+        tax_percent: 6.9,
+        line_subtotal: 580000,
+        line_discount: 0,
+        line_tax: 40020,
+        line_total: 620020,
+        sort_order: 1,
+      },
+    ],
+  },
+  {
+    id: "est-sw-005",
+    tenant_id: "tenant-default",
+    software_requirement_id: "req-sw-005",
+    estimate_number: "EST-2026-005",
+    title: "API Integration",
+    description: "Multi-gateway payment connector module and webhook listener.",
+    currency: "INR",
+    issue_date: "2026-10-08",
+    expiry_date: "2026-10-25",
+    subtotal: 390000,
+    discount_amount: 0,
+    tax_amount: 25000,
+    total_amount: 415000,
+    status: "Rejected",
+    notes: "Tech Corp requested re-scope",
+    created_at: "2026-10-08T11:00:00Z",
+    updated_at: "2026-10-09T11:00:00Z",
+    items: [
+      {
+        id: "item-6",
+        item_name: "Payment Gateway Connector",
+        quantity: 1,
+        unit_price: 390000,
+        discount_percent: 0,
+        tax_percent: 6.4,
+        line_subtotal: 390000,
+        line_discount: 0,
+        line_tax: 24960,
+        line_total: 414960,
+        sort_order: 1,
+      },
+    ],
+  },
+  // Additional estimates to reach 18 total (Draft 6, Sent 5, Accepted 4, Rejected 2, Expired 1)
+  ...Array.from({ length: 13 }).map((_, i) => {
+    const statuses: Array<SoftwareEstimate["status"]> = [
+      "Draft", "Draft", "Draft", "Draft", "Draft",
+      "Sent", "Sent", "Sent",
+      "Accepted", "Accepted", "Accepted",
+      "Rejected",
+      "Expired"
+    ];
+    const st = statuses[i % statuses.length];
+    return {
+      id: `est-sw-seed-${i + 6}`,
+      tenant_id: "tenant-default",
+      software_requirement_id: "req-sw-001",
+      estimate_number: `EST-2026-0${10 + i}`,
+      title: `Estimate for Software Delivery Phase #${i + 6}`,
+      description: "Standard estimate package.",
+      currency: "INR",
+      issue_date: "2026-10-10",
+      expiry_date: "2026-11-30",
+      subtotal: 250000 + i * 20000,
+      discount_amount: 0,
+      tax_amount: 15000 + i * 1000,
+      total_amount: 265000 + i * 21000,
+      status: (st || "Draft") as SoftwareEstimate["status"],
+      created_at: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
+      updated_at: new Date(Date.now() - i * 86400000).toISOString(),
+      items: [
+        {
+          id: `item-seed-${i}`,
+          item_name: "Core Software Implementation",
+          quantity: 1,
+          unit_price: 250000,
+          discount_percent: 0,
+          tax_percent: 5,
+          line_subtotal: 250000,
+          line_discount: 0,
+          line_tax: 12500,
+          line_total: 262500,
+          sort_order: 1,
+        },
+      ],
+    };
+  }),
+];
+
+export const initialSoftwareContracts: SoftwareContract[] = [
+  {
+    id: "cont-sw-001",
+    tenant_id: "tenant-default",
+    software_estimate_id: "est-sw-003",
+    contract_number: "CNT-2026-001",
+    title: "Website Revamp Master Service Agreement",
+    description: "Full lifecycle website redesign and deployment agreement.",
+    currency: "INR",
+    contract_value: 375000,
+    issue_date: "2026-09-01",
+    start_date: "2026-09-15",
+    end_date: "2026-12-15",
+    signed_date: "2026-09-10",
+    status: "Active",
+    scope_of_work: "Design, develop, test and launch corporate website.",
+    deliverables: "Design mockups, frontend code, CMS setup, production cutover.",
+    account_id: "acc-pqr",
+    notes: "Signed with PQR Ltd",
+    created_at: "2026-09-01T10:00:00Z",
+    updated_at: "2026-09-10T10:00:00Z",
+  },
+  ...Array.from({ length: 9 }).map((_, i) => ({
+    id: `cont-sw-seed-${i + 2}`,
+    tenant_id: "tenant-default",
+    software_estimate_id: "est-sw-003",
+    contract_number: `CNT-2026-00${i + 2}`,
+    title: `Software Delivery Contract #${i + 2}`,
+    description: `Service agreement for software initiative #${i + 2}.`,
+    currency: "INR",
+    contract_value: 400000 + i * 50000,
+    issue_date: "2026-09-05",
+    start_date: "2026-09-20",
+    end_date: "2026-12-31",
+    signed_date: "2026-09-18",
+    status: i < 5 ? "Active" : "Signed",
+    scope_of_work: "Full software engineering lifecycle deliverables.",
+    deliverables: "Architecture, source code, CI/CD pipeline, staging validation.",
+    account_id: "acc-abc",
+    notes: "Contract executed successfully",
+    created_at: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - i * 86400000).toISOString(),
+  })),
+];
+
+export const initialSoftwareProjects: SoftwareProject[] = [
+  {
+    id: "proj-sw-001",
+    tenant_id: "tenant-default",
+    software_contract_id: "cont-sw-001",
+    project_number: "PRJ-2026-001",
+    name: "CRM Development",
+    description: "Enterprise CRM platform custom build and integration.",
+    status: "Active",
+    priority: "Critical",
+    budget: 850000,
+    currency: "INR",
+    start_date: "2026-10-01",
+    target_end_date: "2027-01-31",
+    scope_of_work: "Lead management, deal tracking, workflow triggers.",
+    deliverables: "Web UI, REST APIs, Database schemas.",
+    notes: "Client: ABC Technologies",
+    created_at: "2026-10-01T10:00:00Z",
+    updated_at: "2026-10-02T10:00:00Z",
+  },
+  {
+    id: "proj-sw-002",
+    tenant_id: "tenant-default",
+    software_contract_id: "cont-sw-001",
+    project_number: "PRJ-2026-002",
+    name: "Mobile App",
+    description: "iOS and Android client application with loyalty features.",
+    status: "Planned",
+    priority: "High",
+    budget: 1200000,
+    currency: "INR",
+    start_date: "2026-11-10",
+    target_end_date: "2027-03-31",
+    scope_of_work: "Native app development and store distribution.",
+    deliverables: "iOS IPA, Android APK, backend endpoints.",
+    notes: "Client: XYZ Solutions",
+    created_at: "2026-10-03T10:00:00Z",
+    updated_at: "2026-10-04T10:00:00Z",
+  },
+  {
+    id: "proj-sw-003",
+    tenant_id: "tenant-default",
+    software_contract_id: "cont-sw-001",
+    project_number: "PRJ-2026-003",
+    name: "Website Redesign",
+    description: "Complete overhaul of primary digital marketing portal.",
+    status: "On Hold",
+    priority: "Medium",
+    budget: 375000,
+    currency: "INR",
+    start_date: "2026-09-15",
+    target_end_date: "2026-11-30",
+    scope_of_work: "Design, CMS migration, SEO validation.",
+    deliverables: "Next.js codebase, CMS documentation.",
+    notes: "Client: PQR Ltd",
+    created_at: "2026-09-15T10:00:00Z",
+    updated_at: "2026-09-16T10:00:00Z",
+  },
+  {
+    id: "proj-sw-004",
+    tenant_id: "tenant-default",
+    software_contract_id: "cont-sw-001",
+    project_number: "PRJ-2026-004",
+    name: "ERP Integration",
+    description: "Two-way data synchronizer between ERP and sales backend.",
+    status: "Active",
+    priority: "High",
+    budget: 620000,
+    currency: "INR",
+    start_date: "2026-10-05",
+    target_end_date: "2026-12-20",
+    scope_of_work: "ETL pipelines, webhook listeners, conflict reconciliation.",
+    deliverables: "Integration service, worker daemon.",
+    notes: "Client: LMN Systems",
+    created_at: "2026-10-05T10:00:00Z",
+    updated_at: "2026-10-06T10:00:00Z",
+  },
+  {
+    id: "proj-sw-005",
+    tenant_id: "tenant-default",
+    software_contract_id: "cont-sw-001",
+    project_number: "PRJ-2026-005",
+    name: "Cloud Migration",
+    description: "Migration of monolithic app to Docker and AWS ECS.",
+    status: "Completed",
+    priority: "Critical",
+    budget: 450000,
+    currency: "INR",
+    start_date: "2026-08-10",
+    target_end_date: "2026-09-30",
+    actual_end_date: "2026-09-28",
+    scope_of_work: "Containerization, Terraform provisioning, database migration.",
+    deliverables: "Terraform manifests, Helm charts, live cluster.",
+    notes: "Client: Tech Corp",
+    created_at: "2026-08-10T10:00:00Z",
+    updated_at: "2026-09-28T10:00:00Z",
+  },
+  // Additional projects to reach 12 total (Active 8, Planned 2, On Hold 1, Completed 1, Cancelled 0)
+  ...Array.from({ length: 7 }).map((_, i) => {
+    const statuses: Array<SoftwareProject["status"]> = [
+      "Active", "Active", "Active", "Active", "Active", "Active", "Planned"
+    ];
+    return {
+      id: `proj-sw-seed-${i + 6}`,
+      tenant_id: "tenant-default",
+      software_contract_id: "cont-sw-001",
+      project_number: `PRJ-2026-00${i + 6}`,
+      name: `Software Initiative Alpha #${i + 6}`,
+      description: "Custom digital service engineering sprint.",
+      status: (statuses[i] || "Active") as SoftwareProject["status"],
+      priority: i % 2 === 0 ? "High" : "Medium",
+      budget: 350000 + i * 40000,
+      currency: "INR",
+      start_date: "2026-10-12",
+      target_end_date: "2027-02-15",
+      notes: "Client: Enterprise Partner",
+      created_at: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
+      updated_at: new Date(Date.now() - i * 86400000).toISOString(),
+    };
+  }),
+];
+
+export const initialSoftwareSprints: SoftwareSprint[] = [
+  ...Array.from({ length: 28 }).map((_, i) => ({
+    id: `sprint-sw-${i + 1}`,
+    tenant_id: "tenant-default",
+    software_project_id: i < 5 ? `proj-sw-00${(i % 5) + 1}` : "proj-sw-001",
+    name: `Sprint ${i + 1} - Core Features Delivery`,
+    goal: `Complete milestone sprint tasks for iteration #${i + 1}.`,
+    status: i < 16 ? "Active" : i < 24 ? "Planned" : "Completed",
+    start_date: "2026-10-15",
+    end_date: "2026-10-30",
+    created_at: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - i * 86400000).toISOString(),
+  })),
+];
+
+/* ─── Backwards-compatible legacy exports ─── */
 export interface ProtoProject {
   id: string;
   name: string;
   client: string;
   status: "Active" | "Planning" | "On Hold" | "Completed";
-  progress: number; // 0–100
+  progress: number;
   deadline: string;
   projectManager: string;
 }
 
-export const protoProjects: ProtoProject[] = [
-  {
-    id: "proj-001",
-    name: "E-Commerce Platform Redesign",
-    client: "RetailMax India",
-    status: "Active",
-    progress: 72,
-    deadline: "2026-12-15",
-    projectManager: "Arjun Mehta",
-  },
-  {
-    id: "proj-002",
-    name: "Mobile Banking App",
-    client: "FinServ Corp",
-    status: "Active",
-    progress: 45,
-    deadline: "2027-02-28",
-    projectManager: "Priya Sharma",
-  },
-  {
-    id: "proj-003",
-    name: "HR Management System",
-    client: "TalentBridge",
-    status: "Planning",
-    progress: 10,
-    deadline: "2027-04-30",
-    projectManager: "Rohan Gupta",
-  },
-  {
-    id: "proj-004",
-    name: "IoT Dashboard",
-    client: "SmartFactory Ltd",
-    status: "On Hold",
-    progress: 30,
-    deadline: "2027-01-20",
-    projectManager: "Sneha Reddy",
-  },
-  {
-    id: "proj-005",
-    name: "CRM Integration Suite",
-    client: "GlobalTech Solutions",
-    status: "Completed",
-    progress: 100,
-    deadline: "2026-09-30",
-    projectManager: "Arjun Mehta",
-  },
-  {
-    id: "proj-006",
-    name: "Supply Chain Analytics",
-    client: "LogiPrime Inc",
-    status: "Active",
-    progress: 58,
-    deadline: "2027-03-15",
-    projectManager: "Priya Sharma",
-  },
-];
-
-/* ─── Missing API: Team Workload ───
- * No endpoint exists for aggregated team workload.
- * This data would normally be derived from project-task assignments.
- */
-export interface ProtoTeamWorkload {
-  name: string;
-  tasks: number;
-}
-
-export const protoTeamWorkload: ProtoTeamWorkload[] = [
-  { name: "Arjun", tasks: 12 },
-  { name: "Priya", tasks: 9 },
-  { name: "Rohan", tasks: 7 },
-  { name: "Sneha", tasks: 11 },
-  { name: "Vikram", tasks: 5 },
-  { name: "Ananya", tasks: 8 },
-];
+export const protoProjects: ProtoProject[] = initialSoftwareProjects.slice(0, 6).map((p, idx) => ({
+  id: p.id,
+  name: p.name,
+  client: p.notes?.replace("Client: ", "") || "Enterprise Client",
+  status: (p.status === "Planned" ? "Planning" : p.status === "Cancelled" ? "On Hold" : p.status) as any,
+  progress: p.status === "Completed" ? 100 : p.status === "Active" ? 65 : 20,
+  deadline: p.target_end_date || "2026-12-31",
+  projectManager: idx % 2 === 0 ? "Arjun Mehta" : "Priya Sharma",
+}));

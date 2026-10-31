@@ -214,8 +214,8 @@ export default function Documents() {
       // Search filter (title or filename)
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
-        const matchesTitle = doc.title.toLowerCase().includes(query);
-        const matchesFile = doc.filename.toLowerCase().includes(query);
+        const matchesTitle = String(doc.title || "").toLowerCase().includes(query);
+        const matchesFile = String(doc.filename || (doc as any).original_filename || "").toLowerCase().includes(query);
         if (!matchesTitle && !matchesFile) return false;
       }
 
@@ -245,12 +245,13 @@ export default function Documents() {
   // Download action
   const handleDownload = async (doc: DocumentItem) => {
     try {
-      showToast(`Preparing download for ${doc.filename}...`);
+      const safeFilename = doc.filename || (doc as any).original_filename || "document";
+      showToast(`Preparing download for ${safeFilename}...`);
       const res = await downloadDocument(doc.id);
       if (res?.download_url || doc.file_url) {
         const link = document.createElement("a");
         link.href = resolveImageUrl(res?.download_url || doc.file_url);
-        link.download = res.filename || doc.filename;
+        link.download = res?.filename || safeFilename;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         document.body.appendChild(link);

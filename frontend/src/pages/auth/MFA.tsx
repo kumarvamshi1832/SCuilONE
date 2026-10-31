@@ -122,7 +122,8 @@ export default function MFA() {
         } else if (userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR")) {
           targetRoute = "/auditor/dashboard";
         } else if (response.tenant?.industry) {
-          targetRoute = `/${normalizeIndustry(response.tenant.industry)}/dashboard`;
+          const ind = normalizeIndustry(response.tenant.industry);
+          targetRoute = `/${ind}/dashboard`;
         }
 
         setMessage("MFA verified successfully!");

@@ -1,0 +1,71 @@
+/* Customer Portal Ticket Details */
+.cp-ticket-detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cp-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.cp-back-link:hover {
+  color: #2563eb;
+}
+
+.cp-layout.dark .cp-back-link:hover {
+  color: #38bdf8;
+}
+
+.cp-ticket-card {
+  background: var(--cp-card-bg, #ffffff);
+  border: 1px solid var(--cp-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cp-layout.dark .cp-ticket-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.cp-ticket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-bottom: 1px solid var(--cp-border, #e2e8f0);
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+}
+
+.cp-layout.dark .cp-ticket-header {
+  border-bottom-color: #334155;
+}
+
+.cp-ticket-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--cp-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.cp-layout.dark .cp-ticket-meta {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: #334155;
+}
+

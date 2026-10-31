@@ -1,20 +1,19 @@
-
 export interface DashboardSummary {
-  totalProperties: number;
-  activeListings: number;
-  totalLeads: number;
-  openDeals: number;
-  siteVisits: number;
-  bookings: number;
+  totalProperties: number | null;
+  activeListings: number | null;
+  totalLeads: number | null;
+  openDeals: number | null;
+  siteVisits: number | null;
+  bookings: number | null;
 
-  qualifiedLeads: number;
-  totalContacts: number;
-  totalAccounts: number;
-  totalDeals: number;
-  wonRevenue: number;
-  pendingTasks: number;
-  completedTasks: number;
-  overdueTasks: number;
+  qualifiedLeads: number | null;
+  totalContacts: number | null;
+  totalAccounts: number | null;
+  totalDeals: number | null;
+  wonRevenue: number | null;
+  pendingTasks: number | null;
+  completedTasks: number | null;
+  overdueTasks: number | null;
 
   leadStatusBreakdown: {
     status: string;

@@ -1,0 +1,156 @@
+/* Customer Portal Dashboard Styles */
+.cp-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Welcome Banner */
+.cp-welcome-banner {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #0284c7 100%);
+  color: #ffffff;
+  border-radius: 16px;
+  padding: 28px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.25);
+}
+
+.cp-welcome-text h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+}
+
+.cp-welcome-text p {
+  margin: 0;
+  font-size: 0.9375rem;
+  opacity: 0.9;
+}
+
+.cp-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #1e40af;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.cp-banner-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Dashboard KPIs */
+.cp-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.cp-kpi-card {
+  background: var(--cp-card-bg, #ffffff);
+  border: 1px solid var(--cp-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cp-layout.dark .cp-kpi-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.cp-kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cp-kpi-icon.blue { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+.cp-kpi-icon.amber { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+.cp-kpi-icon.purple { background: rgba(168, 85, 247, 0.12); color: #a855f7; }
+.cp-kpi-icon.emerald { background: rgba(16, 185, 129, 0.12); color: #10b981; }
+
+.cp-kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+.cp-kpi-label {
+  font-size: 0.8125rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.cp-layout.dark .cp-kpi-label {
+  color: #94a3b8;
+}
+
+/* Card Section */
+.cp-section-card {
+  background: var(--cp-card-bg, #ffffff);
+  border: 1px solid var(--cp-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cp-layout.dark .cp-section-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.cp-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.cp-section-header h2 {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.cp-section-link {
+  font-size: 0.875rem;
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cp-section-link:hover {
+  text-decoration: underline;
+}
+
+.cp-layout.dark .cp-section-link {
+  color: #38bdf8;
+}
+
