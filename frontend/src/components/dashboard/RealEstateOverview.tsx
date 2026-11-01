@@ -163,10 +163,11 @@ export default function RealEstateOverview({
   const primaryKpis = [
     {
       title: "Total Properties",
-      value: summary.totalProperties === -1 ? "-" : summary.totalProperties,
+      value: summary.totalProperties == null ? "—" : summary.totalProperties,
       colorClass: "blue",
       actionText: "View Properties",
       onClick: () => navigate(`${basePath}/properties`),
+      ariaLabel: summary.totalProperties == null ? "Total Properties: Service unavailable" : undefined,
       icon: icon(
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -176,10 +177,11 @@ export default function RealEstateOverview({
     },
     {
       title: "Active Listings",
-      value: summary.activeListings === -1 ? "-" : summary.activeListings,
+      value: summary.activeListings == null ? "—" : summary.activeListings,
       colorClass: "green",
       actionText: "View Listings",
       onClick: () => navigate(`${basePath}/properties?status=Available`),
+      ariaLabel: summary.activeListings == null ? "Active Listings: Service unavailable" : undefined,
       icon: icon(
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -189,7 +191,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Total Leads",
-      value: summary.totalLeads ?? 0,
+      value: summary.totalLeads == null ? "—" : summary.totalLeads,
       colorClass: "orange",
       actionText: "View Leads",
       onClick: () => navigate(`${basePath}/leads`),
@@ -204,10 +206,11 @@ export default function RealEstateOverview({
     },
     {
       title: "Site Visits",
-      value: summary.siteVisits === -1 ? "-" : (summary.siteVisits ?? 0),
+      value: summary.siteVisits == null ? "—" : summary.siteVisits,
       colorClass: "teal",
       actionText: "View Visits",
       onClick: () => navigate(`${basePath}/site-visits`),
+      ariaLabel: summary.siteVisits == null ? "Site Visits: Service unavailable" : undefined,
       icon: icon(
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -217,10 +220,11 @@ export default function RealEstateOverview({
     },
     {
       title: "Bookings",
-      value: summary.bookings === -1 ? "-" : (summary.bookings ?? 0),
+      value: summary.bookings == null ? "—" : summary.bookings,
       colorClass: "red",
       actionText: "View Bookings",
       onClick: () => navigate(`${basePath}/bookings`),
+      ariaLabel: summary.bookings == null ? "Bookings: Service unavailable" : undefined,
       icon: icon(
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -232,7 +236,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Open Deals",
-      value: summary.openDeals ?? 0,
+      value: summary.openDeals == null ? "—" : summary.openDeals,
       colorClass: "purple",
       actionText: "View Deals",
       onClick: () => navigate(`${basePath}/deals`),
@@ -249,7 +253,7 @@ export default function RealEstateOverview({
   const secondaryKpis = [
     {
       title: "Qualified Leads",
-      value: summary.qualifiedLeads ?? 0,
+      value: summary.qualifiedLeads == null ? "—" : summary.qualifiedLeads,
       colorClass: "green",
       onClick: () => navigate(`${basePath}/leads?status=Qualified`),
       icon: icon(
@@ -261,7 +265,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Total Contacts",
-      value: summary.totalContacts ?? 0,
+      value: summary.totalContacts == null ? "—" : summary.totalContacts,
       colorClass: "teal",
       onClick: () => navigate(`${basePath}/contacts`),
       icon: icon(
@@ -273,7 +277,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Total Accounts",
-      value: summary.totalAccounts ?? 0,
+      value: summary.totalAccounts == null ? "—" : summary.totalAccounts,
       colorClass: "blue",
       onClick: () => navigate(`${basePath}/accounts`),
       icon: icon(
@@ -284,11 +288,14 @@ export default function RealEstateOverview({
     },
     {
       title: "Won Revenue",
-      value: (summary.wonRevenue ?? 0).toLocaleString("en-IN", {
-        style: "currency",
-        currency: "INR",
-        maximumFractionDigits: 0,
-      }),
+      value:
+        summary.wonRevenue == null
+          ? "—"
+          : summary.wonRevenue.toLocaleString("en-IN", {
+              style: "currency",
+              currency: "INR",
+              maximumFractionDigits: 0,
+            }),
       colorClass: "green",
       isRevenue: true,
       onClick: () => navigate(`${basePath}/deals`),
@@ -300,7 +307,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Pending Tasks",
-      value: summary.pendingTasks ?? 0,
+      value: summary.pendingTasks == null ? "—" : summary.pendingTasks,
       colorClass: "orange",
       onClick: () => navigate(`${basePath}/tasks?status=pending`),
       icon: icon(
@@ -312,7 +319,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Completed Tasks",
-      value: summary.completedTasks ?? 0,
+      value: summary.completedTasks == null ? "—" : summary.completedTasks,
       colorClass: "teal",
       onClick: () => navigate(`${basePath}/tasks?status=completed`),
       icon: icon(
@@ -324,7 +331,7 @@ export default function RealEstateOverview({
     },
     {
       title: "Overdue Tasks",
-      value: summary.overdueTasks ?? 0,
+      value: summary.overdueTasks == null ? "—" : summary.overdueTasks,
       colorClass: "red",
       onClick: () => navigate(`${basePath}/tasks?status=overdue`),
       icon: icon(

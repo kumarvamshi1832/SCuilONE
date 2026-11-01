@@ -1,6 +1,5 @@
 import { useState } from "react";
 import "../users/Users.css";
-import { protoProjects } from "../../data/softwareCompanyProtoData";
 
 const Placeholder = ({ title, description }: { title: string; description: string }) => (
   <div style={{ padding: "32px", animation: "fadeIn 0.3s ease-in-out" }}>
@@ -55,11 +54,74 @@ export const Settings = () => (
   />
 );
 
+export const Help = () => (
+  <div style={{ padding: "32px", animation: "fadeIn 0.3s ease-in-out", maxWidth: "900px" }}>
+    <div style={{ marginBottom: "24px" }}>
+      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, margin: "0 0 8px 0" }}>Help & Support</h1>
+      <p style={{ color: "var(--text-secondary, #718096)", fontSize: "0.95rem", margin: 0 }}>
+        Knowledge base, documentation, and support contacts for SCuilONE CRM.
+      </p>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px" }}>
+      <div
+        style={{
+          padding: "24px",
+          borderRadius: "12px",
+          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--card-bg, #ffffff)",
+        }}
+      >
+        <h3 style={{ margin: "0 0 8px 0", fontSize: "1.1rem" }}>User Documentation</h3>
+        <p style={{ color: "var(--text-secondary, #718096)", fontSize: "0.9rem", margin: "0 0 16px 0" }}>
+          Learn how to manage leads, track deals, maintain property listings, and run analytics.
+        </p>
+        <span style={{ fontSize: "0.85rem", color: "#0284c7", fontWeight: 500 }}>CRM User Guide v2.4</span>
+      </div>
+      <div
+        style={{
+          padding: "24px",
+          borderRadius: "12px",
+          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--card-bg, #ffffff)",
+        }}
+      >
+        <h3 style={{ margin: "0 0 8px 0", fontSize: "1.1rem" }}>Technical Support</h3>
+        <p style={{ color: "var(--text-secondary, #718096)", fontSize: "0.9rem", margin: "0 0 16px 0" }}>
+          Encountering issues with data sync, permissions, or system integrations?
+        </p>
+        <span style={{ fontSize: "0.85rem", color: "#0284c7", fontWeight: 500 }}>support@scuilone.com</span>
+      </div>
+      <div
+        style={{
+          padding: "24px",
+          borderRadius: "12px",
+          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--card-bg, #ffffff)",
+        }}
+      >
+        <h3 style={{ margin: "0 0 8px 0", fontSize: "1.1rem" }}>System Status</h3>
+        <p style={{ color: "var(--text-secondary, #718096)", fontSize: "0.9rem", margin: "0 0 16px 0" }}>
+          Check real-time status of backend API services and database connections.
+        </p>
+        <span style={{ fontSize: "0.85rem", color: "#16a34a", fontWeight: 500 }}>● All Core Services Operational</span>
+      </div>
+    </div>
+  </div>
+);
+
 /* ─────────────────────────────────────────────────────────────────────────────
  * Dedicated Software Company Views
  * ───────────────────────────────────────────────────────────────────────────── */
 
-export const Projects = () => {
+export const Projects = () => (
+  <Placeholder
+    title="Projects"
+    description="Software delivery, milestones, sprint progress, and team assignments will be available here."
+  />
+);
+
+const protoProjects: any[] = [];
+export const LegacyProjects = () => {
   const [filter, setFilter] = useState<string>("All");
 
   const filteredProjects =

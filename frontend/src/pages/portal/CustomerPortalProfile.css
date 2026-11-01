@@ -1,0 +1,84 @@
+/* Customer Portal Profile Styles */
+.cp-profile-page {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.cp-profile-card {
+  background: var(--cp-card-bg, #ffffff);
+  border: 1px solid var(--cp-border, #e2e8f0);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cp-layout.dark .cp-profile-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.cp-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--cp-border, #e2e8f0);
+}
+
+.cp-layout.dark .cp-profile-header {
+  border-bottom-color: #334155;
+}
+
+.cp-profile-avatar-lg {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.cp-profile-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.cp-profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cp-profile-field-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cp-layout.dark .cp-profile-field-label {
+  color: #94a3b8;
+}
+
+.cp-profile-field-val {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.cp-layout.dark .cp-profile-field-val {
+  color: #f8fafc;
+}
+

@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { normalizeIndustry } from "../../utils/industryUtils";
 
 export default function ProtectedRoute() {
-  const token = sessionStorage.getItem("access_token");
+  const token = sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
   const location = useLocation();
 
   if (!token) {
@@ -10,13 +10,17 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Read authenticated user role
-  const userStr = sessionStorage.getItem("user");
+  // Read authenticated user role safely (supports string or role object)
+  const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
   let userRole = "";
   if (userStr) {
     try {
       const user = JSON.parse(userStr);
-      userRole = (user.role || "").toUpperCase();
+      const rawRole =
+        typeof user.role === "string"
+          ? user.role
+          : user.role?.name || user.role_name || "";
+      userRole = String(rawRole).trim().toUpperCase();
     } catch (e) {}
   }
   const isManager = userRole === "MANAGER" || userRole.includes("MANAGER");
@@ -33,7 +37,7 @@ export default function ProtectedRoute() {
     if (isSupport) return "/support/dashboard";
     if (isAuditor) return "/auditor/dashboard";
 
-    const tenantStr = sessionStorage.getItem("tenant");
+    const tenantStr = sessionStorage.getItem("tenant") || localStorage.getItem("tenant");
     if (tenantStr) {
       try {
         const tenant = JSON.parse(tenantStr);
@@ -44,8 +48,22 @@ export default function ProtectedRoute() {
       } catch (e) {}
     }
 
-    // Do NOT default to real-estate if tenant/industry data is not yet available
-    return null;
+    const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user?.tenant?.industry) {
+          const expectedSlug = normalizeIndustry(user.tenant.industry);
+          return `/${expectedSlug}/dashboard`;
+        }
+        if (user?.industry) {
+          const expectedSlug = normalizeIndustry(user.industry);
+          return `/${expectedSlug}/dashboard`;
+        }
+      } catch (e) {}
+    }
+
+    return "/real-estate/dashboard";
   };
 
   const expectedDashboard = getExpectedDashboard();
@@ -66,15 +84,37 @@ export default function ProtectedRoute() {
     }
   }
 
-  // For tenant admin, if tenant industry is known, enforce correct industry dashboard and routes
+  // For tenant admin, enforce correct industry dashboard and routes
   if (isTenantAdmin && expectedDashboard) {
     if (path.endsWith("/dashboard") && path !== expectedDashboard) {
       return <Navigate to={expectedDashboard} replace />;
     }
 
-    const urlIndustry = path.split("/")[1];
+    const segments = path.split("/").filter(Boolean);
+    const urlFirstSegment = segments[0] || "";
     const expectedSlug = expectedDashboard.split("/")[1];
-    if (urlIndustry && urlIndustry !== expectedSlug && urlIndustry !== "empty") {
+
+    const knownIndustries = [
+      "real-estate",
+      "software-company",
+      "education-consulting",
+      "training-institute",
+      "digital-marketing-agency",
+      "insurance-agency",
+    ];
+
+    if (knownIndustries.includes(urlFirstSegment) && urlFirstSegment !== expectedSlug) {
+      return <Navigate to={expectedDashboard} replace />;
+    }
+
+    const softwareOnlyRoutes = [
+      "software-requirements",
+      "software-estimates",
+      "software-contracts",
+      "software-projects",
+      "software-sprints",
+    ];
+    if (expectedSlug !== "software-company" && softwareOnlyRoutes.includes(urlFirstSegment)) {
       return <Navigate to={expectedDashboard} replace />;
     }
   }

@@ -22,10 +22,10 @@ import type {
 /* ─── Axios Client ─── */
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? "",
 });
 
-// Attach Authorization header from sessionStorage to all authenticated API requests
+// Attach Authorization header from sessionStorage or localStorage to all authenticated API requests
 apiClient.interceptors.request.use(
   (config) => {
     const requestUrl = config.url || "";
@@ -42,13 +42,17 @@ apiClient.interceptors.request.use(
       requestUrl.includes("/api/v1/auth/reset-password");
 
     if (!isAuthEndpoint) {
-      const token = sessionStorage.getItem("access_token");
+      const token =
+        sessionStorage.getItem("access_token") ||
+        localStorage.getItem("access_token");
       if (token) {
         if (!config.headers) {
           config.headers = new axios.AxiosHeaders();
         }
-        if (!config.headers.Authorization) {
-          config.headers.Authorization = `Bearer ${token}`;
+        if (typeof config.headers.set === "function") {
+          config.headers.set("Authorization", `Bearer ${token}`);
+        } else {
+          config.headers["Authorization"] = `Bearer ${token}`;
         }
       }
     }
@@ -57,12 +61,30 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Auto-logout on 401 Unauthorized for authenticated session requests
+// Token refresh queue handling to avoid concurrent refresh calls
+let isRefreshing = false;
+let refreshSubscribers: ((newToken: string) => void)[] = [];
+
+function onTokenRefreshed(newToken: string) {
+  refreshSubscribers.forEach((cb) => cb(newToken));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (newToken: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+// Graceful session handling on 401 Unauthorized with automatic refresh token support
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
     if (error.response && error.response.status === 401) {
-      const requestUrl = error.config?.url || "";
+      const requestUrl = originalRequest.url || "";
       const isAuthEndpoint =
         requestUrl.includes("/api/v1/auth/login") ||
         requestUrl.includes("/api/v1/auth/register") ||
@@ -73,7 +95,8 @@ apiClient.interceptors.response.use(
         requestUrl.includes("/api/v1/auth/mfa") ||
         requestUrl.includes("/api/v1/auth/forgot-password") ||
         requestUrl.includes("/api/v1/auth/verify-reset-otp") ||
-        requestUrl.includes("/api/v1/auth/reset-password");
+        requestUrl.includes("/api/v1/auth/reset-password") ||
+        requestUrl.includes("/api/v1/auth/refresh");
 
       const publicPaths = [
         "/login",
@@ -93,15 +116,94 @@ apiClient.interceptors.response.use(
           window.location.pathname.startsWith(`${path}/`)
       );
 
-      const hasSession = Boolean(sessionStorage.getItem("access_token"));
+      // Never auto-logout if user is already on a public auth page or endpoint
+      if (isAuthEndpoint || isPublicPage) {
+        return Promise.reject(error);
+      }
 
-      // Only perform auto-logout redirect if this was an authenticated session request
-      // and the user is not currently on a public/auth page
-      if (!isAuthEndpoint && !isPublicPage && hasSession) {
-        sessionStorage.removeItem("access_token");
-        sessionStorage.removeItem("user");
-        sessionStorage.removeItem("tenant");
-        window.location.href = "/login";
+      const refreshToken =
+        sessionStorage.getItem("refresh_token") ||
+        localStorage.getItem("refresh_token");
+
+      // Attempt token refresh if a refresh token is present and not already retried
+      if (refreshToken && !originalRequest._retry) {
+        if (isRefreshing) {
+          return new Promise((resolve) => {
+            addRefreshSubscriber((newToken: string) => {
+              if (originalRequest.headers && typeof originalRequest.headers.set === "function") {
+                originalRequest.headers.set("Authorization", `Bearer ${newToken}`);
+              } else if (originalRequest.headers) {
+                originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+              }
+              resolve(apiClient(originalRequest));
+            });
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          const refreshResponse = await axios.post(
+            `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/v1/auth/refresh`,
+            { refresh_token: refreshToken }
+          );
+
+          const newAccessToken = refreshResponse.data?.access_token;
+          if (newAccessToken) {
+            sessionStorage.setItem("access_token", newAccessToken);
+            if (localStorage.getItem("access_token")) {
+              localStorage.setItem("access_token", newAccessToken);
+            }
+            if (refreshResponse.data?.refresh_token) {
+              sessionStorage.setItem("refresh_token", refreshResponse.data.refresh_token);
+              if (localStorage.getItem("refresh_token")) {
+                localStorage.setItem("refresh_token", refreshResponse.data.refresh_token);
+              }
+            }
+
+            isRefreshing = false;
+            onTokenRefreshed(newAccessToken);
+
+            if (originalRequest.headers && typeof originalRequest.headers.set === "function") {
+              originalRequest.headers.set("Authorization", `Bearer ${newAccessToken}`);
+            } else if (originalRequest.headers) {
+              originalRequest.headers["Authorization"] = `Bearer ${newAccessToken}`;
+            }
+            return apiClient(originalRequest);
+          }
+        } catch {
+          isRefreshing = false;
+          refreshSubscribers = [];
+          // Refresh failed, clear session and redirect only once
+          sessionStorage.removeItem("access_token");
+          sessionStorage.removeItem("refresh_token");
+          sessionStorage.removeItem("user");
+          sessionStorage.removeItem("tenant");
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+          window.location.href = "/login";
+          return Promise.reject(error);
+        }
+      }
+
+      // If no refresh token exists, only redirect if it is a core identity endpoint
+      const isCoreIdentityEndpoint =
+        requestUrl.includes("/api/v1/users/me") ||
+        requestUrl.includes("/api/v1/auth/me");
+
+      if (isCoreIdentityEndpoint) {
+        const hasSession = Boolean(
+          sessionStorage.getItem("access_token") ||
+          localStorage.getItem("access_token")
+        );
+        if (hasSession) {
+          sessionStorage.removeItem("access_token");
+          sessionStorage.removeItem("user");
+          sessionStorage.removeItem("tenant");
+          localStorage.removeItem("access_token");
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);

@@ -1,0 +1,34 @@
+/* Customer Portal Tickets Styles */
+.cp-tickets-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cp-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.cp-page-header h1 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cp-page-header p {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin: 4px 0 0 0;
+}
+
+.cp-layout.dark .cp-page-header p {
+  color: #94a3b8;
+}
+

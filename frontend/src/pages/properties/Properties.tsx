@@ -108,6 +108,12 @@ export default function Properties() {
   };
 
   const formatApiError = (err: any, fallback: string): string => {
+    if (err?.response?.status === 404) {
+      return "The Properties service endpoint (/api/v1/properties) is currently not registered on the backend server. Please verify backend router registration.";
+    }
+    if (err?.response?.status === 403) {
+      return "Access denied: You do not have permission to view properties or the module is not enabled for your industry.";
+    }
     const detail = err?.response?.data?.detail;
     if (typeof detail === "string") return detail;
     if (Array.isArray(detail) && detail.length > 0) {
@@ -241,13 +247,16 @@ export default function Properties() {
 
   // Summary counts based on total baseline properties so filters/pagination don't distort metrics
   const summaryCounts = useMemo(() => {
+    if (error) {
+      return { total: "—", available: "—", reserved: "—", sold: "—" };
+    }
     const source = allProperties.length > 0 ? allProperties : properties;
     const total = source.length;
     const available = source.filter((p) => p.status === "Available").length;
     const reserved = source.filter((p) => p.status === "Reserved").length;
     const sold = source.filter((p) => p.status === "Sold").length;
     return { total, available, reserved, sold };
-  }, [allProperties, properties]);
+  }, [allProperties, properties, error]);
 
   // Load property images & matches when view modal opens
   const loadImages = useCallback(async (propId: string) => {
@@ -1104,7 +1113,11 @@ export default function Properties() {
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
-          <h3 style={{ margin: "0 0 6px", color: "#dc2626" }}>Unable to load properties</h3>
+          <h3 style={{ margin: "0 0 6px", color: "#dc2626" }}>
+            {error.includes("not registered") || error.includes("Not Found")
+              ? "Properties Service Unavailable"
+              : "Unable to load properties"}
+          </h3>
           <p style={{ margin: "0 0 16px", color: "#64748b" }}>{error}</p>
           <button className="btn-secondary" onClick={() => fetchPropertiesList()}>
             Retry

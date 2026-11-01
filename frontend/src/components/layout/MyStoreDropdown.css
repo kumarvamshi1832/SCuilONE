@@ -23,6 +23,16 @@
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+.mystore-label {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-weight: 600;
+}
+
 .tenant-selector.mystore-btn:hover {
   background-color: rgba(148, 163, 184, 0.12);
 }
@@ -263,4 +273,17 @@
 
 .dashboard-wrapper.dark .mystore-chevron.active-nav {
   color: #06B6D4;
+}
+
+/* ─── Breadcrumb Current Page Label ─── */
+.breadcrumb-current-page {
+  color: #64748B;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-right: 14px;
+  white-space: nowrap;
+}
+
+.dashboard-wrapper.dark .breadcrumb-current-page {
+  color: #94A3B8;
 }

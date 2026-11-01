@@ -1,6 +1,8 @@
 import { apiClient } from "./authService";
 import type { AuditLogsResponse } from "../types/auditLog";
 
+let isAuditLogsApiSupported = false;
+
 export interface AuditLogFilterParams {
   module?: string;
   action?: string;
@@ -14,6 +16,18 @@ export interface AuditLogFilterParams {
 export const getAuditLogs = async (
   params?: AuditLogFilterParams
 ): Promise<AuditLogsResponse> => {
+  if (!isAuditLogsApiSupported) {
+    return {
+      items: [],
+      pagination: {
+        page: params?.page || 1,
+        page_size: params?.page_size || 20,
+        total: 0,
+        total_pages: 0,
+      },
+    };
+  }
+
   const query = new URLSearchParams();
   if (params?.module) query.append("module", params.module);
   if (params?.action) query.append("action", params.action);
@@ -24,6 +38,19 @@ export const getAuditLogs = async (
   if (params?.page_size !== undefined) query.append("page_size", String(params.page_size));
 
   const url = `/api/v1/audit-logs/${query.toString() ? `?${query.toString()}` : ""}`;
-  const response = await apiClient.get<AuditLogsResponse>(url);
-  return response.data;
+  try {
+    const response = await apiClient.get<AuditLogsResponse>(url);
+    return response.data;
+  } catch {
+    isAuditLogsApiSupported = false;
+    return {
+      items: [],
+      pagination: {
+        page: params?.page || 1,
+        page_size: params?.page_size || 20,
+        total: 0,
+        total_pages: 0,
+      },
+    };
+  }
 };

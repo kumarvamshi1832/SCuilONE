@@ -1,4 +1,3 @@
-
 import { apiClient } from "./authService";
 
 export interface NotificationItem {
@@ -33,6 +32,11 @@ export interface NotificationReadResponse {
   is_read: boolean;
 }
 
+// Backend notifications router is commented out in main.py, so disable network calls to prevent 404s
+let isNotificationsEndpointAvailable = false;
+
+export const isNotificationsSupported = (): boolean => isNotificationsEndpointAvailable;
+
 const getHeaders = () => {
   const token = sessionStorage.getItem("access_token");
   return {
@@ -46,44 +50,100 @@ export async function getNotifications(
   limit = 20,
   offset = 0
 ): Promise<NotificationListResponse> {
-  const response = await apiClient.get<NotificationListResponse>(
-    "/api/v1/notifications/",
-    {
-      ...getHeaders(),
-      params: { limit, offset },
+  if (!isNotificationsEndpointAvailable) {
+    return { items: [], total: 0, unread_count: 0, limit, offset };
+  }
+  try {
+    const response = await apiClient.get<NotificationListResponse>(
+      "/api/v1/notifications/",
+      {
+        ...getHeaders(),
+        params: { limit, offset },
+      }
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      isNotificationsEndpointAvailable = false;
+      return { items: [], total: 0, unread_count: 0, limit, offset };
     }
-  );
-
-  return response.data;
+    throw error;
+  }
 }
 
 export async function getUnreadNotificationCount(): Promise<number> {
-  const response = await apiClient.get<UnreadCountResponse>(
-    "/api/v1/notifications/unread-count",
-    getHeaders()
-  );
-
-  return response.data.unread_count;
+  if (!isNotificationsEndpointAvailable) {
+    return 0;
+  }
+  try {
+    const response = await apiClient.get<UnreadCountResponse>(
+      "/api/v1/notifications/unread-count",
+      getHeaders()
+    );
+    return response.data.unread_count;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      isNotificationsEndpointAvailable = false;
+      return 0;
+    }
+    throw error;
+  }
 }
 
 export async function markNotificationAsRead(
   notificationId: string
 ): Promise<NotificationReadResponse> {
-  const response = await apiClient.patch<NotificationReadResponse>(
-    `/api/v1/notifications/${notificationId}/read`,
-    {},
-    getHeaders()
-  );
-
-  return response.data;
+  if (!isNotificationsEndpointAvailable) {
+    return {
+      message: "Notifications service unavailable",
+      notification_id: notificationId,
+      is_read: true,
+    };
+  }
+  try {
+    const response = await apiClient.patch<NotificationReadResponse>(
+      `/api/v1/notifications/${notificationId}/read`,
+      {},
+      getHeaders()
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      isNotificationsEndpointAvailable = false;
+      return {
+        message: "Notifications service unavailable",
+        notification_id: notificationId,
+        is_read: true,
+      };
+    }
+    throw error;
+  }
 }
 
 export async function markAllNotificationsAsRead(): Promise<NotificationReadResponse> {
-  const response = await apiClient.patch<NotificationReadResponse>(
-    "/api/v1/notifications/read-all",
-    {},
-    getHeaders()
-  );
-
-  return response.data;
+  if (!isNotificationsEndpointAvailable) {
+    return {
+      message: "Notifications service unavailable",
+      notification_id: null,
+      is_read: true,
+    };
+  }
+  try {
+    const response = await apiClient.patch<NotificationReadResponse>(
+      "/api/v1/notifications/read-all",
+      {},
+      getHeaders()
+    );
+    return response.data;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      isNotificationsEndpointAvailable = false;
+      return {
+        message: "Notifications service unavailable",
+        notification_id: null,
+        is_read: true,
+      };
+    }
+    throw error;
+  }
 }

@@ -50,22 +50,25 @@ export default function IndustryDashboard() {
 
   const metrics = summary
     ? [
-        { label: config.leadLabel, value: summary.totalLeads },
-        { label: "Qualified Leads", value: summary.qualifiedLeads },
-        { label: config.contactLabel, value: summary.totalContacts },
-        { label: config.accountLabel, value: summary.totalAccounts },
-        { label: config.dealLabel, value: summary.totalDeals },
-        { label: "Open Deals", value: summary.openDeals },
+        { label: config.leadLabel, value: summary.totalLeads ?? "—" },
+        { label: "Qualified Leads", value: summary.qualifiedLeads ?? "—" },
+        { label: config.contactLabel, value: summary.totalContacts ?? "—" },
+        { label: config.accountLabel, value: summary.totalAccounts ?? "—" },
+        { label: config.dealLabel, value: summary.totalDeals ?? "—" },
+        { label: "Open Deals", value: summary.openDeals ?? "—" },
         {
           label: "Won Revenue",
-          value: new Intl.NumberFormat("en-IN", {
-            style: "currency",
-            currency: "INR",
-            maximumFractionDigits: 0,
-          }).format(summary.wonRevenue),
+          value:
+            summary.wonRevenue == null
+              ? "—"
+              : new Intl.NumberFormat("en-IN", {
+                  style: "currency",
+                  currency: "INR",
+                  maximumFractionDigits: 0,
+                }).format(summary.wonRevenue),
         },
-        { label: "Pending Tasks", value: summary.pendingTasks },
-        { label: "Overdue Tasks", value: summary.overdueTasks },
+        { label: "Pending Tasks", value: summary.pendingTasks ?? "—" },
+        { label: "Overdue Tasks", value: summary.overdueTasks ?? "—" },
       ]
     : [];
 

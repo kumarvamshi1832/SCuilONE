@@ -1,0 +1,208 @@
+/* Customer Portal Layout Styles */
+.cp-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--cp-bg, #f8fafc);
+  color: var(--cp-text, #0f172a);
+  font-family: inherit;
+}
+
+.cp-layout.dark {
+  --cp-bg: #0b1120;
+  --cp-text: #f8fafc;
+  --cp-card-bg: #1e293b;
+  --cp-border: #334155;
+}
+
+/* Navbar */
+.cp-navbar {
+  background: var(--cp-card-bg, #ffffff);
+  border-bottom: 1px solid var(--cp-border, #e2e8f0);
+  padding: 0 24px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cp-navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cp-brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.cp-brand-text {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.cp-brand-tag {
+  font-size: 0.6875rem;
+  background: rgba(14, 165, 233, 0.15);
+  color: #0284c7;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.cp-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cp-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.cp-nav-link:hover {
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.cp-layout.dark .cp-nav-link {
+  color: #94a3b8;
+}
+
+.cp-layout.dark .cp-nav-link:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cp-nav-link.active {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  font-weight: 600;
+}
+
+.cp-layout.dark .cp-nav-link.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.cp-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cp-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--cp-border, #e2e8f0);
+}
+
+.cp-layout.dark .cp-user-badge {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #334155;
+}
+
+.cp-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cp-user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.cp-user-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.cp-user-account {
+  font-size: 0.6875rem;
+  color: #64748b;
+}
+
+.cp-layout.dark .cp-user-account {
+  color: #94a3b8;
+}
+
+.cp-logout-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+
+.cp-logout-btn:hover {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.cp-layout.dark .cp-logout-btn:hover {
+  background: rgba(220, 38, 38, 0.2);
+}
+
+/* Main Content Area */
+.cp-main-content {
+  flex: 1;
+  padding: 28px 24px 60px 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Footer */
+.cp-footer {
+  border-top: 1px solid var(--cp-border, #e2e8f0);
+  padding: 20px 24px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.cp-layout.dark .cp-footer {
+  border-color: #334155;
+  color: #94a3b8;
+}
+

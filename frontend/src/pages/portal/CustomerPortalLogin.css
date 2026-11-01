@@ -1,0 +1,176 @@
+/* Customer Portal Auth Pages Styles */
+.cp-auth-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  padding: 24px;
+  color: #f8fafc;
+  font-family: inherit;
+}
+
+.cp-auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 36px 32px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+}
+
+.cp-auth-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.cp-auth-logo {
+  width: 52px;
+  height: 52px;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  color: #ffffff;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+}
+
+.cp-auth-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 6px 0;
+}
+
+.cp-auth-subtitle {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.cp-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cp-auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cp-auth-field label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.cp-auth-input-wrapper {
+  position: relative;
+}
+
+.cp-auth-input-wrapper input {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #f8fafc;
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.15s;
+}
+
+.cp-auth-input-wrapper input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.cp-auth-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+}
+
+.cp-auth-btn-primary {
+  width: 100%;
+  padding: 11px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cp-auth-btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.cp-auth-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cp-auth-footer {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #334155;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cp-auth-link {
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.cp-auth-link:hover {
+  text-decoration: underline;
+}
+
+/* Password Checklist in Activate */
+.password-requirements {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.req-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.req-item.met {
+  color: #34d399;
+}
+

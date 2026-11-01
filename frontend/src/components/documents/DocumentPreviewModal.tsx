@@ -54,11 +54,13 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
 
   if (!isOpen || !doc) return null;
 
-  const fileMeta = getFileIcon(doc.filename, doc.content_type);
-  const ext = (doc.filename.split(".").pop() || "").toLowerCase();
-  const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
-  const isPdf = ext === "pdf" || doc.content_type.includes("pdf");
-  const isText = ["txt", "csv"].includes(ext);
+  const safeFilename = doc?.filename || (doc as any)?.original_filename || (doc as any)?.name || "document.pdf";
+  const safeContentType = String(doc?.content_type || "").toLowerCase();
+  const fileMeta = getFileIcon(safeFilename, doc?.content_type);
+  const ext = (safeFilename.split(".").pop() || "").toLowerCase();
+  const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext) || safeContentType.includes("image");
+  const isPdf = ext === "pdf" || safeContentType.includes("pdf");
+  const isText = ["txt", "csv"].includes(ext) || safeContentType.includes("text");
 
   const formattedCreated = doc.created_at
     ? new Date(doc.created_at).toLocaleString("en-US", {
