@@ -19,7 +19,7 @@ class SoftwareInvoice(Base):
         Index("ix_software_invoices_tenant_status", "tenant_id", "status"),
         Index("ix_software_invoices_tenant_project", "tenant_id", "project_id"),
         CheckConstraint("subtotal >= 0 AND tax_total >= 0 AND total_amount >= 0", name="ck_software_invoices_amounts_nonnegative"),
-        CheckConstraint("status IN ('Draft', 'Sent', 'Partially Paid', 'Paid', 'Void')", name="ck_software_invoices_status"),
+        CheckConstraint("status IN ('Draft', 'Sent', 'Partially Paid', 'Paid', 'Credited', 'Void')", name="ck_software_invoices_status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -41,6 +41,9 @@ class SoftwareInvoice(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     items: Mapped[list["SoftwareInvoiceItem"]] = relationship("SoftwareInvoiceItem", back_populates="invoice", cascade="all, delete-orphan", order_by="SoftwareInvoiceItem.created_at")
+    credit_notes: Mapped[list["SoftwareCreditNote"]] = relationship(
+        "SoftwareCreditNote", order_by="SoftwareCreditNote.created_at"
+    )
     payments: Mapped[list["SoftwareInvoicePayment"]] = relationship("SoftwareInvoicePayment", back_populates="invoice", cascade="all, delete-orphan", order_by="SoftwareInvoicePayment.payment_date")
 
 
@@ -73,16 +76,19 @@ class SoftwareInvoicePayment(Base):
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_software_invoice_payments_amount_positive"),
         Index("ix_software_invoice_payments_tenant_invoice", "tenant_id", "invoice_id"),
-        # A non-empty transaction reference must be unique across all invoices
-        # for one tenant. Empty/NULL references remain allowed for methods that
-        # do not provide a bank/provider transaction identifier.
+        CheckConstraint("status IN ('Received', 'Reversed')", name="ck_software_invoice_payments_status"),
+        # The same method + transaction reference cannot be recorded twice for
+        # a tenant while the payment is still counted (reversed ones free it).
         Index(
-            "uq_software_invoice_payments_tenant_reference",
+            "uq_software_invoice_payments_tenant_method_reference",
             "tenant_id",
+            text("lower(btrim(payment_method))"),
             text("lower(btrim(transaction_reference))"),
             unique=True,
             postgresql_where=text(
-                "transaction_reference IS NOT NULL AND btrim(transaction_reference) <> ''"
+                "transaction_reference IS NOT NULL "
+                "AND btrim(transaction_reference) <> '' "
+                "AND status = 'Received'"
             ),
         ),
     )
@@ -97,5 +103,28 @@ class SoftwareInvoicePayment(Base):
     payment_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="Received", server_default="Received")
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reversed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    reversal_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     invoice: Mapped["SoftwareInvoice"] = relationship("SoftwareInvoice", back_populates="payments")
+
+
+class SoftwareCreditNote(Base):
+    __tablename__ = "software_credit_notes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "credit_note_number", name="uq_software_credit_notes_tenant_number"),
+        CheckConstraint("amount > 0", name="ck_software_credit_notes_amount_positive"),
+        Index("ix_software_credit_notes_tenant_invoice", "tenant_id", "invoice_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("software_invoices.id"), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    credit_note_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    issue_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

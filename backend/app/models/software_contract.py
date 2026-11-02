@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -16,10 +17,17 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.connection import Base
+from app.models.software_contract_milestone import SoftwareContractMilestone
 
 
 class SoftwareContract(Base):
     __tablename__ = "software_contracts"
+    __table_args__ = (
+        CheckConstraint(
+            "milestone_billing_mode IN ('Sequential', 'Parallel')",
+            name="ck_software_contracts_milestone_billing_mode",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -159,6 +167,15 @@ class SoftwareContract(Base):
     payment_terms: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    # Sequential: a milestone can only become Ready once the previous one is
+    # paid. Parallel: milestones can be triggered independently.
+    milestone_billing_mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="Sequential",
+        server_default="Sequential",
     )
 
     terms_and_conditions: Mapped[str | None] = mapped_column(

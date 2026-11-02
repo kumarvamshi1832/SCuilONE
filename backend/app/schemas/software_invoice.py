@@ -15,7 +15,7 @@ class SoftwareInvoiceItemCreate(BaseModel):
 
 
 class SoftwareInvoiceCreate(BaseModel):
-    invoice_number: str = Field(min_length=1, max_length=50)
+    invoice_number: str | None = Field(default=None, max_length=50)  # blank = auto-number
     project_id: UUID
     software_contract_id: UUID
     issue_date: date | None = None
@@ -34,6 +34,28 @@ class SoftwareInvoicePaymentCreate(BaseModel):
     transaction_reference: str | None = Field(default=None, max_length=150)
     payment_date: date | None = None
     notes: str | None = Field(default=None, max_length=2000)
+
+
+class SoftwareInvoicePaymentReverse(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class SoftwareCreditNoteCreate(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class SoftwareCreditNoteResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    invoice_id: UUID
+    created_by: UUID | None
+    credit_note_number: str
+    issue_date: date
+    amount: Decimal
+    reason: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SoftwareInvoiceItemResponse(BaseModel):
@@ -62,6 +84,9 @@ class SoftwareInvoicePaymentResponse(BaseModel):
     transaction_reference: str | None
     payment_date: date
     notes: str | None
+    status: str
+    reversed_at: datetime | None
+    reversal_reason: str | None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -81,11 +106,15 @@ class SoftwareInvoiceResponse(BaseModel):
     tax_total: Decimal
     total_amount: Decimal
     amount_paid: Decimal
+    credited_amount: Decimal
     balance_due: Decimal
+    is_overdue: bool
+    days_overdue: int
     notes: str | None
     sent_at: datetime | None
     created_at: datetime
     updated_at: datetime
     items: list[SoftwareInvoiceItemResponse]
     payments: list[SoftwareInvoicePaymentResponse]
+    credit_notes: list[SoftwareCreditNoteResponse]
     model_config = ConfigDict(from_attributes=True)

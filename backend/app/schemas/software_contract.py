@@ -90,6 +90,7 @@ class SoftwareContractCreate(BaseModel):
     assumptions: str | None = None
     acceptance_criteria: str | None = None
     payment_terms: str | None = None
+    milestone_billing_mode: Literal["Sequential", "Parallel"] = "Sequential"
     payment_milestones: list[SoftwareContractMilestoneCreate] = Field(default_factory=list, max_length=20)
     terms_and_conditions: str | None = None
     notes: str | None = None
@@ -141,6 +142,7 @@ class SoftwareContractUpdate(BaseModel):
     assumptions: str | None = None
     acceptance_criteria: str | None = None
     payment_terms: str | None = None
+    milestone_billing_mode: Literal["Sequential", "Parallel"] | None = None
     terms_and_conditions: str | None = None
     notes: str | None = None
 
@@ -189,6 +191,7 @@ class SoftwareContractResponse(BaseModel):
     assumptions: str | None
     acceptance_criteria: str | None
     payment_terms: str | None
+    milestone_billing_mode: str
     terms_and_conditions: str | None
     payment_milestones: list[SoftwareContractMilestoneResponse] = Field(default_factory=list)
 
