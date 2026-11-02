@@ -59,7 +59,7 @@ class SoftwareContractMilestoneReadyRequest(BaseModel):
 
 
 class SoftwareContractMilestoneInvoiceRequest(BaseModel):
-    invoice_number: str | None = Field(default=None, min_length=1, max_length=50)
+    invoice_number: str | None = Field(default=None, max_length=50)  # blank or omitted = auto-number
     due_date: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
 
