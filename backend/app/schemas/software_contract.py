@@ -176,6 +176,8 @@ class SoftwareContractResponse(BaseModel):
     description: str | None
 
     currency: str
+    billing_type: Literal["Fixed Price", "Time & Material"]
+    hourly_rate: Decimal | None
     contract_value: Decimal
 
     issue_date: date

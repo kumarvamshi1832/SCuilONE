@@ -411,6 +411,8 @@ def create_estimate(
         title=payload.title,
         description=payload.description,
         currency=payload.currency,
+        billing_type=payload.billing_type,
+        hourly_rate=payload.hourly_rate,
         issue_date=payload.issue_date,
         expiry_date=payload.expiry_date,
         status=payload.status,
@@ -561,6 +563,15 @@ def update_estimate(
     if "status" in changes and changes["status"] is None:
         raise HTTPException(status_code=422, detail="Status cannot be null")
 
+    effective_billing_type = changes.get("billing_type", estimate.billing_type)
+    effective_hourly_rate = changes.get("hourly_rate", estimate.hourly_rate)
+    if effective_billing_type == "Time & Material" and effective_hourly_rate is None:
+        raise HTTPException(status_code=422, detail="hourly_rate is required for Time & Material estimates")
+    if effective_billing_type == "Fixed Price" and effective_hourly_rate is not None:
+        raise HTTPException(status_code=422, detail="hourly_rate is only applicable to Time & Material estimates")
+    if "billing_type" in changes and changes["billing_type"] is None:
+        raise HTTPException(status_code=422, detail="billing_type cannot be null")
+
     if "issue_date" in changes and changes["issue_date"] is None:
         raise HTTPException(status_code=422, detail="Issue date cannot be null")
 
@@ -622,6 +633,8 @@ def update_estimate(
             "description",
             "assigned_to",
             "currency",
+            "billing_type",
+            "hourly_rate",
             "issue_date",
             "expiry_date",
             "status",
@@ -738,6 +751,8 @@ def create_estimate_revision(
         title=source.title,
         description=source.description,
         currency=source.currency,
+        billing_type=source.billing_type,
+        hourly_rate=source.hourly_rate,
         issue_date=date.today(),
         expiry_date=None,
         status="Draft",

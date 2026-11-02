@@ -158,6 +158,8 @@ def build_estimate_snapshot(estimate: SoftwareEstimate):
         "title": estimate.title,
         "description": estimate.description,
         "currency": estimate.currency,
+        "billing_type": estimate.billing_type,
+        "hourly_rate": str(estimate.hourly_rate) if estimate.hourly_rate is not None else None,
         "issue_date": (
             estimate.issue_date.isoformat()
             if estimate.issue_date
@@ -283,6 +285,8 @@ def create_software_contract(
             else estimate.description
         ),
         currency=estimate.currency,
+        billing_type=estimate.billing_type,
+        hourly_rate=estimate.hourly_rate,
         contract_value=Decimal(str(estimate.total_amount)),
         issue_date=payload.issue_date or date.today(),
         start_date=payload.start_date,

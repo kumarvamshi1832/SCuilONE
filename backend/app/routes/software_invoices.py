@@ -186,12 +186,23 @@ def create_invoice(data: SoftwareInvoiceCreate, current_user: dict = Depends(req
     )
     subtotal_total = Decimal("0.00")
     tax_total = Decimal("0.00")
+    has_time_entries = any(item.time_entry_id is not None for item in data.items)
+    if contract.billing_type == "Time & Material":
+        if not has_time_entries:
+            raise HTTPException(status_code=400, detail="Time & Material invoices must include approved time entries")
+        if contract.hourly_rate is None or contract.hourly_rate <= 0:
+            raise HTTPException(status_code=400, detail="Contract hourly rate is not configured")
+    elif has_time_entries:
+        raise HTTPException(status_code=400, detail="Time entries can only be invoiced under a Time & Material contract")
     for item_data in data.items:
         description = item_data.description.strip()
         quantity = Decimal(item_data.quantity).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
         unit_price = money(Decimal(item_data.unit_price))
         tax_percent = Decimal(item_data.tax_percent)
         time_entry_id = item_data.time_entry_id
+        if time_entry_id and contract.billing_type == "Time & Material":
+            if unit_price != money(Decimal(str(contract.hourly_rate))):
+                raise HTTPException(status_code=400, detail="Invoice hourly rate must match the contract rate")
         if time_entry_id:
             entry = db.query(SoftwareTimeEntry).filter(
                 SoftwareTimeEntry.id == time_entry_id, SoftwareTimeEntry.tenant_id == tenant_id
