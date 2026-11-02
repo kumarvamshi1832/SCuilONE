@@ -119,6 +119,12 @@ permissions = [
     ("software_contract.create", "Create software contracts"),
     ("software_contract.update", "Update software contracts"),
     ("software_contract.delete", "Delete software contracts"),
+    ("software_invoice.view", "View software invoices and billing summary"),
+    ("software_invoice.create", "Create software invoices"),
+    ("software_invoice.update", "Send or void software invoices"),
+    ("software_payment.record", "Record software invoice payments"),
+    ("software_payment.reverse", "Reverse software invoice payments"),
+    ("software_credit_note.create", "Issue software invoice credit notes"),
 
     ("software_project.view", "View software projects"),
     ("software_project.create", "Create software projects"),

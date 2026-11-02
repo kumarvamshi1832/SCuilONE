@@ -27,6 +27,12 @@ def get_current_user(
     db: Session = Depends(get_db)
 ):
     payload = decode_access_token(credentials.credentials)
+    if payload.get("portal_type"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Customer portal tokens cannot access staff resources",
+        )
+
     token_purpose = payload.get("purpose", "access")
 
     if token_purpose in {"mfa_enrollment", "mfa_challenge"}:

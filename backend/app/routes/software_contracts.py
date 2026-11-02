@@ -12,6 +12,7 @@ from app.core.permissions import require_permission
 from app.models.software_contract import SoftwareContract
 from app.models.software_contract_milestone import SoftwareContractMilestone
 from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem
+from app.services.document_numbers import next_unused_number
 from app.models.software_estimate import SoftwareEstimate
 from app.models.software_estimate_item import SoftwareEstimateItem
 from app.models.tenant import Tenant
@@ -131,6 +132,7 @@ def contract_snapshot(contract: SoftwareContract):
         "title": contract.title,
         "contract_value": str(contract.contract_value),
         "currency": contract.currency,
+        "milestone_billing_mode": contract.milestone_billing_mode,
         "status": contract.status,
         "start_date": (
             contract.start_date.isoformat()
@@ -292,6 +294,7 @@ def create_software_contract(
         assumptions=payload.assumptions,
         acceptance_criteria=payload.acceptance_criteria,
         payment_terms=payload.payment_terms,
+        milestone_billing_mode=payload.milestone_billing_mode,
         terms_and_conditions=(
             payload.terms_and_conditions
             if payload.terms_and_conditions is not None
@@ -443,7 +446,11 @@ def update_software_contract(
 
     # Validate assignee
     if "assigned_to" in changes:
-        validate_assignee(db, tenant_id, changes["assigned_to"])
+        validate_assignee(
+            db,
+            tenant_id,
+            changes["assigned_to"],
+        )
 
     # Validate start and end dates
     start_date = changes.get("start_date", contract.start_date)
@@ -472,7 +479,8 @@ def update_software_contract(
 
         if requested_status != contract.status:
             allowed_next_statuses = CONTRACT_STATUS_TRANSITIONS.get(
-                contract.status, set()
+                contract.status,
+                set(),
             )
 
             if requested_status not in allowed_next_statuses:
@@ -483,6 +491,38 @@ def update_software_contract(
                         f"'{contract.status}' to '{requested_status}'"
                     ),
                 )
+
+    # A contract can only be completed when every milestone is Paid.
+    if requested_status == "Completed":
+        if not contract.payment_milestones:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A contract cannot be completed because it has "
+                    "no payment milestones"
+                ),
+            )
+
+        unpaid_milestones = [
+            milestone
+            for milestone in contract.payment_milestones
+            if milestone.status != "Paid"
+        ]
+
+        if unpaid_milestones:
+            unpaid_names = ", ".join(
+                milestone.name
+                for milestone in unpaid_milestones
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A contract can only be completed when all "
+                    "payment milestones are Paid. Unpaid milestones: "
+                    f"{unpaid_names}"
+                ),
+            )
 
     # Automatically set signed_date when a contract is signed
     if (
@@ -496,8 +536,16 @@ def update_software_contract(
     for field, value in changes.items():
         setattr(contract, field, value)
 
-    if changes.get("status") in {"Signed", "Active"} and contract.payment_milestones:
-        first_milestone = min(contract.payment_milestones, key=lambda item: item.sequence)
+    # Automatically activate the first milestone when contract is Signed or Active
+    if (
+        changes.get("status") in {"Signed", "Active"}
+        and contract.payment_milestones
+    ):
+        first_milestone = min(
+            contract.payment_milestones,
+            key=lambda item: item.sequence,
+        )
+
         if first_milestone.status == "Pending":
             first_milestone.status = "Ready"
 
@@ -523,6 +571,7 @@ def update_software_contract(
 
     except IntegrityError:
         db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="The contract number already exists",
@@ -531,7 +580,6 @@ def update_software_contract(
     except Exception:
         db.rollback()
         raise
-
 @router.post(
     "/{contract_id}/milestones/{milestone_id}/ready",
     response_model=SoftwareContractMilestoneResponse,
@@ -556,11 +604,13 @@ def mark_contract_milestone_ready(
         raise HTTPException(status_code=409, detail="A contract must be Signed or Active before billing milestones can be activated")
     if milestone.status != "Pending":
         raise HTTPException(status_code=409, detail=f"Only Pending milestones can be activated; current status is '{milestone.status}'")
-    previous = db.query(SoftwareContractMilestone).filter(
-        SoftwareContractMilestone.tenant_id == tenant_id,
-        SoftwareContractMilestone.contract_id == contract.id,
-        SoftwareContractMilestone.sequence < milestone.sequence,
-    ).order_by(SoftwareContractMilestone.sequence.desc()).first()
+    previous = None
+    if contract.milestone_billing_mode == "Sequential":
+        previous = db.query(SoftwareContractMilestone).filter(
+            SoftwareContractMilestone.tenant_id == tenant_id,
+            SoftwareContractMilestone.contract_id == contract.id,
+            SoftwareContractMilestone.sequence < milestone.sequence,
+        ).order_by(SoftwareContractMilestone.sequence.desc()).first()
     if previous and previous.status != "Paid":
         raise HTTPException(status_code=409, detail=f"Previous milestone '{previous.name}' must be fully paid before this milestone can be activated")
     milestone.status = "Ready"
@@ -572,11 +622,24 @@ def mark_contract_milestone_ready(
     return milestone
 
 
+def contract_tax_ratio(contract: SoftwareContract) -> Decimal:
+    """Share of a gross (tax-inclusive) amount that is tax, from the signed estimate."""
+    snapshot = contract.estimate_snapshot or {}
+    try:
+        total = Decimal(str(snapshot.get("total_amount")))
+        tax = Decimal(str(snapshot.get("tax_amount")))
+    except Exception:
+        return Decimal("0")
+    if total <= 0 or tax <= 0 or tax >= total:
+        return Decimal("0")
+    return tax / total
+
+
 @router.post(
     "/{contract_id}/milestones/{milestone_id}/invoice",
     response_model=SoftwareContractMilestoneResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission("software_contract.create"))],
+    dependencies=[Depends(require_permission("software_invoice.create"))],
 )
 def create_invoice_for_contract_milestone(
     contract_id: uuid.UUID, milestone_id: uuid.UUID,
@@ -604,20 +667,38 @@ def create_invoice_for_contract_milestone(
     issue_date = date.today()
     if payload.due_date and payload.due_date < issue_date:
         raise HTTPException(status_code=422, detail="due_date cannot be before the invoice issue date")
-    invoice_number = (payload.invoice_number or f"SINV-{date.today():%Y%m%d}-{uuid.uuid4().hex[:8].upper()}").strip()
-    if not invoice_number:
+    if payload.invoice_number is not None and not payload.invoice_number.strip():
         raise HTTPException(status_code=422, detail="invoice_number cannot be blank")
+    if payload.invoice_number:
+        invoice_number = payload.invoice_number.strip()
+    else:
+        invoice_number = next_unused_number(
+            db, tenant_id, "INV",
+            lambda number: db.query(SoftwareInvoice.id).filter(
+                SoftwareInvoice.tenant_id == tenant_id, SoftwareInvoice.invoice_number == number
+            ).first() is not None,
+            issue_date.year,
+        )
+    # Milestone amounts are the tax-inclusive contract value; split out the tax
+    # using the rate from the signed estimate so the invoice shows GST correctly.
+    gross = Decimal(str(milestone.amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    tax_amount = (gross * contract_tax_ratio(contract)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    net_amount = gross - tax_amount
+    tax_percent = (
+        (tax_amount / net_amount * Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if net_amount > 0 else Decimal("0.00")
+    )
     invoice = SoftwareInvoice(
         tenant_id=tenant_id, project_id=project.id, software_contract_id=contract.id,
         created_by=user_id, invoice_number=invoice_number, currency=contract.currency,
         issue_date=issue_date, due_date=payload.due_date, status="Draft",
-        subtotal=milestone.amount, tax_total=Decimal("0.00"), total_amount=milestone.amount,
+        subtotal=net_amount, tax_total=tax_amount, total_amount=gross,
         notes=payload.notes or f"Payment milestone: {milestone.name} ({milestone.percentage}%)",
     )
     invoice.items.append(SoftwareInvoiceItem(
         tenant_id=tenant_id, description=f"{milestone.name} - {milestone.percentage}% milestone",
-        quantity=Decimal("1.0000"), unit_price=milestone.amount, tax_percent=Decimal("0.00"),
-        line_subtotal=milestone.amount, line_tax=Decimal("0.00"), line_total=milestone.amount,
+        quantity=Decimal("1.0000"), unit_price=net_amount, tax_percent=tax_percent,
+        line_subtotal=net_amount, line_tax=tax_amount, line_total=gross,
     ))
     milestone.status = "Invoiced"
     try:

@@ -183,3 +183,74 @@ async def send_customer_portal_invitation_email(
         message, hostname=settings.SMTP_HOST, port=settings.SMTP_PORT,
         username=settings.SMTP_USERNAME, password=settings.SMTP_PASSWORD, start_tls=True
     )
+
+
+
+def _clean_header_text(value: str, limit: int = 120) -> str:
+    """Remove control characters so user-entered text can never break a header."""
+    return "".join(ch for ch in str(value) if ch.isprintable())[:limit].strip()
+
+
+def send_customer_payment_reminder_email(
+    recipient_email: str,
+    customer_name: str,
+    business_name: str,
+    invoice_number: str,
+    outstanding_amount: str,
+    currency: str,
+    due_date: str,
+    days_overdue: int = 0,
+    reply_to: str | None = None,
+) -> None:
+    """Payment reminder sent to a customer on behalf of the tenant's business."""
+    recipient_email = _clean_header_text(recipient_email, 254)
+
+    if not recipient_email or "@" not in recipient_email or " " in recipient_email:
+        raise ValueError("Invalid customer email address")
+
+    business = _clean_header_text(business_name, 80) or "Your service provider"
+    number = _clean_header_text(invoice_number, 50)
+    name = _clean_header_text(customer_name, 80) or "Customer"
+
+    if days_overdue > 0:
+        subject = f"Payment reminder: invoice {number} is overdue"
+        intro = (
+            f"This is a reminder that invoice {number} was due on {due_date} "
+            f"and is now {days_overdue} day(s) overdue."
+        )
+    else:
+        subject = f"Payment reminder: invoice {number} is due on {due_date}"
+        intro = f"This is a friendly reminder that invoice {number} is due on {due_date}."
+
+    email = EmailMessage()
+    email["From"] = settings.SMTP_FROM_EMAIL
+    email["To"] = recipient_email
+    email["Subject"] = f"{business}: {subject}"
+
+    if reply_to:
+        cleaned_reply_to = _clean_header_text(reply_to, 254)
+        if "@" in cleaned_reply_to and " " not in cleaned_reply_to:
+            email["Reply-To"] = cleaned_reply_to
+
+    email.set_content(
+        f"""Dear {name},
+
+{intro}
+
+Outstanding amount: {outstanding_amount} {currency}
+
+If you have already made this payment, please ignore this message or reply with the payment details so we can update our records.
+
+Regards,
+{business}
+"""
+    )
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+        server.ehlo()
+        server.starttls(context=ssl.create_default_context())
+        server.ehlo()
+        server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        server.send_message(email)
+
+    logger.info("Customer payment reminder sent for invoice %s", number)

@@ -54,9 +54,12 @@ from app.models.software_sprint import SoftwareSprint
 from app.models.industry_pack import IndustryPack
 from app.models.tenant_industry_config import TenantIndustryConfig
 from app.models.software_time_entry import SoftwareTimeEntry
-from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment
+from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment, SoftwareCreditNote
+from app.models.document_sequence import DocumentSequence
 from app.models.support_ticket import SupportTicket, SupportTicketComment
 from app.models.customer_portal import CustomerPortalUser, CustomerPortalInvitation, CustomerPortalSession
+from app.models.software_invoice_reminder import SoftwareInvoiceReminder
+
 
 config = context.config
 

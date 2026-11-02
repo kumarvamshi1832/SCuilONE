@@ -39,6 +39,12 @@ role_permissions = {
 
         "software_contract.view","software_contract.create",
         "software_contract.update","software_contract.delete",
+        "software_invoice.view",
+        "software_invoice.create",
+        "software_invoice.update",
+        "software_payment.record",
+        "software_payment.reverse",
+        "software_credit_note.create",
 
         "software_project.view","software_project.create",
         "software_project.update","software_project.delete",
@@ -98,6 +104,12 @@ role_permissions = {
 
         "software_contract.view","software_contract.create",
         "software_contract.update","software_contract.delete",
+        "software_invoice.view",
+        "software_invoice.create",
+        "software_invoice.update",
+        "software_payment.record",
+        "software_payment.reverse",
+        "software_credit_note.create",
 
         "software_project.view","software_project.create",
         "software_project.update","software_project.delete",
@@ -152,6 +164,12 @@ role_permissions = {
 
         "software_contract.view","software_contract.create",
         "software_contract.update","software_contract.delete",
+        "software_invoice.view",
+        "software_invoice.create",
+        "software_invoice.update",
+        "software_payment.record",
+        "software_payment.reverse",
+        "software_credit_note.create",
 
         "software_project.view","software_project.create",
         "software_project.update","software_project.delete",
@@ -202,6 +220,7 @@ role_permissions = {
         "software_estimate.update",
 
         "software_contract.view","software_contract.create","software_contract.update",
+        "software_invoice.view",
 
         "software_project.view","software_project.create","software_project.update",
 
@@ -240,6 +259,10 @@ role_permissions = {
         "software_estimate.update",
 
         "software_contract.view","software_contract.create","software_contract.update",
+        "software_invoice.view",
+        "software_invoice.create",
+        "software_invoice.update",
+        "software_payment.record",
 
         "software_project.view","software_project.create","software_project.update",
 
@@ -299,6 +322,7 @@ role_permissions = {
         "software_requirement.view",
         "software_estimate.view",
         "software_contract.view",
+        "software_invoice.view",
         "software_project.view",
         "software_sprint.view",
         "software_time.view","software_invoice.view","software_invoice.payment.view",
