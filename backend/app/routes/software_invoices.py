@@ -303,9 +303,13 @@ def read_invoice(invoice_id: uuid.UUID, current_user: dict = Depends(require_act
     return invoice_payload(get_invoice(db, tenant_id, invoice_id))
 
 
-@router.patch("/{invoice_id}/status", response_model=SoftwareInvoiceResponse, dependencies=[Depends(require_permission("software_invoice.update"))])
+@router.patch("/{invoice_id}/status", response_model=SoftwareInvoiceResponse)
 def update_invoice_status(invoice_id: uuid.UUID, data: SoftwareInvoiceStatusUpdate,
                           current_user: dict = Depends(require_active_user), db: Session = Depends(get_db)):
+    # Sending and voiding are separate permissions, so check the one that applies.
+    require_permission(
+        "software_invoice.cancel" if data.status == "Void" else "software_invoice.send"
+    )(current_user=current_user, db=db)
     tenant_id, user_id = get_context(current_user)
     invoice = get_invoice(db, tenant_id, invoice_id, lock=True)
     old_status = invoice.status
@@ -336,7 +340,7 @@ def update_invoice_status(invoice_id: uuid.UUID, data: SoftwareInvoiceStatusUpda
 
 
 @router.post("/{invoice_id}/payments", response_model=SoftwareInvoiceResponse, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(require_permission("software_payment.record"))])
+             dependencies=[Depends(require_permission("software_invoice.payment.create"))])
 def record_invoice_payment(invoice_id: uuid.UUID, data: SoftwareInvoicePaymentCreate,
                            current_user: dict = Depends(require_active_user), db: Session = Depends(get_db)):
     tenant_id, user_id = get_context(current_user)
@@ -407,7 +411,7 @@ def record_invoice_payment(invoice_id: uuid.UUID, data: SoftwareInvoicePaymentCr
 
 
 @router.post("/{invoice_id}/payments/{payment_id}/reverse", response_model=SoftwareInvoiceResponse,
-             dependencies=[Depends(require_permission("software_payment.reverse"))])
+             dependencies=[Depends(require_permission("software_invoice.payment.reverse"))])
 def reverse_invoice_payment(invoice_id: uuid.UUID, payment_id: uuid.UUID, data: SoftwareInvoicePaymentReverse,
                             current_user: dict = Depends(require_active_user), db: Session = Depends(get_db)):
     """Reverse a payment (bounced cheque, wrong entry). The record is kept for audit."""
@@ -444,7 +448,7 @@ def reverse_invoice_payment(invoice_id: uuid.UUID, payment_id: uuid.UUID, data: 
 
 
 @router.post("/{invoice_id}/credit-notes", response_model=SoftwareInvoiceResponse, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(require_permission("software_credit_note.create"))])
+             dependencies=[Depends(require_permission("software_invoice.credit_note.create"))])
 def create_invoice_credit_note(invoice_id: uuid.UUID, data: SoftwareCreditNoteCreate,
                                current_user: dict = Depends(require_active_user), db: Session = Depends(get_db)):
     tenant_id, user_id = get_context(current_user)

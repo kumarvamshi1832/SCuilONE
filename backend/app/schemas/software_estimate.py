@@ -91,6 +91,9 @@ class SoftwareEstimateCreate(BaseModel):
         max_length=50,
     )
 
+    billing_type: Literal["Fixed Price", "Time & Material"] = "Fixed Price"
+    hourly_rate: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+
     currency: CurrencyCode = "INR"
     issue_date: date = Field(default_factory=date.today)
     expiry_date: date | None = None
@@ -111,6 +114,10 @@ class SoftwareEstimateCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_dates(self):
+        if self.billing_type == "Time & Material" and self.hourly_rate is None:
+            raise ValueError("hourly_rate is required for Time & Material estimates")
+        if self.billing_type == "Fixed Price" and self.hourly_rate is not None:
+            raise ValueError("hourly_rate is only applicable to Time & Material estimates")
         if self.expiry_date and self.expiry_date < self.issue_date:
             raise ValueError("Expiry date cannot be before issue date")
         return self
@@ -120,6 +127,9 @@ class SoftwareEstimateUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     assigned_to: UUID | None = None
+
+    billing_type: Literal["Fixed Price", "Time & Material"] | None = None
+    hourly_rate: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
 
     currency: CurrencyCode | None = None
     issue_date: date | None = None
@@ -163,6 +173,8 @@ class SoftwareEstimateResponse(BaseModel):
     description: str | None
 
     currency: str
+    billing_type: str
+    hourly_rate: Decimal | None
     issue_date: date
     expiry_date: date | None
 

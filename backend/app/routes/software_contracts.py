@@ -158,6 +158,8 @@ def build_estimate_snapshot(estimate: SoftwareEstimate):
         "title": estimate.title,
         "description": estimate.description,
         "currency": estimate.currency,
+        "billing_type": estimate.billing_type,
+        "hourly_rate": str(estimate.hourly_rate) if estimate.hourly_rate is not None else None,
         "issue_date": (
             estimate.issue_date.isoformat()
             if estimate.issue_date
@@ -283,6 +285,8 @@ def create_software_contract(
             else estimate.description
         ),
         currency=estimate.currency,
+        billing_type=estimate.billing_type,
+        hourly_rate=estimate.hourly_rate,
         contract_value=Decimal(str(estimate.total_amount)),
         issue_date=payload.issue_date or date.today(),
         start_date=payload.start_date,
@@ -446,11 +450,7 @@ def update_software_contract(
 
     # Validate assignee
     if "assigned_to" in changes:
-        validate_assignee(
-            db,
-            tenant_id,
-            changes["assigned_to"],
-        )
+        validate_assignee(db, tenant_id, changes["assigned_to"])
 
     # Validate start and end dates
     start_date = changes.get("start_date", contract.start_date)
@@ -479,8 +479,7 @@ def update_software_contract(
 
         if requested_status != contract.status:
             allowed_next_statuses = CONTRACT_STATUS_TRANSITIONS.get(
-                contract.status,
-                set(),
+                contract.status, set()
             )
 
             if requested_status not in allowed_next_statuses:
@@ -491,38 +490,6 @@ def update_software_contract(
                         f"'{contract.status}' to '{requested_status}'"
                     ),
                 )
-
-    # A contract can only be completed when every milestone is Paid.
-    if requested_status == "Completed":
-        if not contract.payment_milestones:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "A contract cannot be completed because it has "
-                    "no payment milestones"
-                ),
-            )
-
-        unpaid_milestones = [
-            milestone
-            for milestone in contract.payment_milestones
-            if milestone.status != "Paid"
-        ]
-
-        if unpaid_milestones:
-            unpaid_names = ", ".join(
-                milestone.name
-                for milestone in unpaid_milestones
-            )
-
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "A contract can only be completed when all "
-                    "payment milestones are Paid. Unpaid milestones: "
-                    f"{unpaid_names}"
-                ),
-            )
 
     # Automatically set signed_date when a contract is signed
     if (
@@ -536,16 +503,8 @@ def update_software_contract(
     for field, value in changes.items():
         setattr(contract, field, value)
 
-    # Automatically activate the first milestone when contract is Signed or Active
-    if (
-        changes.get("status") in {"Signed", "Active"}
-        and contract.payment_milestones
-    ):
-        first_milestone = min(
-            contract.payment_milestones,
-            key=lambda item: item.sequence,
-        )
-
+    if changes.get("status") in {"Signed", "Active"} and contract.payment_milestones:
+        first_milestone = min(contract.payment_milestones, key=lambda item: item.sequence)
         if first_milestone.status == "Pending":
             first_milestone.status = "Ready"
 
@@ -571,7 +530,6 @@ def update_software_contract(
 
     except IntegrityError:
         db.rollback()
-
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="The contract number already exists",
@@ -580,6 +538,7 @@ def update_software_contract(
     except Exception:
         db.rollback()
         raise
+
 @router.post(
     "/{contract_id}/milestones/{milestone_id}/ready",
     response_model=SoftwareContractMilestoneResponse,
@@ -667,10 +626,15 @@ def create_invoice_for_contract_milestone(
     issue_date = date.today()
     if payload.due_date and payload.due_date < issue_date:
         raise HTTPException(status_code=422, detail="due_date cannot be before the invoice issue date")
-    if payload.invoice_number is not None and not payload.invoice_number.strip():
-        raise HTTPException(status_code=422, detail="invoice_number cannot be blank")
-    if payload.invoice_number:
+    # Generate automatically when invoice_number is omitted or blank.
+    # Nonblank custom numbers remain supported and are checked for duplicates.
+    if payload.invoice_number and payload.invoice_number.strip():
         invoice_number = payload.invoice_number.strip()
+        if db.query(SoftwareInvoice.id).filter(
+            SoftwareInvoice.tenant_id == tenant_id,
+            SoftwareInvoice.invoice_number == invoice_number,
+        ).first():
+            raise HTTPException(status_code=409, detail="Invoice number already exists for this tenant")
     else:
         invoice_number = next_unused_number(
             db, tenant_id, "INV",

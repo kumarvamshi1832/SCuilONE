@@ -120,6 +120,10 @@ class SoftwareEstimate(Base):
         nullable=True,
     )
 
+    billing_type: Mapped[str] = mapped_column(String(30), nullable=False, default="Fixed Price", server_default="Fixed Price")
+
+    hourly_rate: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+
     currency: Mapped[str] = mapped_column(
         String(3),
         nullable=False,
