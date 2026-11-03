@@ -17,6 +17,7 @@ import type {
   SoftwareEstimateUpdate,
   SoftwareEstimateItemCreate,
   SoftwareEstimateStatus,
+  SoftwareBillingType,
 } from "../../types/softwareEstimate";
 import {
   SOFTWARE_ESTIMATE_STATUSES,
@@ -120,6 +121,8 @@ export default function SoftwareEstimates() {
     description: string;
     assigned_to: string | null;
     currency: string;
+    billing_type: SoftwareBillingType;
+    hourly_rate: number | null;
     issue_date: string;
     expiry_date: string;
     status: SoftwareEstimateStatus;
@@ -133,6 +136,8 @@ export default function SoftwareEstimates() {
     description: "",
     assigned_to: null,
     currency: "INR",
+    billing_type: "Fixed Price",
+    hourly_rate: null,
     issue_date: new Date().toISOString().slice(0, 10),
     expiry_date: "",
     status: "Draft",
@@ -340,6 +345,8 @@ export default function SoftwareEstimates() {
       description: "",
       assigned_to: users[0]?.id || null,
       currency: "INR",
+      billing_type: "Fixed Price",
+      hourly_rate: null,
       issue_date: new Date().toISOString().slice(0, 10),
       expiry_date: "",
       status: "Draft",
@@ -370,6 +377,8 @@ export default function SoftwareEstimates() {
       description: item.description || "",
       assigned_to: item.assigned_to || null,
       currency: item.currency || "INR",
+      billing_type: (item.billing_type as SoftwareBillingType) || "Fixed Price",
+      hourly_rate: item.hourly_rate != null ? Number(item.hourly_rate) : null,
       issue_date: item.issue_date || new Date().toISOString().slice(0, 10),
       expiry_date: item.expiry_date || "",
       status: (item.status as SoftwareEstimateStatus) || "Draft",
@@ -416,6 +425,17 @@ export default function SoftwareEstimates() {
     if (formData.items.length === 0) {
       setFormError("Please add at least one line item.");
       return;
+    }
+    if (formData.billing_type === "Time & Material") {
+      const rate = Number(formData.hourly_rate);
+      if (formData.hourly_rate === null || formData.hourly_rate === undefined || isNaN(rate) || rate <= 0) {
+        setFormError("Hourly rate is required and must be greater than 0 for Time & Material estimates.");
+        return;
+      }
+      if (rate > 999999999999.99) {
+        setFormError("Hourly rate exceeds maximum allowed value.");
+        return;
+      }
     }
 
     // Client-side status transition guard based on backend state machine
@@ -467,6 +487,8 @@ export default function SoftwareEstimates() {
             description: formData.description,
             assigned_to: formData.assigned_to,
             currency: formData.currency,
+            billing_type: formData.billing_type,
+            hourly_rate: formData.billing_type === "Time & Material" ? Number(formData.hourly_rate) : null,
             issue_date: formData.issue_date,
             expiry_date: formData.expiry_date || null,
             status: formData.status,
@@ -495,6 +517,8 @@ export default function SoftwareEstimates() {
           description: formData.description,
           assigned_to: formData.assigned_to,
           currency: formData.currency,
+          billing_type: formData.billing_type,
+          hourly_rate: formData.billing_type === "Time & Material" ? Number(formData.hourly_rate) : null,
           issue_date: formData.issue_date,
           expiry_date: formData.expiry_date || null,
           status: "Draft",
@@ -658,6 +682,7 @@ export default function SoftwareEstimates() {
                 <th>Estimate No</th>
                 <th>Title / Requirement</th>
                 <th>Issue Date</th>
+                <th>Billing</th>
                 <th>Items</th>
                 <th>Total Amount</th>
                 <th>Status</th>
@@ -682,6 +707,18 @@ export default function SoftwareEstimates() {
                       </div>
                     </td>
                     <td>{est.issue_date}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{est.billing_type || "Fixed Price"}</div>
+                      {est.billing_type === "Time & Material" && est.hourly_rate != null ? (
+                        <div style={{ fontSize: "0.75rem", color: "#0ea5e9" }}>
+                          {formatCurrency(est.hourly_rate, est.currency)}/hr
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                          Fixed Scope
+                        </div>
+                      )}
+                    </td>
                     <td>{est.items ? est.items.length : 1} line item(s)</td>
                     <td style={{ fontWeight: 700 }}>{INR.format(est.total_amount)}</td>
                     <td>
@@ -936,6 +973,52 @@ export default function SoftwareEstimates() {
                       <option value="AED">AED (د.إ)</option>
                     </select>
                   </div>
+
+                  <div className="sw-form-group">
+                    <label>Billing Type *</label>
+                    <select
+                      className="sw-form-select"
+                      value={formData.billing_type}
+                      disabled={isLockedAfterDraft}
+                      onChange={(e) => {
+                        const val = e.target.value as SoftwareBillingType;
+                        setFormData((prev) => ({
+                          ...prev,
+                          billing_type: val,
+                          hourly_rate: val === "Fixed Price" ? null : prev.hourly_rate,
+                        }));
+                      }}
+                    >
+                      <option value="Fixed Price">Fixed Price</option>
+                      <option value="Time & Material">Time & Material</option>
+                    </select>
+                  </div>
+
+                  {formData.billing_type === "Time & Material" && (
+                    <div className="sw-form-group">
+                      <label>Hourly Rate ({formData.currency}/hr) *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        className="sw-form-input"
+                        required={formData.billing_type === "Time & Material"}
+                        placeholder="e.g. 50.00"
+                        disabled={isLockedAfterDraft}
+                        value={formData.hourly_rate ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            hourly_rate: val === "" ? null : parseFloat(val),
+                          }));
+                        }}
+                      />
+                      <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px", display: "block" }}>
+                        Rate per hour for Time & Material billing (&gt; 0).
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Estimate Line Items Section */}
@@ -1152,6 +1235,12 @@ export default function SoftwareEstimates() {
                 <span className={`sw-badge ${viewingItem.status?.toLowerCase()}`}>Status: {viewingItem.status}</span>
                 <span className="sw-badge active">Total: {INR.format(viewingItem.total_amount)}</span>
                 <span className="sw-badge planned">Issue Date: {viewingItem.issue_date}</span>
+                <span className="sw-badge discovery">
+                  Billing: {viewingItem.billing_type || "Fixed Price"}
+                  {viewingItem.billing_type === "Time & Material" && viewingItem.hourly_rate != null
+                    ? ` (${formatCurrency(viewingItem.hourly_rate, viewingItem.currency)}/hr)`
+                    : ""}
+                </span>
               </div>
               <p>
                 <strong>Requirement:</strong> {reqMap.get(viewingItem.software_requirement_id) || "—"}

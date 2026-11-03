@@ -8,9 +8,13 @@
  * - software_invoice.view
  * - software_invoice.create
  * - software_invoice.update
- * - software_payment.record
- * - software_payment.reverse
- * - software_credit_note.create
+ * - software_invoice.delete
+ * - software_invoice.send
+ * - software_invoice.cancel
+ * - software_invoice.payment.view
+ * - software_invoice.payment.create
+ * - software_invoice.payment.reverse
+ * - software_invoice.credit_note.create
  */
 
 export interface SoftwarePermissions {
@@ -23,6 +27,10 @@ export interface SoftwarePermissions {
   canViewInvoices: boolean;
   canCreateInvoices: boolean;
   canUpdateInvoices: boolean;
+  canDeleteInvoices: boolean;
+  canSendInvoices: boolean;
+  canCancelInvoices: boolean;
+  canViewInvoicePayments: boolean;
   canRecordPayment: boolean;
   canReversePayment: boolean;
   canCreateCreditNote: boolean;
@@ -43,6 +51,10 @@ export function getSoftwarePermissions(): SoftwarePermissions {
       canViewInvoices: false,
       canCreateInvoices: false,
       canUpdateInvoices: false,
+      canDeleteInvoices: false,
+      canSendInvoices: false,
+      canCancelInvoices: false,
+      canViewInvoicePayments: false,
       canRecordPayment: false,
       canReversePayment: false,
       canCreateCreditNote: false,
@@ -80,6 +92,10 @@ export function getSoftwarePermissions(): SoftwarePermissions {
         canViewInvoices: true,
         canCreateInvoices: true,
         canUpdateInvoices: true,
+        canDeleteInvoices: true,
+        canSendInvoices: true,
+        canCancelInvoices: true,
+        canViewInvoicePayments: true,
         canRecordPayment: true,
         canReversePayment: true,
         canCreateCreditNote: true,
@@ -98,16 +114,17 @@ export function getSoftwarePermissions(): SoftwarePermissions {
     }
 
     const hasPerm = (permName: string): boolean => {
-      // If user has wildcard permissions or no permissions array is restricted
-      if (perms.length === 0) return true; // Default fallback to allow access if permissions are not strictly populated on token
+      if (!Array.isArray(perms) || perms.length === 0) return false;
       return perms.some((p) => {
         const pName = typeof p === "string" ? p : p?.name || "";
-        const lower = pName.toLowerCase();
+        const lower = pName.toLowerCase().trim();
+        const target = permName.toLowerCase().trim();
         return (
-          lower === permName.toLowerCase() ||
+          lower === target ||
           lower === "*" ||
           lower === "software.*" ||
-          lower === "software_contract.*"
+          (target.startsWith("software_contract.") && lower === "software_contract.*") ||
+          (target.startsWith("software_invoice.") && lower === "software_invoice.*")
         );
       });
     };
@@ -120,9 +137,13 @@ export function getSoftwarePermissions(): SoftwarePermissions {
     const viewInvoice = hasPerm("software_invoice.view");
     const createInvoice = hasPerm("software_invoice.create");
     const updateInvoice = hasPerm("software_invoice.update");
-    const recordPayment = hasPerm("software_payment.record") || updateInvoice;
-    const reversePayment = hasPerm("software_payment.reverse");
-    const createCreditNote = hasPerm("software_credit_note.create");
+    const deleteInvoice = hasPerm("software_invoice.delete");
+    const sendInvoice = hasPerm("software_invoice.send");
+    const cancelInvoice = hasPerm("software_invoice.cancel");
+    const viewInvoicePayments = hasPerm("software_invoice.payment.view");
+    const recordPayment = hasPerm("software_invoice.payment.create");
+    const reversePayment = hasPerm("software_invoice.payment.reverse");
+    const createCreditNote = hasPerm("software_invoice.credit_note.create");
 
     return {
       canViewContracts: viewContract,
@@ -130,10 +151,14 @@ export function getSoftwarePermissions(): SoftwarePermissions {
       canUpdateContracts: updateContract,
       canDeleteContracts: deleteContract,
       canMarkMilestoneReady: updateContract,
-      canGenerateMilestoneInvoice: createContract,
+      canGenerateMilestoneInvoice: createInvoice,
       canViewInvoices: viewInvoice,
       canCreateInvoices: createInvoice,
       canUpdateInvoices: updateInvoice,
+      canDeleteInvoices: deleteInvoice,
+      canSendInvoices: sendInvoice,
+      canCancelInvoices: cancelInvoice,
+      canViewInvoicePayments: viewInvoicePayments,
       canRecordPayment: recordPayment,
       canReversePayment: reversePayment,
       canCreateCreditNote: createCreditNote,
@@ -142,20 +167,24 @@ export function getSoftwarePermissions(): SoftwarePermissions {
     };
   } catch {
     return {
-      canViewContracts: true,
-      canCreateContracts: true,
-      canUpdateContracts: true,
-      canDeleteContracts: true,
-      canMarkMilestoneReady: true,
-      canGenerateMilestoneInvoice: true,
-      canViewInvoices: true,
-      canCreateInvoices: true,
-      canUpdateInvoices: true,
-      canRecordPayment: true,
-      canReversePayment: true,
-      canCreateCreditNote: true,
+      canViewContracts: false,
+      canCreateContracts: false,
+      canUpdateContracts: false,
+      canDeleteContracts: false,
+      canMarkMilestoneReady: false,
+      canGenerateMilestoneInvoice: false,
+      canViewInvoices: false,
+      canCreateInvoices: false,
+      canUpdateInvoices: false,
+      canDeleteInvoices: false,
+      canSendInvoices: false,
+      canCancelInvoices: false,
+      canViewInvoicePayments: false,
+      canRecordPayment: false,
+      canReversePayment: false,
+      canCreateCreditNote: false,
       isAdmin: false,
-      hasPermission: () => true,
+      hasPermission: () => false,
     };
   }
 }

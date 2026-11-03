@@ -1,3 +1,5 @@
+export type MilestoneBillingMode = "Sequential" | "Parallel";
+
 export type SoftwareContractStatus =
   | "Draft"
   | "Sent"
@@ -56,6 +58,8 @@ export interface SoftwareContract {
   description?: string | null;
 
   currency: string;
+  billing_type: "Fixed Price" | "Time & Material";
+  hourly_rate: number | null;
   contract_value: number;
 
   issue_date: string;
@@ -71,6 +75,7 @@ export interface SoftwareContract {
   assumptions?: string | null;
   acceptance_criteria?: string | null;
   payment_terms?: string | null;
+  milestone_billing_mode?: "Sequential" | "Parallel";
   payment_milestones?: SoftwareContractMilestone[];
   terms_and_conditions?: string | null;
 
@@ -101,7 +106,6 @@ export interface SoftwareContractCreate {
   signed_date?: string | null;
 
   status?: SoftwareContractStatus | string;
-  billing_type?: string;
   service_level_agreement?: string;
 
   scope_of_work: string;
@@ -110,6 +114,7 @@ export interface SoftwareContractCreate {
   assumptions?: string | null;
   acceptance_criteria?: string | null;
   payment_terms?: string | null;
+  milestone_billing_mode?: "Sequential" | "Parallel";
   payment_milestones?: SoftwareContractMilestoneCreate[];
   terms_and_conditions?: string | null;
   notes?: string | null;
@@ -125,7 +130,6 @@ export interface SoftwareContractUpdate {
 
   contract_value?: number;
   currency?: string;
-  billing_type?: string;
   service_level_agreement?: string;
 
   issue_date?: string | null;
@@ -141,6 +145,7 @@ export interface SoftwareContractUpdate {
   assumptions?: string | null;
   acceptance_criteria?: string | null;
   payment_terms?: string | null;
+  milestone_billing_mode?: "Sequential" | "Parallel";
   terms_and_conditions?: string | null;
   notes?: string | null;
 }

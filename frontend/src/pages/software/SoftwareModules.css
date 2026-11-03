@@ -1247,3 +1247,619 @@
   border-color: rgba(245, 158, 11, 0.4);
   color: #fbbf24;
 }
+
+/* ==========================================================================
+   Software Contract View Details Modal & Milestone Cards
+   ========================================================================== */
+
+/* Contract Modal Card overrides */
+.sw-contract-detail-modal {
+  max-width: 960px !important;
+  width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Modal Header enhancements */
+.sw-contract-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.sw-contract-modal-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sw-contract-modal-num {
+  font-size: 0.82rem;
+  font-family: monospace;
+  font-weight: 700;
+  color: #0ea5e9;
+  letter-spacing: 0.5px;
+}
+
+.sw-contract-modal-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .sw-contract-modal-name,
+.dark .sw-contract-modal-name {
+  color: #f8fafc;
+}
+
+/* Executive Contract Overview Grid */
+.sw-contract-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.dashboard-wrapper.dark .sw-contract-overview-grid,
+.dark .sw-contract-overview-grid {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sw-contract-overview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sw-contract-overview-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+}
+
+.dashboard-wrapper.dark .sw-contract-overview-label,
+.dark .sw-contract-overview-label {
+  color: #94a3b8;
+}
+
+.sw-contract-overview-val {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dashboard-wrapper.dark .sw-contract-overview-val,
+.dark .sw-contract-overview-val {
+  color: #f1f5f9;
+}
+
+/* Milestones Section Container */
+.sw-contract-milestones-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sw-contract-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sw-contract-section-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-wrapper.dark .sw-contract-section-header h4,
+.dark .sw-contract-section-header h4 {
+  color: #f8fafc;
+}
+
+.sw-contract-section-badge {
+  font-size: 0.74rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(14, 165, 233, 0.1);
+  color: #0ea5e9;
+  border: 1px solid rgba(14, 165, 233, 0.25);
+  font-weight: 600;
+}
+
+/* Milestone Cards Stack */
+.sw-milestone-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Individual Milestone Card */
+.sw-milestone-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-wrapper.dark .sw-milestone-card,
+.dark .sw-milestone-card {
+  background: #162238;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sw-milestone-card:hover {
+  border-color: rgba(14, 165, 233, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-wrapper.dark .sw-milestone-card:hover,
+.dark .sw-milestone-card:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Status-accent border bar on the left */
+.sw-milestone-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.sw-milestone-card.status-pending::before {
+  background: #f59e0b;
+}
+
+.sw-milestone-card.status-ready::before {
+  background: #0ea5e9;
+}
+
+.sw-milestone-card.status-invoiced::before {
+  background: #6366f1;
+}
+
+.sw-milestone-card.status-paid::before {
+  background: #10b981;
+}
+
+/* Milestone Card Header (Top Row) */
+.sw-milestone-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sw-milestone-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sw-milestone-seq-badge {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+  padding: 2px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sw-milestone-card-name {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .sw-milestone-card-name,
+.dark .sw-milestone-card-name {
+  color: #f8fafc;
+}
+
+/* Milestone Status Badges */
+.sw-milestone-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  text-transform: capitalize;
+}
+
+.sw-milestone-status-badge.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-milestone-status-badge.pending,
+.dark .sw-milestone-status-badge.pending {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.sw-milestone-status-badge.ready {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-milestone-status-badge.ready,
+.dark .sw-milestone-status-badge.ready {
+  background: rgba(14, 165, 233, 0.18);
+  color: #38bdf8;
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+.sw-milestone-status-badge.invoiced {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-milestone-status-badge.invoiced,
+.dark .sw-milestone-status-badge.invoiced {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.sw-milestone-status-badge.paid {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-milestone-status-badge.paid,
+.dark .sw-milestone-status-badge.paid {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+/* Milestone Card Body (Middle Row) */
+.sw-milestone-card-body {
+  display: grid;
+  grid-template-columns: 100px 140px 1fr;
+  gap: 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 14px;
+  border: 1px solid #eef2f6;
+}
+
+.dashboard-wrapper.dark .sw-milestone-card-body,
+.dark .sw-milestone-card-body {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.sw-milestone-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sw-milestone-metric-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.4px;
+}
+
+.dashboard-wrapper.dark .sw-milestone-metric-label,
+.dark .sw-milestone-metric-label {
+  color: #94a3b8;
+}
+
+.sw-milestone-metric-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .sw-milestone-metric-value,
+.dark .sw-milestone-metric-value {
+  color: #f1f5f9;
+}
+
+.sw-milestone-metric-value.highlight {
+  color: #0ea5e9;
+  font-weight: 700;
+}
+
+.dashboard-wrapper.dark .sw-milestone-metric-value.highlight,
+.dark .sw-milestone-metric-value.highlight {
+  color: #38bdf8;
+}
+
+/* Milestone Card Footer (Bottom Row) */
+.sw-milestone-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.dashboard-wrapper.dark .sw-milestone-card-footer,
+.dark .sw-milestone-card-footer {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.sw-milestone-invoice-ref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #64748b;
+  min-width: 0;
+}
+
+.dashboard-wrapper.dark .sw-milestone-invoice-ref,
+.dark .sw-milestone-invoice-ref {
+  color: #94a3b8;
+}
+
+.sw-milestone-invoice-pill {
+  font-family: monospace;
+  font-size: 0.74rem;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.sw-milestone-invoice-pill:hover {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.dashboard-wrapper.dark .sw-milestone-invoice-pill,
+.dark .sw-milestone-invoice-pill {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.dashboard-wrapper.dark .sw-milestone-invoice-pill:hover,
+.dark .sw-milestone-invoice-pill:hover {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.sw-milestone-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Information Panels for Scope, Deliverables, Payment Terms */
+.sw-contract-info-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-wrapper.dark .sw-contract-info-panel,
+.dark .sw-contract-info-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sw-contract-info-panel-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-wrapper.dark .sw-contract-info-panel-title,
+.dark .sw-contract-info-panel-title {
+  color: #94a3b8;
+}
+
+.sw-contract-info-panel-body {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .sw-contract-info-panel-body,
+.dark .sw-contract-info-panel-body {
+  color: #e2e8f0;
+}
+
+/* Responsive adjustments for Milestone Cards */
+@media (max-width: 768px) {
+  .sw-contract-detail-modal {
+    width: 98vw !important;
+    max-height: 94vh;
+  }
+  
+  .sw-contract-modal-header {
+    padding: 14px 16px;
+  }
+  
+  .sw-contract-overview-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .sw-milestone-card-body {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  
+  .sw-milestone-metric.full-width-on-tablet {
+    grid-column: span 2;
+  }
+  
+  .sw-milestone-card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .sw-milestone-actions-group {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .sw-contract-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .sw-milestone-card-body {
+    grid-template-columns: 1fr;
+  }
+  
+  .sw-milestone-metric.full-width-on-tablet {
+    grid-column: span 1;
+  }
+  
+  .sw-milestone-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .sw-milestone-actions-group {
+    width: 100%;
+  }
+  
+  .sw-milestone-actions-group button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Software Invoice PDF Action & Spinners
+   ══════════════════════════════════════════════════════════════════════════ */
+@keyframes swSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sw-spin {
+  animation: swSpin 1s linear infinite;
+  transform-origin: center center;
+}
+
+.sw-btn-download-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.3);
+  color: #0284c7;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.sw-btn-download-pdf:hover:not(:disabled) {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
+.sw-btn-download-pdf:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dashboard-wrapper.dark .sw-btn-download-pdf,
+.dark .sw-btn-download-pdf {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.35);
+  color: #38bdf8;
+}
+
+.dashboard-wrapper.dark .sw-btn-download-pdf:hover:not(:disabled),
+.dark .sw-btn-download-pdf:hover:not(:disabled) {
+  background: #0ea5e9;
+  color: #0f172a;
+}
+

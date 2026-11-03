@@ -11,7 +11,16 @@ import {
 } from "../../services/softwareInvoiceService";
 import { getSoftwareProjects } from "../../services/softwareProjectService";
 import { getSoftwareContracts } from "../../services/softwareContractService";
+import { getSoftwareEstimates } from "../../services/softwareEstimateService";
+import { getAccounts } from "../../services/accountService";
+import { getLeads } from "../../services/leadService";
+import { downloadSoftwareInvoicePdf } from "../../utils/softwareInvoicePdfGenerator";
+import type { SoftwareEstimate } from "../../types/softwareEstimate";
 import { getSoftwarePermissions } from "../../utils/softwarePermissions";
+import { getActivities } from "../../services/activityService";
+import { getTimeEntries } from "../../services/softwareTimeEntryService";
+import type { Activity } from "../../types/activity";
+import type { SoftwareTimeEntry } from "../../types/softwareTimeEntry";
 
 import type {
   SoftwareInvoice,
@@ -53,7 +62,15 @@ export default function SoftwareInvoices() {
   const [invoices, setInvoices] = useState<SoftwareInvoice[]>([]);
   const [projects, setProjects] = useState<SoftwareProject[]>([]);
   const [contracts, setContracts] = useState<SoftwareContract[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [projectTimeEntries, setProjectTimeEntries] = useState<SoftwareTimeEntry[]>([]);
+  const [timeEntriesLoading, setTimeEntriesLoading] = useState(false);
+  const [timeEntriesError, setTimeEntriesError] = useState<string | null>(null);
   const [billingSummary, setBillingSummary] = useState<BillingSummaryResponse | null>(null);
+  const [estimates, setEstimates] = useState<SoftwareEstimate[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,17 +149,25 @@ export default function SoftwareInvoices() {
     setLoading(true);
     setError(null);
     try {
-      const [invData, projData, contData, summaryData] = await Promise.all([
+      const [invData, projData, contData, summaryData, actData, estData, accData, leadData] = await Promise.all([
         getSoftwareInvoices(),
         getSoftwareProjects().catch(() => []),
         getSoftwareContracts().catch(() => []),
         getBillingSummary(projectFilter || undefined).catch(() => null),
+        getActivities().catch(() => []),
+        getSoftwareEstimates().catch(() => []),
+        getAccounts().catch(() => []),
+        getLeads().catch(() => []),
       ]);
 
       setInvoices(invData);
       setProjects(projData);
       setContracts(contData);
       setBillingSummary(summaryData);
+      setActivities(actData);
+      setEstimates(estData);
+      setAccounts(accData);
+      setLeads(leadData);
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || "Failed to load software invoices");
     } finally {
@@ -166,6 +191,81 @@ export default function SoftwareInvoices() {
     () => new Map(contracts.map((c) => [c.id, `${c.contract_number} - ${c.title}`])),
     [contracts]
   );
+  const activityMap = useMemo(
+    () => new Map(activities.map((a) => [a.id, a.title])),
+    [activities]
+  );
+  const accountMap = useMemo(() => new Map(accounts.map((a: any) => [a.id, a])), [accounts]);
+  const leadMap = useMemo(() => new Map(leads.map((l: any) => [l.id, l])), [leads]);
+  const estimateMap = useMemo(() => new Map(estimates.map((e: any) => [e.id, e])), [estimates]
+  );
+
+  const formSelectedContract = useMemo(() => {
+    return contracts.find((c) => c.id === formData.software_contract_id) || null;
+  }, [contracts, formData.software_contract_id]);
+
+  const formSelectedProject = useMemo(() => {
+    return projects.find((p) => p.id === formData.project_id) || null;
+  }, [projects, formData.project_id]);
+
+  const compatibleProjects = useMemo(() => {
+    if (!formData.software_contract_id) return projects;
+    return projects.filter((p) => p.software_contract_id === formData.software_contract_id);
+  }, [projects, formData.software_contract_id]);
+
+  const alreadyInvoicedTimeEntryIds = useMemo(() => {
+    const set = new Set<string>();
+    invoices.forEach((inv) => {
+      (inv.items || []).forEach((it) => {
+        if (it.time_entry_id) {
+          set.add(it.time_entry_id);
+        }
+      });
+    });
+    return set;
+  }, [invoices]);
+
+  const eligibleTimeEntries = useMemo(() => {
+    return projectTimeEntries.filter((entry) => {
+      if (!entry.is_billable) return false;
+      if (entry.billing_status !== "Approved") return false;
+      if (entry.duration_minutes === null || entry.duration_minutes === undefined || entry.duration_minutes <= 0) return false;
+      if (entry.source === "timer" && !entry.stopped_at) return false;
+      if (alreadyInvoicedTimeEntryIds.has(entry.id)) return false;
+      return true;
+    });
+  }, [projectTimeEntries, alreadyInvoicedTimeEntryIds]);
+
+  const eligibleTimeEntryMap = useMemo(() => {
+    return new Map(eligibleTimeEntries.map((e) => [e.id, e]));
+  }, [eligibleTimeEntries]);
+
+  const fetchProjectTimeEntries = useCallback(async (projId: string) => {
+    if (!projId) {
+      setProjectTimeEntries([]);
+      return;
+    }
+    setTimeEntriesLoading(true);
+    setTimeEntriesError(null);
+    try {
+      const data = await getTimeEntries({ project_id: projId });
+      setProjectTimeEntries(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setTimeEntriesError(err?.message || "Failed to load project time entries");
+      setProjectTimeEntries([]);
+    } finally {
+      setTimeEntriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isCreateModalOpen && formSelectedContract?.billing_type === "Time & Material" && formData.project_id) {
+      fetchProjectTimeEntries(formData.project_id);
+    } else {
+      setProjectTimeEntries([]);
+      setTimeEntriesError(null);
+    }
+  }, [isCreateModalOpen, formSelectedContract?.billing_type, formData.project_id, fetchProjectTimeEntries]);
 
   // Primary active summary from backend billing summary API
   const activeSummary = useMemo(() => {
@@ -230,40 +330,96 @@ export default function SoftwareInvoices() {
   // Open Create Modal
   const handleOpenCreate = () => {
     setFormError(null);
+    const tmContract = contracts.find((c) => c.billing_type === "Time & Material") || contracts[0];
+    const initialContractId = tmContract?.id || "";
+    const matchingProjects = projects.filter((p) => p.software_contract_id === initialContractId);
+    const initialProjectId = matchingProjects[0]?.id || projects[0]?.id || "";
+
     setFormData({
       invoice_number: "",
-      project_id: projects[0]?.id || "",
-      software_contract_id: contracts[0]?.id || "",
+      software_contract_id: initialContractId,
+      project_id: initialProjectId,
       issue_date: new Date().toISOString().slice(0, 10),
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       notes: "",
-      items: [
-        {
-          description: "",
-          quantity: 1,
-          unit_price: 0,
-          tax_percent: 0,
-        },
-      ],
+      items: [],
     });
     setIsCreateModalOpen(true);
   };
 
-  // Add Line Item
-  const handleAddItem = () => {
+  const handleContractChange = (contractId: string) => {
+    const validProjects = projects.filter((p) => p.software_contract_id === contractId);
+    const currentMatches = validProjects.some((p) => p.id === formData.project_id);
+    const newProjectId = currentMatches ? formData.project_id : validProjects[0]?.id || "";
+
+    setFormData((prev) => ({
+      ...prev,
+      software_contract_id: contractId,
+      project_id: newProjectId,
+      items: [],
+    }));
+  };
+
+  const handleProjectChange = (projectId: string) => {
+    const proj = projects.find((p) => p.id === projectId);
+    const matchedContractId = proj?.software_contract_id || formData.software_contract_id;
+    const contract = contracts.find((c) => c.id === matchedContractId);
+
+    setFormData((prev) => ({
+      ...prev,
+      project_id: projectId,
+      software_contract_id: matchedContractId,
+      items: contract?.billing_type === "Time & Material" ? [] : prev.items,
+    }));
+  };
+
+  const handleAddTMItem = () => {
     setFormData((prev) => ({
       ...prev,
       items: [
         ...prev.items,
         {
+          time_entry_id: "",
           description: "",
           quantity: 1,
-          unit_price: 0,
+          unit_price: Number(formSelectedContract?.hourly_rate || 0),
           tax_percent: 0,
         },
       ],
     }));
   };
+
+  const handleSelectTimeEntry = (index: number, entryId: string) => {
+    const entry = eligibleTimeEntryMap.get(entryId);
+    setFormData((prev) => {
+      const updated = [...prev.items];
+      if (!entry) {
+        updated[index] = {
+          ...updated[index],
+          time_entry_id: "",
+          description: "",
+          quantity: 1,
+          unit_price: Number(formSelectedContract?.hourly_rate || 0),
+        };
+        return { ...prev, items: updated };
+      }
+
+      const taskTitle = activityMap.get(entry.activity_id) || entry.activity_title || "Development Task";
+      const durationHours = parseFloat((Number(entry.duration_minutes || 0) / 60).toFixed(4));
+      const rate = Number(formSelectedContract?.hourly_rate || 0);
+
+      updated[index] = {
+        ...updated[index],
+        time_entry_id: entry.id,
+        description: `${entry.work_date}: ${taskTitle}${entry.notes ? ` — ${entry.notes}` : ""}`,
+        quantity: durationHours,
+        unit_price: rate,
+      };
+      return { ...prev, items: updated };
+    });
+  };
+
+
 
   // Remove Line Item
   const handleRemoveItem = (index: number) => {
@@ -312,33 +468,53 @@ export default function SoftwareInvoices() {
     e.preventDefault();
     setFormError(null);
 
-    if (!formData.project_id) {
-      setFormError("Please select a project.");
-      return;
-    }
     if (!formData.software_contract_id) {
       setFormError("Please select the linked software contract.");
       return;
     }
-    if (!formData.invoice_number.trim()) {
-      setFormError("Invoice number is required.");
+    if (!formData.project_id) {
+      setFormError("Please select a project.");
       return;
     }
-    if (formData.items.length === 0) {
-      setFormError("At least one line item is required.");
+    if (formSelectedProject && formSelectedContract && formSelectedProject.software_contract_id !== formSelectedContract.id) {
+      setFormError("The selected project is not linked to this contract.");
       return;
     }
-    for (const [i, it] of formData.items.entries()) {
-      if (!it.description.trim()) {
-        setFormError(`Item #${i + 1} requires a description.`);
+    if (formSelectedContract?.billing_type === "Fixed Price") {
+      setFormError("Fixed Price contracts must be invoiced through payment milestones in the Software Contracts module. Please open Software Contracts and generate the milestone invoice.");
+      return;
+    }
+    if (formSelectedContract?.billing_type === "Time & Material") {
+      if (!formSelectedContract.hourly_rate || Number(formSelectedContract.hourly_rate) <= 0) {
+        setFormError("Time & Material contracts require a valid positive hourly rate from the contract.");
         return;
       }
-      if (Number(it.quantity) <= 0) {
-        setFormError(`Item #${i + 1} quantity must be greater than 0.`);
+      if (formData.items.length === 0) {
+        setFormError("Please add at least one approved billable time entry to create a Time & Material invoice.");
         return;
       }
-      if (Number(it.unit_price) < 0) {
-        setFormError(`Item #${i + 1} unit price cannot be negative.`);
+      for (const [i, it] of formData.items.entries()) {
+        if (!it.time_entry_id) {
+          setFormError(`Line item #${i + 1} must reference an approved billable time entry.`);
+          return;
+        }
+        if (!it.description.trim()) {
+          setFormError(`Line item #${i + 1} requires a description.`);
+          return;
+        }
+        if (Number(it.quantity) <= 0) {
+          setFormError(`Line item #${i + 1} quantity must be greater than 0.`);
+          return;
+        }
+      }
+      const selectedIds = formData.items.map((it) => it.time_entry_id).filter(Boolean);
+      if (new Set(selectedIds).size !== selectedIds.length) {
+        setFormError("The same time entry cannot be selected more than once in an invoice.");
+        return;
+      }
+    } else {
+      if (formData.items.length === 0) {
+        setFormError("At least one line item is required.");
         return;
       }
     }
@@ -346,13 +522,14 @@ export default function SoftwareInvoices() {
     setSubmitting(true);
     try {
       const payload: SoftwareInvoiceCreate = {
-        invoice_number: formData.invoice_number.trim(),
+        invoice_number: formData.invoice_number.trim() || null,
         project_id: formData.project_id,
         software_contract_id: formData.software_contract_id,
         issue_date: formData.issue_date || null,
         due_date: formData.due_date || null,
         notes: formData.notes.trim() || null,
         items: formData.items.map((it) => ({
+          time_entry_id: it.time_entry_id || null,
           description: it.description.trim(),
           quantity: Number(it.quantity || 1),
           unit_price: Number(it.unit_price || 0),
@@ -372,6 +549,71 @@ export default function SoftwareInvoices() {
       setFormError(err?.response?.data?.detail || err?.message || "Failed to create invoice");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Download Invoice PDF
+  const handleDownloadPdf = async (inv: SoftwareInvoice) => {
+    if (downloadingInvoiceId) return;
+
+    setDownloadingInvoiceId(inv.id);
+    setActionMessage(null);
+
+    try {
+      let fullInvoice = inv;
+      if (!Array.isArray(inv.items) || inv.items.length === 0 || !inv.payments) {
+        try {
+          fullInvoice = await getSoftwareInvoice(inv.id);
+        } catch {
+          fullInvoice = inv;
+        }
+      }
+
+      const project = projects.find((p) => p.id === fullInvoice.project_id) || null;
+      const contract = contracts.find((c) => c.id === fullInvoice.software_contract_id) || null;
+      const estimate = contract?.software_estimate_id
+        ? estimateMap.get(contract.software_estimate_id) || null
+        : null;
+
+      let clientName = "";
+      let clientEmail = "";
+      let clientAddress = "";
+
+      if (contract?.account_id && accountMap.has(contract.account_id)) {
+        const acc = accountMap.get(contract.account_id);
+        clientName = acc?.name || "";
+        clientEmail = acc?.email || "";
+        clientAddress = acc?.billing_address || acc?.address || "";
+      } else if (contract?.lead_id && leadMap.has(contract.lead_id)) {
+        const ld = leadMap.get(contract.lead_id);
+        clientName = ld?.name || `${ld?.first_name || ""} ${ld?.last_name || ""}`.trim();
+        clientEmail = ld?.email || "";
+      } else if (project?.name) {
+        clientName = `${project.name} Client`;
+      }
+
+      const downloadedFileName = await downloadSoftwareInvoicePdf({
+        invoice: fullInvoice,
+        project,
+        contract,
+        estimate,
+        clientName: clientName || undefined,
+        clientEmail: clientEmail || undefined,
+        clientAddress: clientAddress || undefined,
+      });
+
+      setActionMessage({
+        text: `Invoice ${fullInvoice.invoice_number || fullInvoice.id} downloaded successfully as ${downloadedFileName}`,
+        type: "success",
+      });
+    } catch (err: any) {
+      console.error("PDF download error:", err);
+      setActionMessage({
+        text: err?.message || "Failed to generate invoice PDF. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setDownloadingInvoiceId(null);
     }
   };
 
@@ -895,7 +1137,7 @@ export default function SoftwareInvoices() {
                     Boolean(inv.due_date) &&
                     inv.due_date! < new Date().toISOString().slice(0, 10));
 
-                const canMarkSent = inv.status === "Draft" && perms.canUpdateInvoices;
+                const canMarkSent = inv.status === "Draft" && perms.canSendInvoices;
                 const canPay =
                   (inv.status === "Sent" || inv.status === "Partially Paid") &&
                   Number(inv.balance_due) > 0 &&
@@ -905,8 +1147,11 @@ export default function SoftwareInvoices() {
                   Number(inv.balance_due) > 0 &&
                   perms.canCreateCreditNote;
                 const canVoid =
-                  (inv.status === "Draft" || (inv.status === "Sent" && Number(inv.amount_paid) === 0)) &&
-                  perms.canUpdateInvoices;
+                  perms.canCancelInvoices &&
+                  (inv.status === "Draft" ||
+                    (inv.status === "Sent" &&
+                      Number(inv.amount_paid || 0) <= 0 &&
+                      (!inv.credit_notes || inv.credit_notes.length === 0)));
 
                 return (
                   <tr key={inv.id}>
@@ -1028,6 +1273,45 @@ export default function SoftwareInvoices() {
                           </svg>
                         </button>
 
+                        <button
+                          className="sw-btn-icon"
+                          title="Download Invoice PDF"
+                          disabled={downloadingInvoiceId === inv.id}
+                          onClick={() => handleDownloadPdf(inv)}
+                          style={{
+                            color: "#0284c7",
+                            cursor: downloadingInvoiceId === inv.id ? "not-allowed" : "pointer",
+                            opacity: downloadingInvoiceId === inv.id ? 0.6 : 1,
+                          }}
+                        >
+                          {downloadingInvoiceId === inv.id ? (
+                            <svg
+                              className="sw-spin"
+                              viewBox="0 0 24 24"
+                              width="16"
+                              height="16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+                            </svg>
+                          ) : (
+                            <svg
+                              viewBox="0 0 24 24"
+                              width="16"
+                              height="16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                          )}
+                        </button>
+
                         {canMarkSent && (
                           <button
                             className="sw-btn-secondary"
@@ -1125,18 +1409,21 @@ export default function SoftwareInvoices() {
                 {formError && <div className="sw-error-banner">{formError}</div>}
 
                 <div className="sw-invoice-form-grid">
-                  <div className="sw-form-group">
-                    <label>Invoice Number *</label>
-                    <input
-                      type="text"
-                      className="sw-form-input"
+                  <div className="sw-form-group span-2">
+                    <label>Linked Software Contract *</label>
+                    <select
+                      className="sw-form-select"
                       required
-                      placeholder="e.g. SINV-2026-001"
-                      value={formData.invoice_number}
-                      onChange={(e) =>
-                        setFormData({ ...formData, invoice_number: e.target.value })
-                      }
-                    />
+                      value={formData.software_contract_id}
+                      onChange={(e) => handleContractChange(e.target.value)}
+                    >
+                      <option value="">Select Linked Contract...</option>
+                      {contracts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.contract_number} — {c.title} [{c.billing_type || "Fixed Price"}]
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="sw-form-group">
@@ -1145,34 +1432,33 @@ export default function SoftwareInvoices() {
                       className="sw-form-select"
                       required
                       value={formData.project_id}
-                      onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+                      onChange={(e) => handleProjectChange(e.target.value)}
                     >
-                      <option value="">Select Delivery Project...</option>
-                      {projects.map((p) => (
+                      <option value="">Select Linked Project...</option>
+                      {compatibleProjects.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
                         </option>
                       ))}
                     </select>
+                    {compatibleProjects.length === 0 && formData.software_contract_id && (
+                      <span style={{ fontSize: "0.75rem", color: "#f59e0b", marginTop: "4px", display: "block" }}>
+                        ⚠️ No project is currently linked to this contract.
+                      </span>
+                    )}
                   </div>
 
-                  <div className="sw-form-group span-2">
-                    <label>Linked Software Contract *</label>
-                    <select
-                      className="sw-form-select"
-                      required
-                      value={formData.software_contract_id}
+                  <div className="sw-form-group">
+                    <label>Invoice Number (Optional)</label>
+                    <input
+                      type="text"
+                      className="sw-form-input"
+                      placeholder="Leave blank to auto-generate (or enter custom)"
+                      value={formData.invoice_number}
                       onChange={(e) =>
-                        setFormData({ ...formData, software_contract_id: e.target.value })
+                        setFormData({ ...formData, invoice_number: e.target.value })
                       }
-                    >
-                      <option value="">Select Linked Contract...</option>
-                      {contracts.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.contract_number} — {c.title}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
 
                   <div className="sw-form-group">
@@ -1199,160 +1485,299 @@ export default function SoftwareInvoices() {
                   </div>
                 </div>
 
-                {/* Line Items */}
-                <div className="sw-invoice-items-section">
-                  <div className="sw-invoice-items-section-header">
-                    <div className="sw-invoice-items-title">
-                      <h3>Invoice Line Items</h3>
-                      <span className="sw-items-count-badge">
-                        {formData.items.length} {formData.items.length === 1 ? "item" : "items"}
-                      </span>
+                {/* Contract Billing Rules Notice */}
+                {formSelectedContract?.billing_type === "Fixed Price" ? (
+                  <div
+                    style={{
+                      margin: "14px 0",
+                      padding: "16px",
+                      background: "rgba(245, 158, 11, 0.1)",
+                      border: "1px solid rgba(245, 158, 11, 0.3)",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: "#f59e0b", fontSize: "0.9rem", marginBottom: "4px" }}>
+                      📌 Fixed Price Contract Invoicing
                     </div>
-                    <button
-                      type="button"
-                      className="sw-btn-secondary"
-                      style={{ padding: "6px 12px", fontSize: "0.8rem" }}
-                      onClick={handleAddItem}
-                    >
-                      + Add Item
-                    </button>
+                    <div style={{ fontSize: "0.84rem", color: "#94a3b8", lineHeight: 1.5 }}>
+                      Fixed Price contracts must be invoiced through payment milestones in the Software Contracts module.
+                      To invoice a milestone, please go to{" "}
+                      <a href="/software-contracts" style={{ color: "#38bdf8", textDecoration: "underline" }}>
+                        Software Contracts
+                      </a>
+                      , open contract details, and click <strong>"Invoice"</strong> on a Ready milestone. Manual line item generation is disabled for Fixed Price contracts.
+                    </div>
                   </div>
-
-                  <div className="sw-invoice-items-header">
-                    <span>Description *</span>
-                    <span>Qty *</span>
-                    <span>Unit Price *</span>
-                    <span>Tax %</span>
-                    <span style={{ textAlign: "right", paddingRight: "4px" }}>Line Total</span>
-                    <span></span>
+                ) : formSelectedContract?.billing_type === "Time & Material" ? (
+                  <div
+                    style={{
+                      margin: "14px 0",
+                      padding: "12px 16px",
+                      background: "rgba(14, 165, 233, 0.08)",
+                      border: "1px solid rgba(14, 165, 233, 0.25)",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#38bdf8", fontSize: "0.88rem" }}>
+                        ⏱️ Time & Material Invoicing
+                      </div>
+                      <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                        Invoiced using approved billable time entries at the contract hourly rate:{" "}
+                        <strong style={{ color: "#10b981" }}>
+                          {formatCurrency(formSelectedContract?.hourly_rate || 0, formSelectedContract?.currency)}/hr
+                        </strong>
+                      </div>
+                    </div>
+                    {(!formSelectedContract?.hourly_rate || Number(formSelectedContract.hourly_rate) <= 0) && (
+                      <span style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: 600 }}>
+                        ⚠️ Missing contract hourly rate
+                      </span>
+                    )}
                   </div>
+                ) : null}
 
-                  <div className="sw-invoice-items-list">
-                    {formData.items.map((item, idx) => {
-                      const lineSub = Number(item.quantity || 0) * Number(item.unit_price || 0);
-                      const lineTax = (lineSub * Number(item.tax_percent || 0)) / 100;
-                      const lineTotal = lineSub + lineTax;
+                {/* Line Items for Time & Material */}
+                {formSelectedContract?.billing_type === "Time & Material" && (
+                  <div className="sw-invoice-items-section">
+                    <div className="sw-invoice-items-section-header">
+                      <div className="sw-invoice-items-title">
+                        <h3>Time Entry Line Items</h3>
+                        <span className="sw-items-count-badge">
+                          {formData.items.length} {formData.items.length === 1 ? "entry" : "entries"}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="sw-btn-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+                        onClick={handleAddTMItem}
+                        disabled={
+                          timeEntriesLoading ||
+                          formData.items.length >= eligibleTimeEntries.length
+                        }
+                      >
+                        + Add Time Entry Line
+                      </button>
+                    </div>
 
-                      return (
-                        <div className="sw-invoice-item-row" key={idx}>
-                          <div className="sw-invoice-item-field sw-field-desc">
-                            <span className="sw-mobile-label">Description *</span>
-                            <input
-                              type="text"
-                              className="sw-form-input"
-                              required
-                              placeholder="Service description or milestone..."
-                              value={item.description}
-                              onChange={(e) =>
-                                handleItemChange(idx, "description", e.target.value)
-                              }
-                            />
-                          </div>
+                    {timeEntriesLoading && (
+                      <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
+                        ⏳ Loading project time entries...
+                      </div>
+                    )}
 
-                          <div className="sw-invoice-item-field">
-                            <span className="sw-mobile-label">Qty *</span>
-                            <input
-                              type="number"
-                              className="sw-form-input"
-                              min="0.0001"
-                              step="any"
-                              required
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  idx,
-                                  "quantity",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                            />
-                          </div>
+                    {timeEntriesError && (
+                      <div className="sw-error-banner" style={{ margin: "10px 0" }}>
+                        ⚠️ {timeEntriesError}
+                        {formData.project_id && (
+                          <button
+                            type="button"
+                            className="sw-btn-secondary"
+                            style={{ marginLeft: "12px", padding: "2px 8px", fontSize: "0.75rem" }}
+                            onClick={() => fetchProjectTimeEntries(formData.project_id)}
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </div>
+                    )}
 
-                          <div className="sw-invoice-item-field">
-                            <span className="sw-mobile-label">Unit Price *</span>
-                            <input
-                              type="number"
-                              className="sw-form-input"
-                              min="0"
-                              step="any"
-                              required
-                              value={item.unit_price}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  idx,
-                                  "unit_price",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                            />
-                          </div>
+                    {!timeEntriesLoading && !timeEntriesError && eligibleTimeEntries.length === 0 && (
+                      <div
+                        style={{
+                          padding: "14px",
+                          background: "rgba(255, 255, 255, 0.02)",
+                          borderRadius: "6px",
+                          fontSize: "0.82rem",
+                          color: "#94a3b8",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        ℹ️ No uninvoiced approved billable time entries found for project "
+                        <strong>{formSelectedProject?.name || "Selected Project"}</strong>".
+                        Ensure time entries are marked <strong>Billable</strong> and have <strong>Approved</strong> billing status in Software Time Tracking.
+                      </div>
+                    )}
 
-                          <div className="sw-invoice-item-field">
-                            <span className="sw-mobile-label">Tax %</span>
-                            <input
-                              type="number"
-                              className="sw-form-input"
-                              min="0"
-                              max="100"
-                              value={item.tax_percent}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  idx,
-                                  "tax_percent",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                            />
-                          </div>
+                    <div className="sw-invoice-items-list">
+                      {formData.items.map((item, idx) => {
+                        const selectedEntry = eligibleTimeEntryMap.get(item.time_entry_id || "");
+                        const taskTitle = selectedEntry
+                          ? activityMap.get(selectedEntry.activity_id) || selectedEntry.activity_title || "Development Task"
+                          : "";
+                        const lineSub = Number(item.quantity || 0) * Number(item.unit_price || 0);
+                        const lineTax = (lineSub * Number(item.tax_percent || 0)) / 100;
+                        const lineTotal = lineSub + lineTax;
 
-                          <div className="sw-invoice-item-total">
-                            <span className="sw-mobile-label">Total</span>
-                            <span>{formatCurrency(lineTotal)}</span>
-                          </div>
+                        // Unselected entries for this line
+                        const availableEntries = eligibleTimeEntries.filter(
+                          (entry) =>
+                            entry.id === item.time_entry_id ||
+                            !formData.items.some((it, oIdx) => oIdx !== idx && it.time_entry_id === entry.id)
+                        );
 
-                          <div className="sw-invoice-item-action">
-                            {formData.items.length > 1 ? (
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: "12px",
+                              marginBottom: "10px",
+                              background: "rgba(255, 255, 255, 0.02)",
+                              border: "1px solid rgba(255, 255, 255, 0.06)",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                              <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: "0.78rem", color: "#94a3b8", display: "block", marginBottom: "4px" }}>
+                                  Select Approved Time Entry *
+                                </label>
+                                <select
+                                  className="sw-form-select"
+                                  required
+                                  value={item.time_entry_id || ""}
+                                  onChange={(e) => handleSelectTimeEntry(idx, e.target.value)}
+                                >
+                                  <option value="">-- Choose Approved Time Entry --</option>
+                                  {availableEntries.map((e) => {
+                                    const title = activityMap.get(e.activity_id) || e.activity_title || "Task";
+                                    const hrs = (Number(e.duration_minutes || 0) / 60).toFixed(2);
+                                    return (
+                                      <option key={e.id} value={e.id}>
+                                        {e.work_date} — {title} ({hrs} hrs) [Approved]
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+
                               <button
                                 type="button"
                                 className="sw-btn-icon danger"
-                                title="Remove Item"
+                                style={{ marginTop: "22px" }}
+                                title="Remove Line"
                                 onClick={() => handleRemoveItem(idx)}
                               >
                                 ✕
                               </button>
-                            ) : (
-                              <span style={{ width: "32px" }}></span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                            </div>
 
-                  {/* Totals Summary */}
-                  <div className="sw-invoice-totals-wrapper">
-                    <div className="sw-invoice-totals-card">
-                      <div className="sw-invoice-total-row">
-                        <span>Subtotal:</span>
-                        <span className="value">
-                          {formatCurrency(formTotals.subtotal)}
-                        </span>
-                      </div>
-                      <div className="sw-invoice-total-row">
-                        <span>Tax Amount:</span>
-                        <span className="value">
-                          {formatCurrency(formTotals.taxAmount)}
-                        </span>
-                      </div>
-                      <div className="sw-invoice-total-row grand">
-                        <span>Grand Total:</span>
-                        <span className="value">
-                          {formatCurrency(formTotals.totalAmount)}
-                        </span>
+                            {selectedEntry && (
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  padding: "8px 12px",
+                                  background: "rgba(14, 165, 233, 0.05)",
+                                  borderRadius: "6px",
+                                  border: "1px solid rgba(14, 165, 233, 0.15)",
+                                  display: "flex",
+                                  gap: "16px",
+                                  flexWrap: "wrap",
+                                  fontSize: "0.78rem",
+                                }}
+                              >
+                                <span>📅 <strong>Date:</strong> {selectedEntry.work_date}</span>
+                                <span>📝 <strong>Task:</strong> {taskTitle}</span>
+                                <span>⏱️ <strong>Duration:</strong> {selectedEntry.duration_minutes} min ({(Number(selectedEntry.duration_minutes) / 60).toFixed(4)} hrs)</span>
+                                <span>✓ <strong>Status:</strong> Approved • Billable</span>
+                                <span>💵 <strong>Rate:</strong> {formatCurrency(item.unit_price, formSelectedContract?.currency)}/hr</span>
+                              </div>
+                            )}
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "3fr 1fr 1fr 1fr 1fr",
+                                gap: "10px",
+                                marginTop: "8px",
+                              }}
+                            >
+                              <div>
+                                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Description *</label>
+                                <input
+                                  type="text"
+                                  className="sw-form-input"
+                                  required
+                                  value={item.description}
+                                  onChange={(e) => handleItemChange(idx, "description", e.target.value)}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Hours (Qty)</label>
+                                <input
+                                  type="number"
+                                  className="sw-form-input"
+                                  readOnly
+                                  disabled
+                                  value={item.quantity}
+                                  style={{ cursor: "not-allowed", opacity: 0.8 }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Rate/hr</label>
+                                <input
+                                  type="number"
+                                  className="sw-form-input"
+                                  readOnly
+                                  disabled
+                                  value={item.unit_price}
+                                  style={{ cursor: "not-allowed", opacity: 0.8 }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: "0.75rem", color: "#64748b" }}>Tax %</label>
+                                <input
+                                  type="number"
+                                  className="sw-form-input"
+                                  min="0"
+                                  max="100"
+                                  value={item.tax_percent}
+                                  onChange={(e) => handleItemChange(idx, "tax_percent", parseFloat(e.target.value) || 0)}
+                                />
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <label style={{ fontSize: "0.75rem", color: "#64748b", display: "block" }}>Line Total</label>
+                                <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "#0ea5e9", lineHeight: "34px" }}>
+                                  {formatCurrency(lineTotal, formSelectedContract?.currency)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Totals Summary */}
+                    <div className="sw-invoice-totals-wrapper">
+                      <div className="sw-invoice-totals-card">
+                        <div className="sw-invoice-total-row">
+                          <span>Subtotal:</span>
+                          <span className="value">
+                            {formatCurrency(formTotals.subtotal, formSelectedContract?.currency)}
+                          </span>
+                        </div>
+                        <div className="sw-invoice-total-row">
+                          <span>Tax Amount:</span>
+                          <span className="value">
+                            {formatCurrency(formTotals.taxAmount, formSelectedContract?.currency)}
+                          </span>
+                        </div>
+                        <div className="sw-invoice-total-row grand">
+                          <span>Grand Total:</span>
+                          <span className="value">
+                            {formatCurrency(formTotals.totalAmount, formSelectedContract?.currency)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="sw-form-group" style={{ marginTop: "8px" }}>
                   <label>Notes / Billing Instructions</label>
@@ -1373,7 +1798,7 @@ export default function SoftwareInvoices() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="sw-btn-primary" disabled={submitting}>
+                <button type="submit" className="sw-btn-primary" disabled={submitting || formSelectedContract?.billing_type === "Fixed Price"}>
                   {submitting ? "Saving..." : "Create Invoice"}
                 </button>
               </div>
@@ -1392,9 +1817,35 @@ export default function SoftwareInvoices() {
           >
             <div className="sw-modal-header">
               <h2>Invoice {viewingItem.invoice_number}</h2>
-              <button className="sw-btn-icon" onClick={() => setViewingItem(null)}>
-                ✕
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  className="sw-btn-download-pdf"
+                  disabled={downloadingInvoiceId === viewingItem.id}
+                  onClick={() => handleDownloadPdf(viewingItem)}
+                  title="Download Invoice as PDF"
+                >
+                  {downloadingInvoiceId === viewingItem.id ? (
+                    <>
+                      <svg className="sw-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+                      </svg>
+                      <span>Generating PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      <span>Download PDF</span>
+                    </>
+                  )}
+                </button>
+                <button className="sw-btn-icon" onClick={() => setViewingItem(null)}>
+                  ✕
+                </button>
+              </div>
             </div>
             <div className="sw-modal-body">
               {/* Badges Bar */}
@@ -1638,14 +2089,16 @@ export default function SoftwareInvoices() {
               </table>
 
               {/* Payment History Table with Reversal Support */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  margin: "24px 0 8px 0",
-                }}
-              >
+              {perms.canViewInvoicePayments && (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      margin: "24px 0 8px 0",
+                    }}
+                  >
                 <h4 style={{ margin: 0 }}>Payment History</h4>
                 {Number(viewingItem.balance_due) > 0 &&
                   (viewingItem.status === "Sent" || viewingItem.status === "Partially Paid") &&
@@ -1763,7 +2216,9 @@ export default function SoftwareInvoices() {
                     </tr>
                   )}
                 </tbody>
-              </table>
+                  </table>
+                </>
+              )}
 
               {viewingItem.notes && (
                 <div style={{ marginTop: "16px", fontSize: "0.85rem", color: "#94a3b8" }}>
@@ -1773,7 +2228,7 @@ export default function SoftwareInvoices() {
             </div>
 
             <div className="sw-modal-footer">
-              {viewingItem.status === "Draft" && perms.canUpdateInvoices && (
+              {viewingItem.status === "Draft" && perms.canSendInvoices && (
                 <button
                   className="sw-btn-primary"
                   onClick={() => handleUpdateStatus(viewingItem.id, "Sent")}
@@ -1803,6 +2258,31 @@ export default function SoftwareInvoices() {
                     Issue Credit Note
                   </button>
                 )}
+              <button
+                className="sw-btn-download-pdf"
+                disabled={downloadingInvoiceId === viewingItem.id}
+                onClick={() => handleDownloadPdf(viewingItem)}
+                title="Download Invoice as PDF"
+              >
+                {downloadingInvoiceId === viewingItem.id ? (
+                  <>
+                    <svg className="sw-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+                    </svg>
+                    <span>Generating PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Download PDF</span>
+                  </>
+                )}
+              </button>
+
               <button className="sw-btn-secondary" onClick={() => setViewingItem(null)}>
                 Close
               </button>
