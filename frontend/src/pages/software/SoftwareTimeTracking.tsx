@@ -676,6 +676,10 @@ export default function SoftwareTimeTracking() {
       {actionMessage && (
         <div
           style={{
+            position: "sticky",
+            top: "12px",
+            zIndex: 1000,
+            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
             marginBottom: "18px",
             padding: "12px 18px",
             borderRadius: "8px",
@@ -1325,7 +1329,7 @@ export default function SoftwareTimeTracking() {
                 <div className="sw-dropdown-status-list">
                   {/* Status 1: Unreviewed — Amber */}
                   <div
-                    className={`sw-dropdown-status-row ${currentStatus === "Unreviewed" ? "is-current" : ""}`}
+                    className={`sw-dropdown-status-row ${currentStatus === "Unreviewed" ? "is-current" : "is-disabled"}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => {
@@ -1378,12 +1382,18 @@ export default function SoftwareTimeTracking() {
 
                   {/* Status 2: Approved — Green */}
                   <div
-                    className={`sw-dropdown-status-row ${currentStatus === "Approved" ? "is-current" : "is-clickable"}`}
+                    className={`sw-dropdown-status-row ${
+                      currentStatus === "Approved"
+                        ? "is-current"
+                        : currentStatus === "Unreviewed" && eligibility.isBillable && !isEntryActiveTimer(activeEntry)
+                        ? "is-clickable"
+                        : "is-disabled"
+                    }`}
                     role="button"
                     tabIndex={0}
                     onClick={() => {
                       if (currentStatus === "Approved") {
-                        setActionMessage({ text: "Time entry is already Approved for billing.", type: "info" });
+                        setActionMessage({ text: "Time entry is already Approved for client invoicing.", type: "info" });
                         setOpenActionId(null);
                         setActiveActionEntry(null);
                         setDropdownPos(null);
@@ -1392,7 +1402,7 @@ export default function SoftwareTimeTracking() {
 
                       if (!eligibility.isBillable) {
                         setActionMessage({
-                          text: "Cannot approve billing: Only billable time entries can be approved for client contract invoicing.",
+                          text: "Cannot approve billing: Only billable time entries can be approved for client contract invoicing. This entry is Non-Billable.",
                           type: "error",
                         });
                         setOpenActionId(null);
@@ -1438,7 +1448,9 @@ export default function SoftwareTimeTracking() {
                       currentStatus === "Approved"
                         ? "Current billing status: Approved"
                         : !eligibility.isBillable
-                        ? "Non-billable entries cannot be approved"
+                        ? "Non-billable entries cannot be approved for invoicing"
+                        : isEntryActiveTimer(activeEntry)
+                        ? "Stop active timer before approving billing"
                         : "Click to approve this billable time entry"
                     }
                   >
@@ -1446,9 +1458,9 @@ export default function SoftwareTimeTracking() {
                       className="sw-status-pill approved"
                       style={{
                         opacity:
-                          currentStatus === "Approved" || (currentStatus === "Unreviewed" && eligibility.isBillable)
+                          currentStatus === "Approved" || (currentStatus === "Unreviewed" && eligibility.isBillable && !isEntryActiveTimer(activeEntry))
                             ? 1
-                            : 0.6,
+                            : 0.5,
                       }}
                     >
                       <span
@@ -1468,11 +1480,17 @@ export default function SoftwareTimeTracking() {
                     {currentStatus === "Unreviewed" && eligibility.isBillable && !isEntryActiveTimer(activeEntry) && (
                       <span className="sw-status-indicator action-hint">Approve →</span>
                     )}
+                    {currentStatus === "Unreviewed" && !eligibility.isBillable && (
+                      <span className="sw-status-indicator" style={{ fontSize: "0.7rem", color: "#94a3b8" }}>🔒 Non-Billable</span>
+                    )}
+                    {currentStatus === "Unreviewed" && eligibility.isBillable && isEntryActiveTimer(activeEntry) && (
+                      <span className="sw-status-indicator" style={{ fontSize: "0.7rem", color: "#f59e0b" }}>⏱ Timer Running</span>
+                    )}
                   </div>
 
                   {/* Status 3: Rejected — Red (Status indicator only) */}
                   <div
-                    className={`sw-dropdown-status-row ${currentStatus === "Rejected" ? "is-current" : ""}`}
+                    className={`sw-dropdown-status-row ${currentStatus === "Rejected" ? "is-current" : "is-disabled"}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => {
@@ -1481,7 +1499,7 @@ export default function SoftwareTimeTracking() {
                       } else {
                         setActionMessage({
                           text: "Rejecting billing status is not supported by the backend API. Status is an indicator only.",
-                          type: "error",
+                          type: "info",
                         });
                       }
                       setOpenActionId(null);
@@ -1496,7 +1514,7 @@ export default function SoftwareTimeTracking() {
                         } else {
                           setActionMessage({
                             text: "Rejecting billing status is not supported by the backend API. Status is an indicator only.",
-                            type: "error",
+                            type: "info",
                           });
                         }
                         setOpenActionId(null);
@@ -1512,7 +1530,7 @@ export default function SoftwareTimeTracking() {
                   >
                     <span
                       className="sw-status-pill rejected"
-                      style={{ opacity: currentStatus === "Rejected" ? 1 : 0.6 }}
+                      style={{ opacity: currentStatus === "Rejected" ? 1 : 0.5 }}
                     >
                       <span
                         style={{
@@ -1528,8 +1546,26 @@ export default function SoftwareTimeTracking() {
                     {currentStatus === "Rejected" && (
                       <span className="sw-status-indicator current-tag">✓ Current</span>
                     )}
+                    {currentStatus !== "Rejected" && (
+                      <span className="sw-status-indicator" style={{ fontSize: "0.68rem", color: "#94a3b8" }}>Indicator Only</span>
+                    )}
                   </div>
                 </div>
+
+                {/* Status Guidance Card */}
+                {!eligibility.isBillable ? (
+                  <div className="sw-dropdown-helper-note warning">
+                    <span>🔒 <strong>Non-Billable:</strong> Internal hours cannot be approved for client invoicing.</span>
+                  </div>
+                ) : isEntryActiveTimer(activeEntry) ? (
+                  <div className="sw-dropdown-helper-note info">
+                    <span>⏱ <strong>Timer Running:</strong> Stop the timer before approving billing.</span>
+                  </div>
+                ) : currentStatus === "Unreviewed" ? (
+                  <div className="sw-dropdown-helper-note success">
+                    <span>✓ <strong>Billable:</strong> Ready for billing approval and invoicing.</span>
+                  </div>
+                ) : null}
 
                 {/* Dedicated Action Button: Approve Billing (when eligible) */}
                 {eligibility.canApproveBilling && (
@@ -1546,7 +1582,7 @@ export default function SoftwareTimeTracking() {
                       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
-                      <span>Approve Billing</span>
+                      <span>Approve Billing for Invoicing</span>
                     </button>
                   </>
                 )}

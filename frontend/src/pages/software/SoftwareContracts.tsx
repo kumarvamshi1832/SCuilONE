@@ -64,7 +64,7 @@ export default function SoftwareContracts() {
   const [deletingItem, setDeletingItem] = useState<SoftwareContract | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
   // Milestone Actions: Mark Ready confirmation modal state
   const [readyingMilestone, setReadyingMilestone] = useState<{
@@ -101,6 +101,7 @@ export default function SoftwareContracts() {
     terms_and_conditions: "",
     notes: "",
     status: "Draft",
+    milestone_billing_mode: "Sequential",
     payment_milestones: [],
   });
 
@@ -210,6 +211,10 @@ export default function SoftwareContracts() {
     () => estimates.find((e) => e.id === formData.software_estimate_id),
     [estimates, formData.software_estimate_id]
   );
+  const effectiveBillingType = editingItem?.billing_type || selectedEstimate?.billing_type || "Fixed Price";
+  const effectiveHourlyRate = editingItem?.hourly_rate ?? selectedEstimate?.hourly_rate ?? null;
+  const effectiveCurrency = editingItem?.currency || selectedEstimate?.currency || "INR";
+
   const selectedEstimateContract = useMemo(() => {
     if (!formData.software_estimate_id) return null;
     return contractedEstimateMap.get(formData.software_estimate_id) || null;
@@ -266,6 +271,7 @@ export default function SoftwareContracts() {
       terms_and_conditions: "",
       notes: currentEligible?.notes || "",
       status: "Draft",
+      milestone_billing_mode: "Sequential",
       payment_milestones: [],
     });
     setIsModalOpen(true);
@@ -317,6 +323,7 @@ export default function SoftwareContracts() {
       terms_and_conditions: item.terms_and_conditions || "",
       notes: item.notes || "",
       status: (item.status as SoftwareContractStatus) || "Draft",
+      milestone_billing_mode: item.milestone_billing_mode || "Sequential",
       payment_milestones: [],
     });
     setIsModalOpen(true);
@@ -396,34 +403,45 @@ export default function SoftwareContracts() {
       return;
     }
 
-    // Milestone validations when creating a contract
-    if (!editingItem && formData.payment_milestones && formData.payment_milestones.length > 0) {
-      if (formData.payment_milestones.length > 20) {
-        setFormError("Maximum 20 payment milestones allowed.");
-        return;
-      }
+    // Billing-Type-Based Validations when creating a contract
+    if (!editingItem) {
+      if (effectiveBillingType === "Fixed Price") {
+        if (!formData.payment_milestones || formData.payment_milestones.length === 0) {
+          setFormError("Fixed Price contracts require at least one payment milestone. Please add a valid payment milestone plan totalling 100.00%.");
+          return;
+        }
+        if (formData.payment_milestones.length > 20) {
+          setFormError("Maximum 20 payment milestones allowed.");
+          return;
+        }
 
-      for (const [i, m] of formData.payment_milestones.entries()) {
-        if (!m.name.trim()) {
-          setFormError(`Milestone #${i + 1} requires a valid name (1-120 characters).`);
-          return;
+        for (const [i, m] of formData.payment_milestones.entries()) {
+          if (!m.name.trim()) {
+            setFormError(`Milestone #${i + 1} requires a valid name (1-120 characters).`);
+            return;
+          }
+          if (m.name.length > 120) {
+            setFormError(`Milestone #${i + 1} name must not exceed 120 characters.`);
+            return;
+          }
+          const pct = Number(m.percentage);
+          if (isNaN(pct) || pct <= 0 || pct > 100) {
+            setFormError(`Milestone #${i + 1} percentage must be greater than 0% and at most 100%.`);
+            return;
+          }
         }
-        if (m.name.length > 120) {
-          setFormError(`Milestone #${i + 1} name must not exceed 120 characters.`);
-          return;
-        }
-        const pct = Number(m.percentage);
-        if (isNaN(pct) || pct <= 0 || pct > 100) {
-          setFormError(`Milestone #${i + 1} percentage must be greater than 0% and at most 100%.`);
-          return;
-        }
-      }
 
-      if (milestoneTotalPercentage !== 100) {
-        setFormError(
-          `Payment milestone percentages must total exactly 100% (currently ${milestoneTotalPercentage.toFixed(2)}%).`
-        );
-        return;
+        if (milestoneTotalPercentage !== 100) {
+          setFormError(
+            `Payment milestone percentages must total exactly 100% (currently ${milestoneTotalPercentage.toFixed(2)}%).`
+          );
+          return;
+        }
+      } else if (effectiveBillingType === "Time & Material") {
+        if (effectiveHourlyRate === null || effectiveHourlyRate === undefined || Number(effectiveHourlyRate) <= 0) {
+          setFormError("Time & Material contracts require a valid positive hourly rate from the accepted estimate.");
+          return;
+        }
       }
     }
 
@@ -440,6 +458,7 @@ export default function SoftwareContracts() {
           scope_of_work: formData.scope_of_work,
           deliverables: formData.deliverables,
           payment_terms: formData.payment_terms,
+          milestone_billing_mode: editingItem.billing_type === "Fixed Price" ? (formData.milestone_billing_mode || "Sequential") : undefined,
           terms_and_conditions: formData.terms_and_conditions,
           notes: formData.notes,
         };
@@ -461,10 +480,11 @@ export default function SoftwareContracts() {
           scope_of_work: formData.scope_of_work,
           deliverables: formData.deliverables,
           payment_terms: formData.payment_terms || undefined,
+          milestone_billing_mode: effectiveBillingType === "Fixed Price" ? (formData.milestone_billing_mode || "Sequential") : undefined,
           terms_and_conditions: formData.terms_and_conditions || undefined,
           notes: formData.notes || undefined,
           payment_milestones:
-            formData.payment_milestones && formData.payment_milestones.length > 0
+            effectiveBillingType === "Fixed Price" && formData.payment_milestones && formData.payment_milestones.length > 0
               ? formData.payment_milestones.map((m) => ({
                 name: m.name.trim(),
                 percentage: Number(m.percentage),
@@ -649,12 +669,22 @@ export default function SoftwareContracts() {
             background:
               actionMessage.type === "success"
                 ? "rgba(16, 185, 129, 0.15)"
+                : actionMessage.type === "info"
+                ? "rgba(14, 165, 233, 0.15)"
                 : "rgba(239, 68, 68, 0.15)",
-            border: `1px solid ${actionMessage.type === "success"
+            border: `1px solid ${
+              actionMessage.type === "success"
                 ? "rgba(16, 185, 129, 0.3)"
+                : actionMessage.type === "info"
+                ? "rgba(14, 165, 233, 0.3)"
                 : "rgba(239, 68, 68, 0.3)"
-              }`,
-            color: actionMessage.type === "success" ? "#10b981" : "#ef4444",
+            }`,
+            color:
+              actionMessage.type === "success"
+                ? "#10b981"
+                : actionMessage.type === "info"
+                ? "#0284c7"
+                : "#ef4444",
           }}
         >
           <span>{actionMessage.text}</span>
@@ -744,6 +774,7 @@ export default function SoftwareContracts() {
               <tr>
                 <th>Contract Title / Number</th>
                 <th>Linked Estimate</th>
+                <th>Billing</th>
                 <th>Assigned To</th>
                 <th>Contract Value</th>
                 <th>Start Date</th>
@@ -765,6 +796,18 @@ export default function SoftwareContracts() {
                   <td>
                     {estMap.get(item.software_estimate_id) ||
                       item.software_estimate_id.slice(0, 8)}
+                  </td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{item.billing_type || "Fixed Price"}</div>
+                    {item.billing_type === "Time & Material" && item.hourly_rate != null ? (
+                      <div style={{ fontSize: "0.75rem", color: "#0ea5e9" }}>
+                        {formatCurrency(item.hourly_rate, item.currency)}/hr
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                        Fixed Price
+                      </div>
+                    )}
                   </td>
                   <td>
                     {item.assigned_to
@@ -942,6 +985,7 @@ export default function SoftwareContracts() {
                       onChange={(e) => {
                         const val = e.target.value;
                         const match = estimates.find((est) => est.id === val);
+                        const isTM = match?.billing_type === "Time & Material";
                         setFormData((prev) => ({
                           ...prev,
                           software_estimate_id: val,
@@ -953,6 +997,7 @@ export default function SoftwareContracts() {
                           payment_terms:
                             prev.payment_terms || (match ? match.terms_and_conditions || "" : prev.payment_terms),
                           assigned_to: prev.assigned_to || match?.assigned_to || null,
+                          payment_milestones: isTM ? [] : prev.payment_milestones,
                         }));
                       }}
                       disabled={!!editingItem}
@@ -1090,7 +1135,7 @@ export default function SoftwareContracts() {
                             color: "#10b981",
                           }}
                         >
-                          ✓ Ready for contract: Estimate is Accepted ({formatCurrency(selectedEstimate.total_amount, selectedEstimate.currency)}).
+                          ✓ Ready for contract: Estimate is Accepted ({formatCurrency(selectedEstimate.total_amount, selectedEstimate.currency)}) • Inherited Billing: {selectedEstimate.billing_type || "Fixed Price"}{selectedEstimate.billing_type === "Time & Material" && selectedEstimate.hourly_rate != null ? ` (${formatCurrency(selectedEstimate.hourly_rate, selectedEstimate.currency)}/hr)` : ""}.
                         </div>
                       )}
                   </div>
@@ -1104,6 +1149,38 @@ export default function SoftwareContracts() {
                       required
                       value={formData.title || ""}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* Read-Only Inherited Billing Information */}
+                <div className="sw-form-row">
+                  <div className="sw-form-group">
+                    <label>Billing Type (Inherited)</label>
+                    <input
+                      type="text"
+                      className="sw-form-input"
+                      readOnly
+                      disabled
+                      value={effectiveBillingType}
+                      style={{ cursor: "not-allowed", opacity: 0.85, fontWeight: 600 }}
+                    />
+                  </div>
+                  <div className="sw-form-group">
+                    <label>Hourly Rate (Inherited)</label>
+                    <input
+                      type="text"
+                      className="sw-form-input"
+                      readOnly
+                      disabled
+                      value={
+                        effectiveBillingType === "Time & Material"
+                          ? effectiveHourlyRate != null
+                            ? `${formatCurrency(effectiveHourlyRate, effectiveCurrency)}/hr`
+                            : "⚠️ Missing Hourly Rate in Accepted Estimate"
+                          : "Not Applicable (Fixed Price)"
+                      }
+                      style={{ cursor: "not-allowed", opacity: 0.85, fontWeight: 600 }}
                     />
                   </div>
                 </div>
@@ -1175,8 +1252,32 @@ export default function SoftwareContracts() {
                   </div>
                 </div>
 
-                {/* Payment Milestones Definition — Enabled exclusively on Creation */}
-                {!editingItem ? (
+                {/* Payment Milestones Definition — Fixed Price Only */}
+                {effectiveBillingType === "Time & Material" ? (
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      marginBottom: "16px",
+                      padding: "14px 16px",
+                      background: "rgba(14, 165, 233, 0.08)",
+                      border: "1px solid rgba(14, 165, 233, 0.25)",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <span style={{ fontSize: "1.2rem" }}>ℹ️</span>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#38bdf8", fontSize: "0.88rem" }}>
+                        Time & Material Contract Billing
+                      </div>
+                      <div style={{ fontSize: "0.82rem", color: "#94a3b8", marginTop: "2px" }}>
+                        Time & Material contracts are invoiced using approved billable project time entries. Payment milestones are not applicable.
+                      </div>
+                    </div>
+                  </div>
+                ) : !editingItem ? (
                   <div
                     style={{
                       marginTop: "12px",
@@ -1187,6 +1288,44 @@ export default function SoftwareContracts() {
                       borderRadius: "8px",
                     }}
                   >
+                    {/* Milestone Billing Mode selector */}
+                    <div
+                      style={{
+                        marginBottom: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        flexWrap: "wrap",
+                        padding: "8px 12px",
+                        background: "rgba(255, 255, 255, 0.02)",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(255, 255, 255, 0.06)",
+                      }}
+                    >
+                      <label style={{ fontWeight: 600, fontSize: "0.84rem", minWidth: "160px" }}>
+                        Milestone Billing Mode:
+                      </label>
+                      <select
+                        className="sw-form-select"
+                        style={{ maxWidth: "200px" }}
+                        value={formData.milestone_billing_mode || "Sequential"}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            milestone_billing_mode: e.target.value as "Sequential" | "Parallel",
+                          })
+                        }
+                      >
+                        <option value="Sequential">Sequential (Strict Order)</option>
+                        <option value="Parallel">Parallel (Independent)</option>
+                      </select>
+                      <span style={{ fontSize: "0.76rem", color: "#94a3b8" }}>
+                        {formData.milestone_billing_mode === "Parallel"
+                          ? "Parallel: Milestones can be activated independently once contract is active."
+                          : "Sequential: Each milestone can only be activated after preceding milestone is fully Paid."}
+                      </span>
+                    </div>
+
                     <div
                       style={{
                         display: "flex",
@@ -1199,10 +1338,10 @@ export default function SoftwareContracts() {
                     >
                       <div>
                         <label style={{ fontWeight: 700, fontSize: "0.9rem" }}>
-                          Payment Milestones
+                          Payment Milestones *
                         </label>
                         <span style={{ fontSize: "0.78rem", color: "#94a3b8", display: "block" }}>
-                          Define milestones for incremental billing. If specified, milestone
+                          Fixed Price contracts require at least one milestone. Milestone
                           percentages must total exactly 100.00%.
                         </span>
                       </div>
@@ -1417,222 +1556,399 @@ export default function SoftwareContracts() {
       {viewingItem && (
         <div className="sw-modal-overlay" onClick={() => setViewingItem(null)}>
           <div
-            className="sw-modal-card"
-            style={{ maxWidth: "840px", maxHeight: "90vh", overflowY: "auto" }}
+            className="sw-modal-card sw-contract-detail-modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sw-modal-header">
-              <h2>
-                {viewingItem.contract_number}: {viewingItem.title}
-              </h2>
-              <button className="sw-btn-icon" onClick={() => setViewingItem(null)}>
+            {/* Modal Header */}
+            <div className="sw-modal-header sw-contract-modal-header">
+              <div className="sw-contract-modal-title-wrap">
+                <span className="sw-contract-modal-num">{viewingItem.contract_number}</span>
+                <h2 className="sw-contract-modal-name">{viewingItem.title}</h2>
+              </div>
+              <button
+                className="sw-btn-icon"
+                onClick={() => setViewingItem(null)}
+                title="Close contract details"
+                aria-label="Close"
+              >
                 ✕
               </button>
             </div>
-            <div className="sw-modal-body">
-              <div
-                style={{
-                  display: "flex",
-                  gap: "10px",
-                  marginBottom: "16px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  className={`sw-badge ${viewingItem.status?.toLowerCase().replace(/\s+/g, "-")}`}
-                >
-                  Status: {viewingItem.status}
-                </span>
-                <span className="sw-badge active">
-                  Value: {formatCurrency(viewingItem.contract_value, viewingItem.currency)}
-                </span>
-                <span className="sw-badge planned">
-                  Timeline: {viewingItem.start_date || "—"} to {viewingItem.end_date || "—"}
-                </span>
-                {viewingItem.assigned_to && (
-                  <span className="sw-badge discovery">
-                    Assigned: {userMap.get(viewingItem.assigned_to) || viewingItem.assigned_to}
-                  </span>
-                )}
-              </div>
 
-              {/* Payment Milestones & Billing Progression */}
-              <div
-                style={{
-                  margin: "18px 0 16px 0",
-                  padding: "16px",
-                  background: "rgba(255, 255, 255, 0.02)",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(255, 255, 255, 0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "10px",
-                  }}
-                >
-                  <h4 style={{ margin: 0, fontSize: "1rem" }}>
-                    Payment Milestones & Invoicing Progression
-                  </h4>
-                  <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-                    Currency: {viewingItem.currency || "INR"}
-                  </span>
+            {/* Modal Body */}
+            <div className="sw-modal-body">
+              {/* 1. Executive Contract Overview Grid */}
+              <div className="sw-contract-overview-grid">
+                <div className="sw-contract-overview-item">
+                  <span className="sw-contract-overview-label">Status</span>
+                  <div className="sw-contract-overview-val">
+                    <span
+                      className={`sw-badge ${viewingItem.status?.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {viewingItem.status}
+                    </span>
+                  </div>
                 </div>
 
-                {viewingItem.payment_milestones && viewingItem.payment_milestones.length > 0 ? (
-                  <table
-                    className="sw-data-table"
-                    style={{ border: "1px solid rgba(255,255,255,0.08)" }}
-                  >
-                    <thead>
-                      <tr>
-                        <th style={{ width: "40px" }}>Seq</th>
-                        <th>Milestone Name</th>
-                        <th style={{ width: "80px" }}>% Alloc</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Trigger Condition</th>
-                        <th>Invoice Ref</th>
-                        <th style={{ textAlign: "right", minWidth: "130px" }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewingItem.payment_milestones.map((ms) => {
-                        const isContractActive =
-                          viewingItem.status === "Signed" || viewingItem.status === "Active";
-                        const canReady = isContractActive && ms.status === "Pending";
-                        const canInvoice = ms.status === "Ready" && !ms.invoice_id;
+                <div className="sw-contract-overview-item">
+                  <span className="sw-contract-overview-label">Contract Value</span>
+                  <div className="sw-contract-overview-val" style={{ color: "#0ea5e9", fontWeight: 700 }}>
+                    {formatCurrency(viewingItem.contract_value, viewingItem.currency)}
+                  </div>
+                </div>
 
-                        return (
-                          <tr key={ms.id}>
-                            <td style={{ fontWeight: 700, color: "#0ea5e9" }}>#{ms.sequence}</td>
-                            <td style={{ fontWeight: 600 }}>{ms.name}</td>
-                            <td>{ms.percentage}%</td>
-                            <td style={{ fontWeight: 700, color: "#0ea5e9" }}>
-                              {formatCurrency(ms.amount, viewingItem.currency)}
-                            </td>
-                            <td>
-                              <span
-                                className={`sw-badge ${ms.status === "Paid"
-                                    ? "accepted"
-                                    : ms.status === "Invoiced"
-                                      ? "proposal"
-                                      : ms.status === "Ready"
-                                        ? "active"
-                                        : "under-review"
-                                  }`}
-                              >
-                                {ms.status}
-                              </span>
-                            </td>
-                            <td style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
-                              {ms.trigger_description || "—"}
-                            </td>
-                            <td>
-                              {ms.invoice_id ? (
-                                <span
-                                  title={`Invoice UUID: ${ms.invoice_id}`}
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    fontFamily: "monospace",
-                                    color: "#818cf8",
-                                    background: "rgba(99, 102, 241, 0.1)",
-                                    padding: "2px 6px",
-                                    borderRadius: "4px",
-                                    border: "1px solid rgba(99, 102, 241, 0.2)",
-                                  }}
-                                >
-                                  {ms.invoice_id.slice(0, 8)}...
-                                </span>
-                              ) : (
-                                <span style={{ color: "#64748b", fontSize: "0.78rem" }}>—</span>
-                              )}
-                            </td>
-                            <td style={{ textAlign: "right" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "flex-end",
-                                  gap: "6px",
-                                  alignItems: "center",
-                                }}
-                              >
-                                {canReady && perms.canMarkMilestoneReady && (
-                                  <button
-                                    className="sw-btn-secondary"
-                                    style={{
-                                      padding: "4px 8px",
-                                      fontSize: "0.72rem",
-                                      borderColor: "#10b981",
-                                      color: "#10b981",
-                                    }}
-                                    onClick={() => handleOpenMarkReadyDialog(viewingItem.id, ms)}
-                                    title="Mark milestone ready for billing"
-                                  >
-                                    Mark Ready
-                                  </button>
-                                )}
-                                {canInvoice && perms.canGenerateMilestoneInvoice && (
-                                  <button
-                                    className="sw-btn-primary"
-                                    style={{ padding: "4px 8px", fontSize: "0.72rem" }}
-                                    onClick={() =>
-                                      handleOpenMilestoneInvoiceModal(viewingItem.id, ms)
-                                    }
-                                    title="Generate invoice for this milestone"
-                                  >
-                                    Invoice
-                                  </button>
-                                )}
-                                {ms.status === "Invoiced" && (
-                                  <span style={{ fontSize: "0.75rem", color: "#818cf8" }}>
-                                    Invoiced
-                                  </span>
-                                )}
-                                {ms.status === "Paid" && (
-                                  <span style={{ fontSize: "0.75rem", color: "#10b981", fontWeight: 600 }}>
-                                    ✓ Settled
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div style={{ color: "#94a3b8", fontSize: "0.85rem", padding: "12px 0" }}>
-                    No payment milestones configured for this contract.
+                <div className="sw-contract-overview-item">
+                  <span className="sw-contract-overview-label">Billing Type</span>
+                  <div className="sw-contract-overview-val">
+                    <span className="sw-badge discovery">
+                      {viewingItem.billing_type || "Fixed Price"}
+                    </span>
+                    {viewingItem.billing_type === "Time & Material" && viewingItem.hourly_rate != null && (
+                      <span style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                        ({formatCurrency(viewingItem.hourly_rate, viewingItem.currency)}/hr)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {viewingItem.billing_type !== "Time & Material" && (
+                  <div className="sw-contract-overview-item">
+                    <span className="sw-contract-overview-label">Milestone Mode</span>
+                    <div className="sw-contract-overview-val">
+                      <span className="sw-badge planned">
+                        {viewingItem.milestone_billing_mode || "Sequential"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="sw-contract-overview-item">
+                  <span className="sw-contract-overview-label">Timeline</span>
+                  <div className="sw-contract-overview-val" style={{ fontSize: "0.84rem" }}>
+                    {viewingItem.start_date || "—"} &rarr; {viewingItem.end_date || "—"}
+                  </div>
+                </div>
+
+                <div className="sw-contract-overview-item">
+                  <span className="sw-contract-overview-label">Assigned Lead</span>
+                  <div className="sw-contract-overview-val">
+                    {viewingItem.assigned_to
+                      ? userMap.get(viewingItem.assigned_to) || viewingItem.assigned_to
+                      : "Unassigned"}
+                  </div>
+                </div>
+
+                {viewingItem.software_estimate_id && (
+                  <div className="sw-contract-overview-item">
+                    <span className="sw-contract-overview-label">Source Estimate</span>
+                    <div className="sw-contract-overview-val" style={{ fontSize: "0.84rem" }}>
+                      {estMap.get(viewingItem.software_estimate_id) || viewingItem.software_estimate_id.slice(0, 8)}
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div style={{ marginBottom: "12px" }}>
-                <strong>Scope of Work:</strong>
-                <p style={{ marginTop: "4px", lineHeight: "1.6", whiteSpace: "pre-wrap" }}>
-                  {viewingItem.scope_of_work}
+              {/* 2. Payment Milestones Section */}
+              <div className="sw-contract-milestones-section">
+                <div className="sw-contract-section-header">
+                  <h4>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    Payment Milestones &amp; Invoicing Progression
+                  </h4>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {viewingItem.billing_type !== "Time & Material" && (
+                      <span className="sw-contract-section-badge">
+                        {viewingItem.milestone_billing_mode || "Sequential"} Mode
+                      </span>
+                    )}
+                    <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
+                      Currency: {viewingItem.currency || "INR"}
+                    </span>
+                  </div>
+                </div>
+
+                {viewingItem.billing_type === "Time & Material" ? (
+                  <div
+                    className="sw-contract-info-panel"
+                    style={{ borderLeft: "4px solid #0ea5e9", background: "rgba(14, 165, 233, 0.04)" }}
+                  >
+                    <h5 className="sw-contract-info-panel-title" style={{ color: "#0ea5e9" }}>
+                      Time &amp; Material Contract Billing
+                    </h5>
+                    <p className="sw-contract-info-panel-body" style={{ color: "#94a3b8" }}>
+                      This contract is billed against approved project time entries at{" "}
+                      <strong style={{ color: "#0ea5e9" }}>
+                        {formatCurrency(viewingItem.hourly_rate || 0, viewingItem.currency)}/hr
+                      </strong>. Payment milestones are not applicable.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {viewingItem.payment_milestones && viewingItem.payment_milestones.length > 0 ? (
+                      <div className="sw-milestone-cards-stack">
+                        {(() => {
+                          const sortedMilestones = viewingItem.payment_milestones
+                            .slice()
+                            .sort((a, b) => a.sequence - b.sequence);
+
+                          return sortedMilestones.map((ms) => {
+                            const isContractActive =
+                              viewingItem.status === "Signed" || viewingItem.status === "Active";
+                            const isSequential = viewingItem.milestone_billing_mode !== "Parallel";
+                            const priorMilestones = sortedMilestones
+                              .filter((m) => m.sequence < ms.sequence)
+                              .sort((a, b) => b.sequence - a.sequence);
+                            const priorMilestone = priorMilestones[0];
+                            const isPriorPaid = !isSequential || !priorMilestone || priorMilestone.status === "Paid";
+
+                            const canReady = isContractActive && ms.status === "Pending" && isPriorPaid;
+                            const isBlockedByPrior =
+                              isContractActive && ms.status === "Pending" && isSequential && !isPriorPaid;
+                            const canInvoice = ms.status === "Ready" && !ms.invoice_id;
+                            const statusLower = (ms.status || "pending").toLowerCase();
+
+                            return (
+                              <div
+                                key={ms.id}
+                                className={`sw-milestone-card status-${statusLower}`}
+                              >
+                                {/* Top Row: Seq + Name + Status Badge */}
+                                <div className="sw-milestone-card-header">
+                                  <div className="sw-milestone-card-title-group">
+                                    <span className="sw-milestone-seq-badge">#{ms.sequence}</span>
+                                    <h5 className="sw-milestone-card-name">{ms.name}</h5>
+                                  </div>
+                                  <span className={`sw-milestone-status-badge ${statusLower}`}>
+                                    <span
+                                      style={{
+                                        width: "6px",
+                                        height: "6px",
+                                        borderRadius: "50%",
+                                        backgroundColor:
+                                          statusLower === "paid"
+                                            ? "#10b981"
+                                            : statusLower === "ready"
+                                            ? "#0ea5e9"
+                                            : statusLower === "invoiced"
+                                            ? "#6366f1"
+                                            : "#f59e0b",
+                                        display: "inline-block",
+                                      }}
+                                    />
+                                    {ms.status}
+                                  </span>
+                                </div>
+
+                                {/* Middle Row: Allocation, Amount, Trigger Condition */}
+                                <div className="sw-milestone-card-body">
+                                  <div className="sw-milestone-metric">
+                                    <span className="sw-milestone-metric-label">Allocation</span>
+                                    <span className="sw-milestone-metric-value">{ms.percentage}%</span>
+                                  </div>
+
+                                  <div className="sw-milestone-metric">
+                                    <span className="sw-milestone-metric-label">Amount</span>
+                                    <span className="sw-milestone-metric-value highlight">
+                                      {formatCurrency(ms.amount, viewingItem.currency)}
+                                    </span>
+                                  </div>
+
+                                  <div className="sw-milestone-metric full-width-on-tablet">
+                                    <span className="sw-milestone-metric-label">Trigger Condition</span>
+                                    <span
+                                      className="sw-milestone-metric-value"
+                                      style={{ fontSize: "0.82rem", color: "#64748b" }}
+                                    >
+                                      {ms.trigger_description || "— No trigger condition specified"}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Bottom Row: Invoice Ref & Actions */}
+                                <div className="sw-milestone-card-footer">
+                                  <div className="sw-milestone-invoice-ref">
+                                    <span style={{ fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600, color: "#64748b" }}>
+                                      Invoice:
+                                    </span>
+                                    {ms.invoice_id ? (
+                                      <span
+                                        className="sw-milestone-invoice-pill"
+                                        title={`Invoice UUID: ${ms.invoice_id} (Click to copy)`}
+                                        onClick={() => {
+                                          if (navigator.clipboard) {
+                                            void navigator.clipboard.writeText(ms.invoice_id!);
+                                            setActionMessage({
+                                              text: `Copied invoice UUID: ${ms.invoice_id}`,
+                                              type: "info",
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                        </svg>
+                                        {ms.invoice_id.slice(0, 8)}...
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>— Not Invoiced</span>
+                                    )}
+                                  </div>
+
+                                  <div className="sw-milestone-actions-group">
+                                    {isBlockedByPrior && (
+                                      <span
+                                        style={{
+                                          fontSize: "0.72rem",
+                                          color: "#f59e0b",
+                                          background: "rgba(245, 158, 11, 0.1)",
+                                          padding: "3px 8px",
+                                          borderRadius: "4px",
+                                          border: "1px solid rgba(245, 158, 11, 0.25)",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "help",
+                                        }}
+                                        title={`Sequential Mode: Milestone #${priorMilestone?.sequence} ("${priorMilestone?.name}") must be Paid before this milestone can become Ready.`}
+                                      >
+                                        🔒 Awaiting #{priorMilestone?.sequence} Paid
+                                      </span>
+                                    )}
+
+                                    {canReady && perms.canMarkMilestoneReady && (
+                                      <button
+                                        type="button"
+                                        className="sw-btn-secondary"
+                                        style={{
+                                          padding: "4px 10px",
+                                          fontSize: "0.76rem",
+                                          borderColor: "#10b981",
+                                          color: "#10b981",
+                                          fontWeight: 600,
+                                        }}
+                                        onClick={() => handleOpenMarkReadyDialog(viewingItem.id, ms)}
+                                        title="Mark milestone ready for billing"
+                                      >
+                                        Mark Ready
+                                      </button>
+                                    )}
+
+                                    {canInvoice && perms.canGenerateMilestoneInvoice && (
+                                      <button
+                                        type="button"
+                                        className="sw-btn-primary"
+                                        style={{ padding: "4px 10px", fontSize: "0.76rem", fontWeight: 600 }}
+                                        onClick={() => handleOpenMilestoneInvoiceModal(viewingItem.id, ms)}
+                                        title="Generate invoice for this milestone"
+                                      >
+                                        Generate Invoice
+                                      </button>
+                                    )}
+
+                                    {ms.status === "Invoiced" && (
+                                      <span style={{ fontSize: "0.78rem", color: "#6366f1", fontWeight: 600 }}>
+                                        ✓ Invoiced
+                                      </span>
+                                    )}
+
+                                    {ms.status === "Paid" && (
+                                      <span style={{ fontSize: "0.78rem", color: "#10b981", fontWeight: 700 }}>
+                                        ✓ Paid &amp; Settled
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="sw-empty-state" style={{ padding: "20px 0", textAlign: "center" }}>
+                        <p style={{ color: "#94a3b8", fontSize: "0.85rem", margin: 0 }}>
+                          No payment milestones configured for this contract.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* 3. Scope of Work Information Panel */}
+              <div className="sw-contract-info-panel">
+                <h5 className="sw-contract-info-panel-title">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                  Scope of Work
+                </h5>
+                <p className="sw-contract-info-panel-body">
+                  {viewingItem.scope_of_work || "No scope of work documented."}
                 </p>
               </div>
 
-              <div style={{ marginBottom: "12px" }}>
-                <strong>Deliverables:</strong>
-                <p style={{ marginTop: "4px", lineHeight: "1.6", whiteSpace: "pre-wrap" }}>
-                  {viewingItem.deliverables}
+              {/* 4. Deliverables Information Panel */}
+              <div className="sw-contract-info-panel">
+                <h5 className="sw-contract-info-panel-title">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Deliverables
+                </h5>
+                <p className="sw-contract-info-panel-body">
+                  {viewingItem.deliverables || "No deliverables specified."}
                 </p>
               </div>
 
+              {/* 5. Payment Terms Information Panel (if present) */}
               {viewingItem.payment_terms && (
-                <div style={{ marginBottom: "12px" }}>
-                  <strong>Payment Terms:</strong> {viewingItem.payment_terms}
+                <div className="sw-contract-info-panel">
+                  <h5 className="sw-contract-info-panel-title">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="6" x2="12" y2="12" />
+                      <line x1="12" y1="12" x2="16" y2="14" />
+                    </svg>
+                    Payment Terms
+                  </h5>
+                  <p className="sw-contract-info-panel-body">
+                    {viewingItem.payment_terms}
+                  </p>
+                </div>
+              )}
+
+              {/* 6. Terms and Conditions (if present) */}
+              {viewingItem.terms_and_conditions && (
+                <div className="sw-contract-info-panel">
+                  <h5 className="sw-contract-info-panel-title">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    Terms &amp; Conditions
+                  </h5>
+                  <p className="sw-contract-info-panel-body">
+                    {viewingItem.terms_and_conditions}
+                  </p>
                 </div>
               )}
             </div>
+
+            {/* Modal Footer */}
             <div className="sw-modal-footer">
-              <button className="sw-btn-secondary" onClick={() => setViewingItem(null)}>
+              <button
+                type="button"
+                className="sw-btn-secondary"
+                onClick={() => setViewingItem(null)}
+              >
                 Close
               </button>
             </div>

@@ -1,3 +1,5 @@
+export type SoftwareBillingType = "Fixed Price" | "Time & Material";
+
 export type SoftwareEstimateStatus =
   | "Draft"
   | "Sent"
@@ -53,6 +55,8 @@ export interface SoftwareEstimate {
   description?: string | null;
 
   currency: string;
+  billing_type: SoftwareBillingType;
+  hourly_rate: number | null;
   issue_date: string;
   expiry_date?: string | null;
 
@@ -82,6 +86,8 @@ export interface SoftwareEstimateCreate {
   lead_id?: string | null;
   contact_id?: string | null;
 
+  billing_type?: SoftwareBillingType;
+  hourly_rate?: number | null;
   currency?: string;
   issue_date?: string;
   expiry_date?: string | null;
@@ -100,6 +106,8 @@ export interface SoftwareEstimateUpdate {
   description?: string | null;
   assigned_to?: string | null;
 
+  billing_type?: SoftwareBillingType;
+  hourly_rate?: number | null;
   currency?: string;
   issue_date?: string | null;
   expiry_date?: string | null;

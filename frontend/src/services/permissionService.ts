@@ -85,18 +85,23 @@ export const SYSTEM_PERMISSIONS: PermissionDetail[] = [
   { id: "p59", name: "software_sprint.create", module: "Software Sprints", action: "Create", description: "Create delivery sprints" },
   { id: "p60", name: "software_sprint.update", module: "Software Sprints", action: "Update", description: "Update delivery sprints" },
   { id: "p61", name: "software_sprint.delete", module: "Software Sprints", action: "Delete", description: "Delete delivery sprints" },
-  { id: "p62", name: "software_invoice.view", module: "Software Invoices", action: "View", description: "View software invoices and billing summaries" },
-  { id: "p63", name: "software_invoice.create", module: "Software Invoices", action: "Create", description: "Create software invoices and billing progress" },
-  { id: "p64", name: "software_invoice.update", module: "Software Invoices", action: "Update", description: "Update software invoice status (Sent/Void)" },
-  { id: "p65", name: "software_payment.record", module: "Software Payments", action: "Record", description: "Record client invoice payment receipts with references" },
-  { id: "p66", name: "software_payment.reverse", module: "Software Payments", action: "Reverse", description: "Reverse verified payment receipts with audit reason" },
-  { id: "p67", name: "software_credit_note.create", module: "Software Credit Notes", action: "Create", description: "Issue credit note adjustments against active invoices" },
+  // Software Invoices
+  { id: "p62", name: "software_invoice.view", module: "Software Invoices", action: "View", description: "View software invoices" },
+  { id: "p63", name: "software_invoice.create", module: "Software Invoices", action: "Create", description: "Create software invoices" },
+  { id: "p64", name: "software_invoice.update", module: "Software Invoices", action: "Update", description: "Update draft software invoices" },
+  { id: "p65", name: "software_invoice.delete", module: "Software Invoices", action: "Delete", description: "Delete eligible draft software invoices" },
+  { id: "p66", name: "software_invoice.send", module: "Software Invoices", action: "Send", description: "Mark invoices as sent" },
+  { id: "p67", name: "software_invoice.payment.view", module: "Software Invoices", action: "View Payments", description: "View invoice payment records" },
+  { id: "p68", name: "software_invoice.payment.create", module: "Software Invoices", action: "Record Payment", description: "Record invoice payments" },
+  { id: "p69", name: "software_invoice.cancel", module: "Software Invoices", action: "Cancel", description: "Cancel eligible software invoices" },
+  { id: "p70", name: "software_invoice.payment.reverse", module: "Software Invoices", action: "Reverse Payment", description: "Reverse recorded invoice payments" },
+  { id: "p71", name: "software_invoice.credit_note.create", module: "Software Invoices", action: "Credit Note", description: "Issue credit notes against invoices" },
 
   // Customer Support & Portal
-  { id: "p68", name: "support_ticket.view", module: "Customer Support", action: "View", description: "View client support tickets" },
-  { id: "p69", name: "support_ticket.create", module: "Customer Support", action: "Create", description: "Create and route support tickets" },
-  { id: "p70", name: "support_ticket.update", module: "Customer Support", action: "Update", description: "Update support tickets and SLAs" },
-  { id: "p71", name: "customer_portal.manage", module: "Customer Portal", action: "Manage", description: "Manage customer portal access and user invitations" },
+  { id: "p72", name: "support_ticket.view", module: "Customer Support", action: "View", description: "View client support tickets" },
+  { id: "p73", name: "support_ticket.create", module: "Customer Support", action: "Create", description: "Create and route support tickets" },
+  { id: "p74", name: "support_ticket.update", module: "Customer Support", action: "Update", description: "Update support tickets and SLAs" },
+  { id: "p75", name: "customer_portal.manage", module: "Customer Portal", action: "Manage", description: "Manage customer portal access and user invitations" },
 ];
 
 /**
