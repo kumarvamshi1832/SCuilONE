@@ -1,3 +1,5 @@
+import { normalizeIndustry } from "../utils/industryUtils";
+
 export type IndustryConfig = {
   name: string;
   slug: string;
@@ -270,6 +272,10 @@ export const INDUSTRY_CONFIGS: Record<string, IndustryConfig> =
 export const normalizeIndustrySlug = (
   industry?: string | null
 ): string => {
+  const norm = normalizeIndustry(industry);
+  if (INDUSTRY_CONFIGS[norm]) {
+    return norm;
+  }
   const value = (industry || "real-estate").trim().toLowerCase();
 
   const existing = Object.values(INDUSTRY_CONFIGS).find(

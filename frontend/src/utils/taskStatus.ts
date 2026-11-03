@@ -105,6 +105,7 @@ export interface TaskSummaryStats {
   total: number;
   completed: number;
   pending: number;
+  inProgress: number;
   overdue: number;
 }
 
@@ -118,11 +119,17 @@ export const calculateTaskSummary = (
   referenceDate: Date = new Date()
 ): TaskSummaryStats => {
   let completed = 0;
+  let inProgress = 0;
   let pending = 0;
   let overdue = 0;
 
   for (const item of activities) {
     if (!isTask(item)) continue;
+
+    const normStatus = normalizeTaskStatus(item.status);
+    if (normStatus === "in_progress") {
+      inProgress++;
+    }
 
     const bucket = getNormalizedTaskBucket(item, referenceDate);
     if (bucket === "completed") {
@@ -138,6 +145,7 @@ export const calculateTaskSummary = (
     total: completed + pending + overdue,
     completed,
     pending,
+    inProgress,
     overdue,
   };
 };

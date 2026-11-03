@@ -310,6 +310,26 @@
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+/* Additional Status Badges */
+.sw-badge.credited {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.sw-badge.overdue {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sw-badge.reversed {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  text-decoration: line-through;
+}
+
 /* Row Actions */
 .sw-row-actions {
   display: flex;
@@ -1150,3 +1170,80 @@
 }
 
 
+
+/* ─── 403 Forbidden / Access Restricted Card ─── */
+.sw-forbidden-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 14px;
+}
+
+.sw-forbidden-card .sw-forbidden-icon-box {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+}
+
+.sw-forbidden-card h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .sw-forbidden-card h3,
+.dark .sw-forbidden-card h3 {
+  color: #f8fafc;
+}
+
+.sw-forbidden-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #64748b;
+  max-width: 500px;
+  line-height: 1.5;
+}
+
+.sw-forbidden-card .sw-forbidden-detail {
+  padding: 8px 14px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #b45309;
+  font-family: monospace;
+}
+
+.dashboard-wrapper.dark .sw-forbidden-card .sw-forbidden-detail,
+.dark .sw-forbidden-card .sw-forbidden-detail {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.sw-warning-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #b45309;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.dashboard-wrapper.dark .sw-warning-banner,
+.dark .sw-warning-banner {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}

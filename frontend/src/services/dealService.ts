@@ -2,12 +2,16 @@ import { apiClient } from "./authService";
 import type { Deal, DealCreate, DealUpdate } from "../types/deal";
 
 const getHeaders = () => {
-  const token = sessionStorage.getItem("access_token");
-  return {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  };
+  const token =
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token");
+  return token
+    ? {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    : {};
 };
 
 /* ─── Endpoints ─── */
@@ -20,13 +24,25 @@ const DEALS_ENDPOINTS = {
 /* ─── Service Functions ─── */
 
 export const getDeals = async (): Promise<Deal[]> => {
-  const response = await apiClient.get<Deal[]>(DEALS_ENDPOINTS.LIST, getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(DEALS_ENDPOINTS.LIST, getHeaders());
+  if (Array.isArray(response.data)) {
+    return response.data;
+  }
+  if (response.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  if (response.data && Array.isArray(response.data.items)) {
+    return response.data.items;
+  }
+  if (response.data && Array.isArray(response.data.results)) {
+    return response.data.results;
+  }
+  return [];
 };
 
 export const getDealById = async (id: string): Promise<Deal> => {
-  const response = await apiClient.get<Deal>(DEALS_ENDPOINTS.DETAIL(id), getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(DEALS_ENDPOINTS.DETAIL(id), getHeaders());
+  return response.data?.data || response.data;
 };
 
 export const createDeal = async (data: DealCreate): Promise<Deal> => {

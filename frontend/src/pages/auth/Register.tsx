@@ -14,6 +14,7 @@ const industries = [
   "Education Consulting",
   "Training Institute",
   "Digital Marketing Agency",
+  "Software Services",
   "Software Company",
   "Insurance Agency",
   "Automobile Dealer",
@@ -106,11 +107,18 @@ export default function Register() {
     setLoading(true);
 
     try {
+      // Normalize industry to canonical values expected by backend route-level security guards
+      const canonicalIndustry =
+        formData.industry.trim().toLowerCase() === "software company" ||
+        formData.industry.trim().toLowerCase() === "software"
+          ? "Software Services"
+          : formData.industry.trim();
+
       const payload: RegisterRequest = {
         company_name: formData.company_name.trim(),
         company_email: companyEmail,
         phone: formData.phone.trim(),
-        industry: formData.industry,
+        industry: canonicalIndustry,
         full_name: formData.full_name.trim(),
         email: email,
         password: formData.password,

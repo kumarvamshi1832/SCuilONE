@@ -21,12 +21,18 @@ export interface ActivityUserContext {
 }
 
 /**
- * Extracts and normalizes the authenticated user and tenant context from sessionStorage and JWT.
+ * Extracts and normalizes the authenticated user and tenant context from storage and JWT.
  */
 export const getActivityUserContext = (): ActivityUserContext => {
-  const userStr = sessionStorage.getItem("user");
-  const tenantStr = sessionStorage.getItem("tenant");
-  const token = sessionStorage.getItem("access_token");
+  const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
+  const tenantStr = sessionStorage.getItem("tenant") || localStorage.getItem("tenant");
+  const token =
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("token") ||
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("authToken") ||
+    localStorage.getItem("authToken");
 
   let userId = "";
   let tenantId = "";
@@ -51,7 +57,7 @@ export const getActivityUserContext = (): ActivityUserContext => {
         permissions = u.role_permissions;
       }
     } catch (e) {
-      console.error("Failed to parse user from sessionStorage:", e);
+      console.error("Failed to parse user from storage:", e);
     }
   }
 
@@ -60,7 +66,7 @@ export const getActivityUserContext = (): ActivityUserContext => {
       const t = JSON.parse(tenantStr);
       tenantId = t.id || t.tenant_id || "";
     } catch (e) {
-      console.error("Failed to parse tenant from sessionStorage:", e);
+      console.error("Failed to parse tenant from storage:", e);
     }
   }
 
@@ -216,4 +222,3 @@ export const getActivityPermissions = () => {
     delete: ctx.delete,
   };
 };
-

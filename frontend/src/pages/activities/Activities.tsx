@@ -1,17 +1,22 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import type { Activity } from "../../types/activity";
-import { User } from "../../types/user";
-import { Lead } from "../../types/lead";
-import { Contact } from "../../types/contact";
-import { Account } from "../../types/account";
-import { Deal } from "../../types/deal";
+import type { User } from "../../types/user";
+import type { Lead } from "../../types/lead";
+import type { Contact } from "../../types/contact";
+import type { Account } from "../../types/account";
+import type { Deal } from "../../types/deal";
 import { getActivities, getMyTasks } from "../../services/activityService";
 import { getUsers } from "../../services/userService";
 import { getLeads } from "../../services/leadService";
 import { getContacts } from "../../services/contactService";
 import { getAccounts } from "../../services/accountService";
 import { getDeals } from "../../services/dealService";
+import {
+  MODULE_DISPLAY_NAMES,
+  getCachedRecordLabel,
+  fetchRecordsForModule,
+} from "../../services/activityRelatedRecordsService";
 import {
   getActivityPermissions,
   getActivityUserContext,
@@ -23,11 +28,26 @@ import LeadViewModal from "../../components/leads/LeadViewModal";
 import ActivityDeleteConfirm from "../../components/activities/ActivityDeleteConfirm";
 import { formatDateTime } from "../../utils/dateFormatter";
 import { normalizeTaskStatus } from "../../utils/taskStatus";
-import "../users/Users.css";
-import "../leads/Leads.css";
+import { useTheme } from "../../context/ThemeContext";
+
 import "./Activities.css";
 
+/**
+ * Splits formatted labels like "Fintech (PRJ-20261102-2816B787)"
+ * into a distinct name and code for professional enterprise display.
+ */
+function parseRecordLabel(label: string): { name: string; code?: string } {
+  if (!label) return { name: "" };
+  const match = label.match(/^(.*?)\s*\(([^)]+)\)$/);
+  if (match && match[1] && match[2]) {
+    return { name: match[1].trim(), code: match[2].trim() };
+  }
+  return { name: label.trim() };
+}
+
 export default function Activities() {
+  const { theme } = useTheme();
+
   /* ─── Permissions & User Context ─── */
   const userContext = useMemo(() => getActivityUserContext(), []);
   const permissions = useMemo(() => getActivityPermissions(), []);
@@ -40,6 +60,7 @@ export default function Activities() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
 
+  const [, setRelatedRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +69,7 @@ export default function Activities() {
   const isTasksRoute = location.pathname.includes("tasks");
   const isExplicitMyTasks = location.pathname.includes("my-tasks");
 
-  // View Mode: Managers and Tenant Admins can toggle "all" vs "my"; ordinary users or explicit /my-tasks route default to "my"
+  // View Mode: Managers and Tenant Admins can toggle "all" vs "my"; ordinary users default to "my"
   const [viewMode, setViewMode] = useState<"all" | "my">(() => {
     if (isExplicitMyTasks) return "my";
     return userContext.canViewAllActivities ? "all" : "my";
@@ -88,23 +109,33 @@ export default function Activities() {
   const [viewLeadState, setViewLeadState] = useState<Lead | null>(null);
   const [deleteActivityState, setDeleteActivityState] = useState<Activity | null>(null);
 
-  // Actions dropdown
-  const [openActionId, setOpenActionId] = useState<string | null>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top?: number; bottom?: number; left: number; openUp: boolean } | null>(null);
-  const actionsRef = useRef<HTMLDivElement | null>(null);
-  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  /* ─── Data Fetching ─── */
+  /* ─── Warm cache for related modules ─── */
+  const warmRelatedModulesCache = useCallback((acts: Activity[]) => {
+    const modulesToFetch = new Set<string>();
+    for (const act of acts) {
+      for (const link of act.related_records || []) {
+        if (!getCachedRecordLabel(link.module, link.record_id)) {
+          modulesToFetch.add(link.module);
+        }
+      }
+    }
+    if (modulesToFetch.size > 0) {
+      Promise.allSettled(
+        Array.from(modulesToFetch).map((m) => fetchRecordsForModule(m as any))
+      ).then(() => {
+        setRelatedRevision((r) => r + 1);
+      });
+    }
+  }, []);
 
+  /* ─── Data Fetching ─── */
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // If user has team-wide visibility and viewMode is "all", fetch all tenant activities.
-      // Otherwise (ordinary user or "my" mode), query my-tasks endpoint.
       const shouldFetchMyTasks = !userContext.canViewAllActivities || viewMode === "my";
       const fetchActivities = shouldFetchMyTasks ? getMyTasks : getActivities;
       const [activitiesData, usersData, leadsData, contactsData, accountsData, dealsData] =
@@ -122,6 +153,8 @@ export default function Activities() {
       setContacts(contactsData);
       setAccounts(accountsData);
       setDeals(dealsData);
+
+      warmRelatedModulesCache(activitiesData);
     } catch (err: any) {
       console.error("Fetch activities error:", err);
       if (err?.response?.status === 401 || err?.status === 401) {
@@ -141,7 +174,7 @@ export default function Activities() {
     } finally {
       setLoading(false);
     }
-  }, [viewMode, userContext.canViewAllActivities]);
+  }, [viewMode, userContext.canViewAllActivities, warmRelatedModulesCache]);
 
   useEffect(() => {
     fetchData();
@@ -156,80 +189,8 @@ export default function Activities() {
     return () => window.removeEventListener("crm:activity-updated", handleUpdate);
   }, [fetchData]);
 
-  // Close actions dropdown on outside click, escape, scroll or resize
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    const handleScrollOrResize = (e: Event) => {
-      if (actionsRef.current && actionsRef.current.contains(e.target as Node)) {
-        return;
-      }
-      setOpenActionId(null);
-      setDropdownPos(null);
-    };
-
-    if (openActionId) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
-      window.addEventListener("scroll", handleScrollOrResize, true);
-      window.addEventListener("resize", handleScrollOrResize);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
-    };
-  }, [openActionId]);
-
-  const toggleActions = (activityId: string) => {
-    if (openActionId === activityId) {
-      setOpenActionId(null);
-      setDropdownPos(null);
-      return;
-    }
-    const btn = triggerRefs.current[activityId];
-    if (btn) {
-      const rect = btn.getBoundingClientRect();
-      const menuWidth = 176;
-      const menuHeight = 130;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const openUp = spaceBelow < menuHeight + 12 && spaceAbove > menuHeight;
-
-      // Align right edge of menu with right edge of trigger button
-      let left = rect.right - menuWidth;
-
-      // Prevent clipping on smaller viewports
-      if (left < 8) {
-        left = Math.max(8, rect.left);
-      }
-      if (left + menuWidth > window.innerWidth - 8) {
-        left = Math.max(8, window.innerWidth - menuWidth - 8);
-      }
-
-      setDropdownPos({
-        top: openUp ? undefined : Math.round(rect.bottom + 4),
-        bottom: openUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
-        left: Math.round(left),
-        openUp,
-      });
-    }
-    setOpenActionId(activityId);
-  };
 
   /* ─── Helpers ─── */
-
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3500);
@@ -289,15 +250,15 @@ export default function Activities() {
     Boolean(priorityFilter) ||
     Boolean(userContext.canViewAllActivities && viewMode === "all" && assignedFilter);
 
+  /* ─── Task Quick Status Transition (Enforcing Backend Rules) ─── */
   /* ─── Filtering (client-side) ─── */
-
   const filteredActivities = activities.filter((act) => {
     // 1. Role-based assigned user & tenant isolation check
     if (!isActivityVisibleToUser(act, userContext, viewMode)) {
       return false;
     }
 
-    // 2. Text search
+    // 2. Text search (including resolved industry related names)
     if (search) {
       const q = search.toLowerCase();
       const titleMatch = (act.title || "").toLowerCase().includes(q);
@@ -306,8 +267,13 @@ export default function Activities() {
       const leadMatch = getLeadName(act.lead_id, act.title).toLowerCase().includes(q);
       const contMatch = getContactName(act.contact_id).toLowerCase().includes(q);
       const dealMatch = getDealName(act.deal_id).toLowerCase().includes(q);
+      const industryMatch = (act.related_records || []).some((link) => {
+        const resolved = getCachedRecordLabel(link.module, link.record_id) || "";
+        const modLabel = MODULE_DISPLAY_NAMES[link.module] || "";
+        return resolved.toLowerCase().includes(q) || modLabel.toLowerCase().includes(q);
+      });
 
-      if (!titleMatch && !descMatch && !acctMatch && !leadMatch && !contMatch && !dealMatch) {
+      if (!titleMatch && !descMatch && !acctMatch && !leadMatch && !contMatch && !dealMatch && !industryMatch) {
         return false;
       }
     }
@@ -351,19 +317,19 @@ export default function Activities() {
   };
 
   const getPriorityBadgeClass = (pr: string) => {
-    switch (pr) {
-      case "High":
+    switch ((pr || "").toLowerCase()) {
+      case "high":
         return "priority-high";
-      case "Medium":
+      case "medium":
         return "priority-medium";
-      case "Low":
+      case "low":
       default:
         return "priority-low";
     }
   };
 
-  const getTypeBadgeClass = (tp: string) => {
-    switch (tp) {
+  const getTypeBadgeClass = (type: string) => {
+    switch (type) {
       case "Call":
         return "activity-type-call";
       case "Meeting":
@@ -375,472 +341,520 @@ export default function Activities() {
   };
 
   return (
-    <div className="activities-page">
-      {/* Toast Notification */}
+    <div className={`activities-page ${theme}`}>
+      {/* Toast */}
       {notification && (
         <div
           className="notification-toast"
           style={{
-            background: notification.type === "success" ? "#38a169" : "#e53e3e",
-            color: "white",
+            background: notification.type === "success" ? "#10b981" : "#ef4444",
+            color: "#ffffff",
           }}
+          role="status"
         >
           {notification.message}
         </div>
       )}
 
-      {/* Page Header */}
-      <div className="page-header">
-        <div>
-          <h1>
-            {isTasksRoute
-              ? viewMode === "my" || !userContext.canViewAllActivities
-                ? "My Tasks"
-                : "Tasks"
-              : viewMode === "my"
-              ? "My Tasks"
-              : "Activities"}
+      {/* 1. Page Header */}
+      <div className="activities-header">
+        <div className="activities-header-left">
+          <h1 className="activities-header-title">
+            {isTasksRoute ? "Tasks" : "Activities & Tasks"}
+            <span className="activities-count-badge">
+              {filteredActivities.length} {filteredActivities.length === 1 ? "Item" : "Total"}
+            </span>
           </h1>
-          <p className="text-muted" style={{ margin: "4px 0 0" }}>
+          <p className="activities-header-subtitle">
             {isTasksRoute
-              ? viewMode === "my" || !userContext.canViewAllActivities
-                ? "Manage and complete your assigned tasks, calls, and meetings."
-                : "Track and manage tasks, calls, and meetings assigned across your team."
-              : viewMode === "my"
-              ? "Manage and complete your assigned activities and tasks."
-              : "Track tasks, calls, and meetings across your CRM records."}
+              ? "Track, manage, and complete your assigned tasks."
+              : "Manage tasks, calls, and meetings across your organization."}
           </p>
         </div>
 
-        <div className="header-actions">
-          {/* Segmented View Mode Control (only for roles with team-wide visibility) */}
+        <div className="activities-header-right">
+          {/* Segmented View Mode Control (All Activities vs My Activities) */}
           {userContext.canViewAllActivities && (
-            <div className="view-segmented-control">
+            <div className="view-segmented-control" role="group" aria-label="Activity view filter">
               <button
                 type="button"
                 className={`view-segment-btn ${viewMode === "all" ? "active" : ""}`}
                 onClick={() => setViewMode("all")}
               >
-                {isTasksRoute ? "All Tasks" : "All Activities"}
+                All Activities
               </button>
               <button
                 type="button"
                 className={`view-segment-btn ${viewMode === "my" ? "active" : ""}`}
                 onClick={() => setViewMode("my")}
               >
-                My Tasks
+                My Activities
               </button>
             </div>
           )}
 
           {permissions.create && (
             <button
-              className="btn-primary"
+              type="button"
+              className="btn-create-activity"
               onClick={() => {
                 setEditActivity(null);
                 setIsFormOpen(true);
               }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
-              {isTasksRoute ? "Create Task" : "Create Activity"}
+              <span>{isTasksRoute ? "Create Task" : "Create Activity"}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="leads-filter-bar">
-        <div className="leads-search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      {/* 2. Search & Filter Toolbar */}
+      <div className="activities-filter-toolbar">
+        {/* Search input (occupies available flex space) */}
+        <div className="activities-search-box">
+          <svg className="activities-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input
             type="text"
-            placeholder="Search by title, description or related record..."
+            className="activities-search-input"
+            placeholder="Search by title, description, lead, account, contact, or project..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              className="activities-search-clear"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
         </div>
 
-        <select
-          className="filter-select"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          aria-label="Filter by activity type"
-        >
-          <option value="">All Types</option>
-          <option value="Task">Task</option>
-          <option value="Call">Call</option>
-          <option value="Meeting">Meeting</option>
-        </select>
+        {/* Dropdowns Group */}
+        <div className="activities-filters-group">
+          {/* Activity Type Dropdown */}
+          {!isTasksRoute && (
+            <div className="activities-select-wrapper">
+              <select
+                className="activities-filter-select"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                aria-label="Filter by activity type"
+              >
+                <option value="">All Types</option>
+                <option value="Task">Task</option>
+                <option value="Call">Call</option>
+                <option value="Meeting">Meeting</option>
+              </select>
+              <svg className="activities-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          )}
 
-        <select
-          className="filter-select"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="">All Statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Completed">Completed</option>
-          <option value="Cancelled">Cancelled</option>
-        </select>
+          {/* Status Dropdown */}
+          <div className="activities-select-wrapper">
+            <select
+              className="activities-filter-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
+            >
+              <option value="">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <svg className="activities-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
 
-        <select
-          className="filter-select"
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
-        >
-          <option value="">All Priorities</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
-          <option value="Low">Low</option>
-        </select>
+          {/* Priority Dropdown */}
+          <div className="activities-select-wrapper">
+            <select
+              className="activities-filter-select"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              aria-label="Filter by priority"
+            >
+              <option value="">All Priorities</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+            <svg className="activities-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
 
-        {/* Assigned user filter only shown when user has team-wide visibility and is in "all" view */}
-        {userContext.canViewAllActivities && viewMode === "all" && (
-          <select
-            className="filter-select"
-            value={assignedFilter}
-            onChange={(e) => setAssignedFilter(e.target.value)}
-          >
-            <option value="">All Assigned Users</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.full_name}
-              </option>
-            ))}
-          </select>
-        )}
+          {/* Assigned Users Dropdown */}
+          {userContext.canViewAllActivities && viewMode === "all" && (
+            <div className="activities-select-wrapper assignee-select">
+              <select
+                className="activities-filter-select"
+                value={assignedFilter}
+                onChange={(e) => setAssignedFilter(e.target.value)}
+                aria-label="Filter by assigned user"
+              >
+                <option value="">All Assignees</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.full_name}
+                  </option>
+                ))}
+              </select>
+              <svg className="activities-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          )}
 
-        {hasActiveFilters && (
-          <button className="btn-clear-filters" onClick={clearFilters}>
-            Clear Filters
-          </button>
-        )}
+          {/* Reset Filters Button */}
+          {hasActiveFilters && (
+            <button type="button" className="activities-reset-btn" onClick={clearFilters}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              <span>Reset Filters</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Table Content */}
-      <div className="users-table-container">
+      {/* 3. Main Activities Table */}
+      <div className="activities-table-card">
         {loading ? (
-          <div style={{ textAlign: "center", padding: "60px 20px", color: "#718096" }}>
-            Loading activities...
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p>Loading activities & tasks...</p>
           </div>
         ) : error ? (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <p style={{ color: "#e53e3e", marginBottom: "16px", fontSize: "1rem" }}>{error}</p>
-            <button className="btn-secondary" onClick={fetchData}>
-              Retry
+          <div className="error-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ color: "#ef4444", marginBottom: "12px" }}>
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <h3>Unable to Load Activities</h3>
+            <p>{error}</p>
+            <button
+              type="button"
+              className="activities-reset-btn"
+              onClick={fetchData}
+              style={{ marginTop: "14px" }}
+            >
+              🔄 Retry
             </button>
           </div>
         ) : filteredActivities.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <p style={{ color: "#718096", marginBottom: "16px", fontSize: "1rem" }}>
+          <div className="empty-state">
+            <div className="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" width="32" height="32">
+                <path d="M9 11l3 3L22 4"></path>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+            </div>
+            <h3>{hasActiveFilters ? "No matching activities found" : "No activities recorded"}</h3>
+            <p>
               {hasActiveFilters
-                ? isTasksRoute
-                  ? "No tasks or activities found matching your filters."
-                  : "No activities found matching your filters."
-                : !userContext.canViewAllActivities || viewMode === "my"
-                ? isTasksRoute
-                  ? "No tasks or activities currently assigned to you."
-                  : "No activities currently assigned to you."
-                : isTasksRoute
-                ? "No tasks or activities found."
-                : "No activities found."}
+                ? "Try adjusting your search query, clear some filters, or select a different status/type."
+                : "Create your first activity or task to get started tracking deliverables."}
             </p>
             {hasActiveFilters ? (
-              <button className="btn-secondary" onClick={clearFilters}>
-                Clear Filters
+              <button
+                type="button"
+                className="activities-reset-btn"
+                onClick={clearFilters}
+                style={{ marginTop: "14px" }}
+              >
+                Clear All Filters
               </button>
             ) : permissions.create ? (
               <button
-                className="btn-primary"
+                type="button"
+                className="btn-create-activity"
                 onClick={() => {
                   setEditActivity(null);
                   setIsFormOpen(true);
                 }}
-                style={{ margin: "0 auto" }}
+                style={{ marginTop: "14px" }}
               >
-                {isTasksRoute ? "Create First Task" : "Create First Activity"}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>{isTasksRoute ? "Create Task" : "Create Activity"}</span>
               </button>
             ) : null}
           </div>
         ) : (
-          <table className="leads-table">
-            <thead>
-              <tr>
-                <th>{isTasksRoute ? "Task / Activity" : "Activity"}</th>
-                <th>Type</th>
-                <th>Related To</th>
-                <th>Priority</th>
-                <th>Status</th>
-                <th>Due Date</th>
-                <th>Assigned To</th>
-                <th>Updated</th>
-                <th style={{ width: "80px", textAlign: "center" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredActivities.map((act) => {
-                const assignedUser = getUserDisplay(act.assigned_to);
-                const acctName = getAccountName(act.account_id);
-                const leadName = getLeadName(act.lead_id, act.title);
-                const contName = getContactName(act.contact_id);
-                const dealName = getDealName(act.deal_id);
+          <div className="activities-table-wrapper">
+            <table className="activities-table">
+              <thead>
+                <tr>
+                  <th className="col-title">Title & Description</th>
+                  <th className="col-type">Type</th>
+                  <th className="col-related">Related Records</th>
+                  <th className="col-priority">Priority</th>
+                  <th className="col-status">Status</th>
+                  <th className="col-due">Due Date</th>
+                  <th className="col-assigned">Assigned To</th>
+                  <th className="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredActivities.map((act) => {
+                  const assignedUser = getUserDisplay(act.assigned_to);
+                  const acctName = getAccountName(act.account_id);
+                  const leadName = getLeadName(act.lead_id, act.title);
+                  const contName = getContactName(act.contact_id);
+                  const dealName = getDealName(act.deal_id);
 
-                return (
-                  <tr key={act.id}>
-                    {/* Title */}
-                    <td>
-                      <div style={{ lineHeight: 1.4 }}>
-                        <span
-                          className="activity-title"
-                          onClick={() => setViewActivity(act)}
-                        >
-                          {act.title}
+                  return (
+                    <tr
+                      key={act.id}
+                      onClick={() => setViewActivity(act)}
+                      className="activity-row"
+                    >
+                      {/* 1. Title & Description */}
+                      <td>
+                        <div className="activity-title-cell">
+                          <span className="activity-title" title={act.title}>
+                            {act.title}
+                          </span>
+                          {act.description && (
+                            <span className="activity-desc" title={act.description}>
+                              {act.description}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 2. Type */}
+                      <td>
+                        <span className={`activity-type-badge ${getTypeBadgeClass(act.activity_type)}`}>
+                          {act.activity_type}
                         </span>
-                        {act.description && (
-                          <div className="activity-description">
-                            {act.description}
-                          </div>
-                        )}
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Type */}
-                    <td>
-                      <span className={`activity-type-badge ${getTypeBadgeClass(act.activity_type)}`}>
-                        {act.activity_type}
-                      </span>
-                    </td>
+                      {/* 3. Related Records (CRM + Industry) */}
+                      <td>
+                        <div className="activity-related-stack">
+                          {acctName && (
+                            <div className="activity-related-card" title={`Account: ${acctName}`}>
+                              <span className="activity-related-tag">ACCOUNT</span>
+                              <div className="activity-related-body">
+                                <span className="activity-related-name">{acctName}</span>
+                              </div>
+                            </div>
+                          )}
 
-                    {/* Related Records */}
-                    <td>
-                      <div className="related-pill-container">
-                        {acctName && (
-                          <div className="related-pill">
-                            <span className="related-pill-label">Acct:</span>
-                            <span>{acctName}</span>
-                          </div>
-                        )}
-                        {leadName && (
-                          <div
-                            className="related-pill related-pill-clickable"
-                            title={`View lead: ${leadName}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const leadObj = leads.find((l) => areIdsEqual(l.id, act.lead_id));
-                              if (leadObj) {
-                                setViewLeadState(leadObj);
-                              }
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <span className="related-pill-label">Lead:</span>
-                            <span style={{ textDecoration: "underline", fontWeight: 500 }}>{leadName}</span>
-                          </div>
-                        )}
-                        {contName && (
-                          <div className="related-pill">
-                            <span className="related-pill-label">Contact:</span>
-                            <span>{contName}</span>
-                          </div>
-                        )}
-                        {dealName && (
-                          <div className="related-pill">
-                            <span className="related-pill-label">Deal:</span>
-                            <span>{dealName}</span>
-                          </div>
-                        )}
-                        {!acctName && !leadName && !contName && !dealName && (
-                          <span className="text-muted">—</span>
-                        )}
-                      </div>
-                    </td>
+                          {leadName && (
+                            <div
+                              className="activity-related-card"
+                              title={`Lead: ${leadName} (Click to view)`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const leadObj = leads.find((l) => areIdsEqual(l.id, act.lead_id));
+                                if (leadObj) {
+                                  setViewLeadState(leadObj);
+                                }
+                              }}
+                            >
+                              <span className="activity-related-tag">LEAD</span>
+                              <div className="activity-related-body">
+                                <span className="activity-related-name is-link">{leadName}</span>
+                              </div>
+                            </div>
+                          )}
 
-                    {/* Priority */}
-                    <td>
-                      <span className={`activity-priority-badge ${getPriorityBadgeClass(act.priority)}`}>
-                        {act.priority}
-                      </span>
-                    </td>
+                          {contName && (
+                            <div className="activity-related-card" title={`Contact: ${contName}`}>
+                              <span className="activity-related-tag">CONTACT</span>
+                              <div className="activity-related-body">
+                                <span className="activity-related-name">{contName}</span>
+                              </div>
+                            </div>
+                          )}
 
-                    {/* Status */}
-                    <td>
-                      <span className={`activity-status-badge ${getStatusBadgeClass(act.status)}`}>
-                        {act.status}
-                      </span>
-                    </td>
+                          {dealName && (
+                            <div className="activity-related-card" title={`Deal: ${dealName}`}>
+                              <span className="activity-related-tag">DEAL</span>
+                              <div className="activity-related-body">
+                                <span className="activity-related-name">{dealName}</span>
+                              </div>
+                            </div>
+                          )}
 
-                    {/* Due Date */}
-                    <td>
-                      <span style={{ fontSize: "0.85rem" }}>
-                        {formatDateTime(act.due_date)}
-                      </span>
-                    </td>
+                          {/* Industry Related Records (Projects, Sprints, Real Estate, etc.) */}
+                          {act.related_records && act.related_records.length > 0 && act.related_records.map((link) => {
+                            const resolved = getCachedRecordLabel(link.module, link.record_id);
+                            const parsed = parseRecordLabel(resolved || `#${link.record_id.slice(0, 8)}`);
+                            let tagLabel = MODULE_DISPLAY_NAMES[link.module] || link.module;
+                            if (tagLabel.toLowerCase().includes("software project")) tagLabel = "PROJECT";
+                            else if (tagLabel.toLowerCase().includes("software sprint")) tagLabel = "SPRINT";
 
-                    {/* Assigned User */}
-                    <td>
-                      {act.assigned_to && assignedUser.name !== "—" ? (
-                        <div className="lead-name-cell" style={{ gap: "10px" }}>
-                          <div className="lead-avatar">
-                            {assignedUser.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div style={{ lineHeight: 1.3 }}>
-                            <span className="lead-name-text">{assignedUser.name}</span>
-                            {assignedUser.role && (
-                              <>
-                                <br />
-                                <span className="text-dim" style={{ fontSize: "0.78rem" }}>
+                            return (
+                              <div
+                                className="activity-related-card"
+                                key={`${link.module}-${link.record_id}`}
+                                title={`${MODULE_DISPLAY_NAMES[link.module] || link.module}: ${resolved || link.record_id}`}
+                              >
+                                <span className="activity-related-tag">{tagLabel.toUpperCase()}</span>
+                                <div className="activity-related-body">
+                                  <span className="activity-related-name">{parsed.name}</span>
+                                  {parsed.code && <span className="activity-related-code">({parsed.code})</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {!acctName &&
+                            !leadName &&
+                            !contName &&
+                            !dealName &&
+                            (!act.related_records || act.related_records.length === 0) && (
+                              <span className="activity-related-empty">—</span>
+                            )}
+                        </div>
+                      </td>
+
+                      {/* 4. Priority */}
+                      <td>
+                        <span className={`activity-priority-badge ${getPriorityBadgeClass(act.priority)}`}>
+                          {act.priority}
+                        </span>
+                      </td>
+
+                      {/* 5. Status */}
+                      <td>
+                        <span className={`activity-status-badge ${getStatusBadgeClass(act.status)}`}>
+                          {act.status}
+                        </span>
+                      </td>
+
+                      {/* 6. Due Date with Overdue Indicator */}
+                      <td>
+                        {act.due_date ? (
+                          (() => {
+                            const isOverdue =
+                              act.status !== "Completed" &&
+                              act.status !== "Cancelled" &&
+                              new Date(act.due_date).getTime() < Date.now();
+                            return (
+                              <div className="activity-date-cell">
+                                <span className="activity-date-text">{formatDateTime(act.due_date)}</span>
+                                {isOverdue && <span className="activity-overdue-tag">Overdue</span>}
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <span className="activity-related-empty">—</span>
+                        )}
+                      </td>
+
+                      {/* 7. Assigned To (Compact Avatar + Name + Role) */}
+                      <td>
+                        {act.assigned_to && assignedUser.name !== "—" ? (
+                          <div className="activity-assigned-cell">
+                            <div className="activity-avatar" title={assignedUser.name}>
+                              {assignedUser.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="activity-assigned-meta">
+                              <span className="activity-user-name" title={assignedUser.name}>
+                                {assignedUser.name}
+                              </span>
+                              {assignedUser.role && (
+                                <span className="activity-user-role" title={assignedUser.role}>
                                   {assignedUser.role}
                                 </span>
-                              </>
-                            )}
+                              )}
+                            </div>
                           </div>
+                        ) : (
+                          <span className="activity-related-empty">—</span>
+                        )}
+                      </td>
+
+                      {/* 8. Actions */}
+                      <td className="actions-cell">
+                        <div className="crm-inline-actions">
+                          <button
+                            type="button"
+                            className="crm-action-btn view-btn"
+                            title="View Activity Details"
+                            aria-label="View Activity Details"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewActivity(act);
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                              <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                          </button>
+                          {permissions.update && (
+                            <button
+                              type="button"
+                              className="crm-action-btn edit-btn"
+                              title="Edit Activity"
+                              aria-label="Edit Activity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditActivity(act);
+                                setIsFormOpen(true);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                            </button>
+                          )}
+                          {permissions.delete && (
+                            <button
+                              type="button"
+                              className="crm-action-btn delete-btn"
+                              title="Delete Activity"
+                              aria-label="Delete Activity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteActivityState(act);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
-                    </td>
-
-                    {/* Updated At */}
-                    <td>
-                      <div className="text-sm text-muted">
-                        {formatDateTime(act.updated_at)}
-                      </div>
-                    </td>
-
-                    {/* Actions Cell */}
-                    <td className="actions-cell">
-                      <button
-                        className={`btn-icon activity-action-btn ${openActionId === act.id ? "active" : ""}`}
-                        ref={(el) => (triggerRefs.current[act.id] = el)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleActions(act.id);
-                        }}
-                        aria-label={`Actions for ${act.title || "activity"}`}
-                        aria-haspopup="true"
-                        aria-expanded={openActionId === act.id}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                          <circle cx="12" cy="12" r="1.2"></circle>
-                          <circle cx="12" cy="5" r="1.2"></circle>
-                          <circle cx="12" cy="19" r="1.2"></circle>
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Floating Actions Dropdown */}
-      {openActionId && dropdownPos && (
-        <div
-          ref={actionsRef}
-          className={`activity-actions-dropdown actions-dropdown actions-dropdown-fixed ${dropdownPos.openUp ? "open-up" : ""}`}
-          style={{
-            position: "fixed",
-            top: dropdownPos.top !== undefined ? `${dropdownPos.top}px` : undefined,
-            bottom: dropdownPos.bottom !== undefined ? `${dropdownPos.bottom}px` : undefined,
-            left: `${dropdownPos.left}px`,
-            zIndex: 9999,
-          }}
-        >
-          {(() => {
-            const activeActivity = activities.find((a) => areIdsEqual(a.id, openActionId));
-            if (!activeActivity) return null;
-
-            return (
-              <>
-                <button
-                  type="button"
-                  className="dropdown-item activity-dropdown-item"
-                  onClick={() => {
-                    setViewActivity(activeActivity);
-                    setOpenActionId(null);
-                    setDropdownPos(null);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                  <span>View Details</span>
-                </button>
-
-                {activeActivity.lead_id && (
-                  <button
-                    type="button"
-                    className="dropdown-item activity-dropdown-item"
-                    onClick={() => {
-                      const leadObj = leads.find((l) => areIdsEqual(l.id, activeActivity.lead_id));
-                      if (leadObj) {
-                        setViewLeadState(leadObj);
-                      }
-                      setOpenActionId(null);
-                      setDropdownPos(null);
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                      <circle cx="9" cy="7" r="4"></circle>
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    <span>View Related Lead</span>
-                  </button>
-                )}
-
-                {permissions.update && (
-                  <button
-                    type="button"
-                    className="dropdown-item activity-dropdown-item"
-                    onClick={() => {
-                      setEditActivity(activeActivity);
-                      setIsFormOpen(true);
-                      setOpenActionId(null);
-                      setDropdownPos(null);
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    <span>{isTasksRoute ? "Edit Task" : "Edit Activity"}</span>
-                  </button>
-                )}
-
-                {permissions.delete && (
-                  <button
-                    type="button"
-                    className="dropdown-item activity-dropdown-item delete-action text-danger"
-                    onClick={() => {
-                      setDeleteActivityState(activeActivity);
-                      setOpenActionId(null);
-                      setDropdownPos(null);
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    <span>{isTasksRoute ? "Delete Task" : "Delete Activity"}</span>
-                  </button>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
+      
 
       {/* Modals */}
       {isFormOpen && (
@@ -859,6 +873,7 @@ export default function Activities() {
               setActivities((prev) => [saved, ...prev]);
               showToast(isTasksRoute ? "Task created successfully." : "Activity created successfully.");
             }
+            warmRelatedModulesCache([saved]);
           }}
         />
       )}

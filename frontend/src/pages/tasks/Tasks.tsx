@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Activity } from "../../types/activity";
 import type { User } from "../../types/user";
@@ -12,6 +12,11 @@ import { getLeads } from "../../services/leadService";
 import { getContacts } from "../../services/contactService";
 import { getAccounts } from "../../services/accountService";
 import { getDeals } from "../../services/dealService";
+import {
+  MODULE_DISPLAY_NAMES,
+  getCachedRecordLabel,
+  fetchRecordsForModule,
+} from "../../services/activityRelatedRecordsService";
 import {
   getActivityPermissions,
   getActivityUserContext,
@@ -46,6 +51,7 @@ export default function Tasks() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
 
+  const [, setRelatedRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,9 +110,6 @@ export default function Tasks() {
   const [viewLeadState, setViewLeadState] = useState<Lead | null>(null);
   const [deleteActivityState, setDeleteActivityState] = useState<Activity | null>(null);
 
-  // Actions dropdown
-  const [openActionId, setOpenActionId] = useState<string | null>(null);
-  const actionsRef = useRef<HTMLDivElement | null>(null);
 
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -117,6 +120,25 @@ export default function Tasks() {
       setNotification(null);
     }, 3500);
   };
+
+  /* ─── Cache Warmer for Related Records ─── */
+  const warmRelatedModulesCache = useCallback((taskList: Activity[]) => {
+    const modulesToFetch = new Set<string>();
+    for (const t of taskList) {
+      for (const link of t.related_records || []) {
+        if (!getCachedRecordLabel(link.module, link.record_id)) {
+          modulesToFetch.add(link.module);
+        }
+      }
+    }
+    if (modulesToFetch.size > 0) {
+      Promise.allSettled(
+        Array.from(modulesToFetch).map((m) => fetchRecordsForModule(m as any))
+      ).then(() => {
+        setRelatedRevision((r) => r + 1);
+      });
+    }
+  }, []);
 
   /* ─── Data Fetching ─── */
   const fetchData = useCallback(async () => {
@@ -142,6 +164,8 @@ export default function Tasks() {
       setContacts(contactsData || []);
       setAccounts(accountsData || []);
       setDeals(dealsData || []);
+
+      warmRelatedModulesCache(taskActivities);
     } catch (err: any) {
       console.error("Fetch tasks error:", err);
       if (err?.response?.status === 401 || err?.status === 401) {
@@ -161,7 +185,7 @@ export default function Tasks() {
     } finally {
       setLoading(false);
     }
-  }, [viewMode, userContext.canViewAllActivities]);
+  }, [viewMode, userContext.canViewAllActivities, warmRelatedModulesCache]);
 
   useEffect(() => {
     void fetchData();
@@ -176,16 +200,9 @@ export default function Tasks() {
     return () => window.removeEventListener("crm:activity-updated", handleUpdate);
   }, [fetchData]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
-        setOpenActionId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+
+
+
 
   /* ─── Visible & Filtered Tasks ─── */
   const visibleTasks = useMemo(() => {
@@ -200,7 +217,7 @@ export default function Tasks() {
   // Filtered tasks for the table
   const filteredTasks = useMemo(() => {
     return visibleTasks.filter((task) => {
-      // Search filter
+      // Search filter (including resolved industry related names)
       if (search.trim()) {
         const q = search.toLowerCase();
         const titleMatch = task.title?.toLowerCase().includes(q);
@@ -211,8 +228,13 @@ export default function Tasks() {
         const contactMatch = contact?.full_name?.toLowerCase().includes(q);
         const account = accounts.find((a) => a.id === task.account_id);
         const accountMatch = account?.name?.toLowerCase().includes(q);
+        const industryMatch = (task.related_records || []).some((link) => {
+          const resolved = getCachedRecordLabel(link.module, link.record_id) || "";
+          const modLabel = MODULE_DISPLAY_NAMES[link.module] || "";
+          return resolved.toLowerCase().includes(q) || modLabel.toLowerCase().includes(q);
+        });
 
-        if (!titleMatch && !descMatch && !leadMatch && !contactMatch && !accountMatch) {
+        if (!titleMatch && !descMatch && !leadMatch && !contactMatch && !accountMatch && !industryMatch) {
           return false;
         }
       }
@@ -334,201 +356,187 @@ export default function Tasks() {
                 setIsFormOpen(true);
               }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
+              <span className="btn-icon">+</span>
               Create Task
             </button>
           )}
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="tasks-summary-grid">
+      {/* Summary KPI Cards */}
+      <div className="task-summary-cards">
         <div
-          className={`tasks-summary-card total ${!statusFilter ? "is-active" : ""}`}
+          className={`task-kpi-card ${!statusFilter ? "active" : ""}`}
           onClick={() => handleStatusFilterChange("")}
-          title="Click to view all tasks"
+          role="button"
+          tabIndex={0}
         >
-          <div className="tasks-summary-icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-            </svg>
-          </div>
-          <div className="tasks-summary-content">
-            <span className="tasks-summary-title">Total Tasks</span>
-            <span className="tasks-summary-value">{summaryCounts.total}</span>
-            <span className="tasks-summary-subtitle">All active & finished</span>
-          </div>
+          <span className="task-kpi-label">All Tasks</span>
+          <span className="task-kpi-value">{summaryCounts.total}</span>
         </div>
 
         <div
-          className={`tasks-summary-card pending ${statusFilter === "Pending" ? "is-active" : ""}`}
-          onClick={() => handleStatusFilterChange(statusFilter === "Pending" ? "" : "Pending")}
-          title="Click to filter by Pending tasks"
+          className={`task-kpi-card ${statusFilter.toLowerCase() === "pending" ? "active" : ""}`}
+          onClick={() => handleStatusFilterChange("Pending")}
+          role="button"
+          tabIndex={0}
         >
-          <div className="tasks-summary-icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </div>
-          <div className="tasks-summary-content">
-            <span className="tasks-summary-title">Pending</span>
-            <span className="tasks-summary-value">{summaryCounts.pending}</span>
-            <span className="tasks-summary-subtitle">Requires attention</span>
-          </div>
+          <span className="task-kpi-label">Pending</span>
+          <span className="task-kpi-value text-amber">{summaryCounts.pending}</span>
         </div>
 
         <div
-          className={`tasks-summary-card completed ${statusFilter === "Completed" ? "is-active" : ""}`}
-          onClick={() => handleStatusFilterChange(statusFilter === "Completed" ? "" : "Completed")}
-          title="Click to filter by Completed tasks"
+          className={`task-kpi-card ${statusFilter.toLowerCase() === "in progress" || statusFilter.toLowerCase() === "in-progress"
+            ? "active"
+            : ""
+            }`}
+          onClick={() => handleStatusFilterChange("In Progress")}
+          role="button"
+          tabIndex={0}
         >
-          <div className="tasks-summary-icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-          </div>
-          <div className="tasks-summary-content">
-            <span className="tasks-summary-title">Completed</span>
-            <span className="tasks-summary-value">{summaryCounts.completed}</span>
-            <span className="tasks-summary-subtitle">Finished tasks</span>
-          </div>
+          <span className="task-kpi-label">In Progress</span>
+          <span className="task-kpi-value text-blue">{summaryCounts.inProgress}</span>
         </div>
 
         <div
-          className={`tasks-summary-card overdue ${statusFilter === "Overdue" ? "is-active" : ""}`}
-          onClick={() => handleStatusFilterChange(statusFilter === "Overdue" ? "" : "Overdue")}
-          title="Click to filter by Overdue tasks"
+          className={`task-kpi-card ${statusFilter.toLowerCase() === "completed" ? "active" : ""}`}
+          onClick={() => handleStatusFilterChange("Completed")}
+          role="button"
+          tabIndex={0}
         >
-          <div className="tasks-summary-icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-          </div>
-          <div className="tasks-summary-content">
-            <span className="tasks-summary-title">Overdue</span>
-            <span className="tasks-summary-value">{summaryCounts.overdue}</span>
-            <span className="tasks-summary-subtitle">Past due date</span>
-          </div>
+          <span className="task-kpi-label">Completed</span>
+          <span className="task-kpi-value text-green">{summaryCounts.completed}</span>
+        </div>
+
+        <div
+          className={`task-kpi-card ${statusFilter.toLowerCase() === "overdue" ? "active" : ""}`}
+          onClick={() => handleStatusFilterChange("Overdue")}
+          role="button"
+          tabIndex={0}
+        >
+          <span className="task-kpi-label">Overdue</span>
+          <span className="task-kpi-value text-red">{summaryCounts.overdue}</span>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="tasks-filter-bar">
-        <div className="tasks-search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
+      {/* Filter Toolbar */}
+      <div className="filter-card">
+        <div className="search-box">
           <input
             type="text"
-            placeholder="Search by title, description, or lead..."
+            placeholder="Search by title, description, lead, account, contact, or industry project/property..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search tasks"
           />
+          {search && (
+            <button
+              type="button"
+              className="search-clear-btn"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
         </div>
 
-        <select
-          className="tasks-filter-select"
-          value={statusFilter}
-          onChange={(e) => handleStatusFilterChange(e.target.value)}
-          aria-label="Filter by status"
-        >
-          <option value="">All Statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Completed">Completed</option>
-          <option value="Overdue">Overdue</option>
-          <option value="Cancelled">Cancelled</option>
-        </select>
-
-        <select
-          className="tasks-filter-select"
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
-          aria-label="Filter by priority"
-        >
-          <option value="">All Priorities</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
-          <option value="Low">Low</option>
-        </select>
-
-        <select
-          className="tasks-filter-select"
-          value={dueDateFilter}
-          onChange={(e) => setDueDateFilter(e.target.value)}
-          aria-label="Filter by due date"
-        >
-          <option value="">All Due Dates</option>
-          <option value="today">Due Today</option>
-          <option value="week">Due This Week</option>
-          <option value="overdue">Overdue</option>
-        </select>
-
-        {userContext.canViewAllActivities && viewMode === "all" && (
+        <div className="filters-group">
+          {/* Status Dropdown */}
           <select
-            className="tasks-filter-select"
-            value={assignedFilter}
-            onChange={(e) => setAssignedFilter(e.target.value)}
-            aria-label="Filter by assigned user"
+            value={statusFilter}
+            onChange={(e) => handleStatusFilterChange(e.target.value)}
+            aria-label="Filter by status"
           >
-            <option value="">All Assigned Users</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.full_name}
-              </option>
-            ))}
+            <option value="">All Statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="Overdue">Overdue</option>
           </select>
-        )}
 
-        {hasActiveFilters && (
-          <button type="button" className="btn-clear-tasks-filters" onClick={clearFilters}>
-            Clear Filters
-          </button>
-        )}
+          {/* Priority Dropdown */}
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            aria-label="Filter by priority"
+          >
+            <option value="">All Priorities</option>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </select>
+
+          {/* Due Date Dropdown */}
+          <select
+            value={dueDateFilter}
+            onChange={(e) => setDueDateFilter(e.target.value)}
+            aria-label="Filter by due date"
+          >
+            <option value="">All Due Dates</option>
+            <option value="today">Due Today</option>
+            <option value="week">Due Next 7 Days</option>
+            <option value="overdue">Overdue</option>
+          </select>
+
+          {/* Assigned User Dropdown */}
+          {userContext.canViewAllActivities && viewMode === "all" && (
+            <select
+              value={assignedFilter}
+              onChange={(e) => setAssignedFilter(e.target.value)}
+              aria-label="Filter by assigned user"
+            >
+              <option value="">All Assignees</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={clearFilters}
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Main Table Content */}
-      <div className="tasks-table-card">
+      {/* Content Area */}
+      <div className="tasks-content">
         {loading ? (
-          <div className="tasks-loading-state" role="status">
-            <div className="tasks-spinner" aria-hidden="true" />
-            <span>Loading tasks...</span>
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p>Loading tasks...</p>
           </div>
         ) : error ? (
-          <div className="tasks-error-state" role="alert">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <strong>{error}</strong>
-            <button type="button" className="btn-primary" onClick={() => void fetchData()}>
+          <div className="error-state">
+            <p>{error}</p>
+            <button type="button" className="btn-secondary" onClick={() => void fetchData()}>
               Retry
             </button>
           </div>
         ) : filteredTasks.length === 0 ? (
-          <div className="tasks-empty-state" role="status">
-            <div className="tasks-empty-icon" aria-hidden="true">
-              ✓
-            </div>
-            <h3>No tasks found</h3>
-            <p>
+          <div className="empty-state">
+            <div className="empty-state-icon">✓</div>
+            <h3>{hasActiveFilters ? "No tasks match your filters" : "No tasks found"}</h3>
+            <p className="text-muted">
               {hasActiveFilters
-                ? "No tasks match your current filter criteria. Try clearing filters to see all tasks."
-                : "No tasks scheduled. Create your first task to get started."}
+                ? "Try clearing filters to view all tasks."
+                : "Create your first task to start organizing your work."}
             </p>
             {hasActiveFilters ? (
-              <button type="button" className="btn-secondary" onClick={clearFilters} style={{ marginTop: "8px" }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={clearFilters}
+                style={{ marginTop: "12px" }}
+              >
                 Clear Filters
               </button>
             ) : permissions.create ? (
@@ -539,19 +547,19 @@ export default function Tasks() {
                   setEditActivity(null);
                   setIsFormOpen(true);
                 }}
-                style={{ marginTop: "8px" }}
+                style={{ marginTop: "12px" }}
               >
                 + Create Task
               </button>
             ) : null}
           </div>
         ) : (
-          <div className="tasks-table-responsive">
-            <table className="tasks-main-table">
+          <div className="table-responsive">
+            <table className="data-table tasks-table">
               <thead>
                 <tr>
-                  <th className="col-title">Task Title</th>
-                  <th className="col-lead">Related Lead</th>
+                  <th className="col-task">Task</th>
+                  <th className="col-lead">Related Entity</th>
                   <th className="col-assigned">Assigned To</th>
                   <th className="col-due">Due Date</th>
                   <th className="col-priority">Priority</th>
@@ -561,49 +569,50 @@ export default function Tasks() {
               </thead>
               <tbody>
                 {filteredTasks.map((task) => {
+                  const assignedUser = users.find((u) => u.id === task.assigned_to);
                   const relatedLead = leads.find((l) => l.id === task.lead_id);
                   const relatedContact = contacts.find((c) => c.id === task.contact_id);
                   const relatedAccount = accounts.find((a) => a.id === task.account_id);
-                  const assignedUser = users.find((u) => u.id === task.assigned_to);
                   const overdue = isTaskOverdue(task);
 
                   const initials = assignedUser?.full_name
                     ? assignedUser.full_name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .slice(0, 2)
-                        .join("")
-                        .toUpperCase()
-                    : "?";
+                      .split(" ")
+                      .map((p) => p[0])
+                      .join("")
+                      .toUpperCase()
+                      .slice(0, 2)
+                    : "—";
 
                   return (
-                    <tr key={task.id} className="tasks-table-row">
-                      {/* Task Title */}
-                      <td className="col-title">
-                        <div className="task-title-cell-wrap">
-                          <button
-                            type="button"
-                            className="task-title-link"
-                            onClick={() => setViewActivity(task)}
-                            title="Click to view details"
-                          >
-                            {task.title}
-                          </button>
+                    <tr
+                      key={task.id}
+                      className={`task-row ${overdue ? "task-row-overdue" : ""}`}
+                      onClick={() => setViewActivity(task)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {/* Task Title & Description */}
+                      <td className="col-task">
+                        <div className="task-title-cell">
+                          <span className="task-title-text">{task.title}</span>
                           {task.description && (
-                            <span className="task-desc-preview" title={task.description}>
+                            <span className="task-desc-text text-muted">
                               {task.description}
                             </span>
                           )}
                         </div>
                       </td>
 
-                      {/* Related Lead / Record */}
+                      {/* Related Lead / Record + Industry Records */}
                       <td className="col-lead">
                         {relatedLead ? (
                           <button
                             type="button"
                             className="task-lead-btn"
-                            onClick={() => setViewLeadState(relatedLead)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewLeadState(relatedLead);
+                            }}
                             title={`View lead: ${relatedLead.full_name}`}
                           >
                             {relatedLead.full_name}
@@ -620,6 +629,32 @@ export default function Tasks() {
                           <span className="text-muted">Lead #{task.lead_id.slice(0, 8)}</span>
                         ) : (
                           <span className="text-muted">—</span>
+                        )}
+
+                        {/* Industry Related Records */}
+                        {task.related_records && task.related_records.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", marginTop: "4px" }}>
+                            {task.related_records.map((link) => {
+                              const resolved = getCachedRecordLabel(link.module, link.record_id);
+                              const modName = MODULE_DISPLAY_NAMES[link.module] || link.module.replace("_", " ");
+                              return (
+                                <span
+                                  key={`${link.module}-${link.record_id}`}
+                                  style={{
+                                    fontSize: "0.72rem",
+                                    background: "#f1f5f9",
+                                    color: "#334155",
+                                    padding: "1px 6px",
+                                    borderRadius: "4px",
+                                    display: "inline-block",
+                                  }}
+                                  title={`${modName}: ${resolved || link.record_id}`}
+                                >
+                                  <strong>{modName}:</strong> {resolved || `#${link.record_id.slice(0, 8)}`}
+                                </span>
+                              );
+                            })}
+                          </div>
                         )}
                       </td>
 
@@ -671,66 +706,58 @@ export default function Tasks() {
 
                       {/* Actions */}
                       <td className="col-actions">
-                        <div
-                          className="task-actions-wrapper"
-                          ref={openActionId === task.id ? actionsRef : null}
-                        >
+                        <div className="crm-inline-actions">
                           <button
                             type="button"
-                            className="task-dots-btn"
+                            className="crm-action-btn view-btn"
+                            title="View Task Details"
+                            aria-label="View Task Details"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setOpenActionId(openActionId === task.id ? null : task.id);
+                              setViewActivity(task);
                             }}
-                            aria-label={`Actions for ${task.title}`}
-                            title="Actions"
                           >
-                            ⋮
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                              <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
                           </button>
-
-                          {openActionId === task.id && (
-                            <div className="task-actions-dropdown" role="menu">
-                              <button
-                                type="button"
-                                className="task-dropdown-item"
-                                role="menuitem"
-                                onClick={() => {
-                                  setOpenActionId(null);
-                                  setViewActivity(task);
-                                }}
-                              >
-                                View Details
-                              </button>
-
-                              {permissions.update && (
-                                <button
-                                  type="button"
-                                  className="task-dropdown-item"
-                                  role="menuitem"
-                                  onClick={() => {
-                                    setOpenActionId(null);
-                                    setEditActivity(task);
-                                    setIsFormOpen(true);
-                                  }}
-                                >
-                                  Edit Task
-                                </button>
-                              )}
-
-                              {permissions.delete && (
-                                <button
-                                  type="button"
-                                  className="task-dropdown-item delete"
-                                  role="menuitem"
-                                  onClick={() => {
-                                    setOpenActionId(null);
-                                    setDeleteActivityState(task);
-                                  }}
-                                >
-                                  Delete Task
-                                </button>
-                              )}
-                            </div>
+                          {permissions.update && (
+                            <button
+                              type="button"
+                              className="crm-action-btn edit-btn"
+                              title="Edit Task"
+                              aria-label="Edit Task"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditActivity(task);
+                                setIsFormOpen(true);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                            </button>
+                          )}
+                          {permissions.delete && (
+                            <button
+                              type="button"
+                              className="crm-action-btn delete-btn"
+                              title="Delete Task"
+                              aria-label="Delete Task"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteActivityState(task);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                              </svg>
+                            </button>
                           )}
                         </div>
                       </td>
@@ -743,7 +770,7 @@ export default function Tasks() {
         )}
       </div>
 
-      {/* ─── Modals ─── */}
+      {/* Modals */}
       {isFormOpen && (
         <ActivityFormModal
           activity={editActivity}
@@ -753,8 +780,6 @@ export default function Tasks() {
             setEditActivity(null);
           }}
           onSuccess={(saved) => {
-            setIsFormOpen(false);
-            setEditActivity(null);
             if (editActivity) {
               setTasks((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
               showToast("Task updated successfully.");
@@ -762,6 +787,7 @@ export default function Tasks() {
               setTasks((prev) => [saved, ...prev]);
               showToast("Task created successfully.");
             }
+            warmRelatedModulesCache([saved]);
           }}
         />
       )}
@@ -793,7 +819,9 @@ export default function Tasks() {
           lead={viewLeadState}
           users={users}
           onClose={() => setViewLeadState(null)}
-          onEdit={() => {}}
+          onEdit={() => {
+            setViewLeadState(null);
+          }}
         />
       )}
 
@@ -802,9 +830,7 @@ export default function Tasks() {
           activity={deleteActivityState}
           onClose={() => setDeleteActivityState(null)}
           onSuccess={() => {
-            const deletedId = deleteActivityState.id;
-            setTasks((prev) => prev.filter((t) => t.id !== deletedId));
-            setDeleteActivityState(null);
+            setTasks((prev) => prev.filter((t) => t.id !== deleteActivityState.id));
             showToast("Task deleted successfully.");
           }}
         />

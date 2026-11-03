@@ -52,9 +52,7 @@
 .accounts-table th.actions-header,
 .accounts-table th:last-child {
   text-align: center;
-  width: 80px;
-  min-width: 80px;
-  max-width: 80px;
+  width: 120px; min-width: 110px;
   padding: 14px 16px;
 }
 
@@ -62,9 +60,7 @@
 .accounts-table td:last-child {
   text-align: center;
   vertical-align: middle;
-  width: 80px;
-  min-width: 80px;
-  max-width: 80px;
+  width: 120px; min-width: 110px;
   padding: 10px 16px;
   position: relative;
 }

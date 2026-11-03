@@ -142,9 +142,112 @@
 
 /* ─── Actions Dropdown ─── */
 
+
+/* ─── CRM Table Inline Action Buttons (Leads, Contacts, Accounts, Deals, Tasks) ─── */
 .actions-cell {
   position: relative;
+  text-align: center;
+  white-space: nowrap;
+  width: 120px;
+  min-width: 110px;
 }
+
+.crm-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.crm-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.crm-action-btn svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  stroke-width: 2;
+  transition: stroke 0.15s ease-in-out;
+}
+
+.crm-action-btn:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+}
+
+.crm-action-btn:active {
+  transform: scale(0.95);
+}
+
+/* 1. View button (Eye icon) */
+.crm-action-btn.view-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+/* 2. Edit button (Pencil icon) */
+.crm-action-btn.edit-btn:hover {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #2563eb;
+}
+
+/* 3. Delete button (Trash icon) */
+.crm-action-btn.delete-btn:hover {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+/* Dark mode styling */
+.dashboard-wrapper.dark .crm-action-btn,
+[data-theme='dark'] .crm-action-btn,
+.dark .crm-action-btn {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+.dashboard-wrapper.dark .crm-action-btn.view-btn:hover,
+[data-theme='dark'] .crm-action-btn.view-btn:hover,
+.dark .crm-action-btn.view-btn:hover {
+  background-color: #334155;
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+.dashboard-wrapper.dark .crm-action-btn.edit-btn:hover,
+[data-theme='dark'] .crm-action-btn.edit-btn:hover,
+.dark .crm-action-btn.edit-btn:hover {
+  background-color: rgba(37, 99, 235, 0.18);
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+.dashboard-wrapper.dark .crm-action-btn.delete-btn:hover,
+[data-theme='dark'] .crm-action-btn.delete-btn:hover,
+.dark .crm-action-btn.delete-btn:hover {
+  background-color: rgba(220, 38, 38, 0.18);
+  border-color: #ef4444;
+  color: #f87171;
+}
+
 
 .btn-actions-trigger {
   background: transparent;

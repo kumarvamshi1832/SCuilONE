@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
 import {
   getSoftwareRequirements,
   createSoftwareRequirement,
@@ -6,6 +7,7 @@ import {
   deleteSoftwareRequirement,
   extractErrorMessage,
 } from "../../services/softwareRequirementService";
+import { clearSoftwareForbidden } from "../../services/softwareRequestManager";
 import { getLeads } from "../../services/leadService";
 import { getAccounts } from "../../services/accountService";
 import { getContacts } from "../../services/contactService";
@@ -69,14 +71,64 @@ function SoftwareRequirementsContent() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
+  // Relationship async loading and error states
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsError, setLeadsError] = useState<string | null>(null);
+
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+
+  const [dealsLoading, setDealsLoading] = useState(false);
+  const [dealsError, setDealsError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+
+  // Helper to match status string against canonical SOFTWARE_REQUIREMENT_STATUSES
+  const resolveCanonicalStatus = useCallback((val: string | null | undefined): string => {
+    if (!val) return "";
+    const clean = val.trim().toLowerCase();
+    const found = SOFTWARE_REQUIREMENT_STATUSES.find((s) => s.toLowerCase() === clean);
+    return found || "";
+  }, []);
+
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const fromParam = searchParams.get("status");
+    const fromState = (location.state as any)?.status;
+    return resolveCanonicalStatus(fromParam || fromState);
+  });
   const [typeFilter, setTypeFilter] = useState("");
+
+  // Sync with URL query parameter changes (supports Back / Forward navigation)
+  useEffect(() => {
+    const fromParam = searchParams.get("status");
+    const fromState = (location.state as any)?.status;
+    const resolved = resolveCanonicalStatus(fromParam || fromState);
+    setStatusFilter(resolved);
+  }, [searchParams, location.state, resolveCanonicalStatus]);
+
+  const handleStatusFilterChange = (newStatus: string) => {
+    const resolved = resolveCanonicalStatus(newStatus);
+    setStatusFilter(resolved);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (resolved) {
+        next.set("status", resolved);
+      } else {
+        next.delete("status");
+      }
+      return next;
+    });
+  };
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,50 +159,147 @@ function SoftwareRequirementsContent() {
     notes: "",
   });
 
-  const loadData = useCallback(async () => {
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [forbiddenDetail, setForbiddenDetail] = useState<string | null>(null);
+
+  const loadData = useCallback(async (forceRetry = false) => {
     setLoading(true);
     setError(null);
+    if (forceRetry) {
+      clearSoftwareForbidden("software_requirements");
+      setIsForbidden(false);
+      setForbiddenDetail(null);
+    }
+
+    setLeadsLoading(true);
+    setAccountsLoading(true);
+    setContactsLoading(true);
+    setDealsLoading(true);
+    setLeadsError(null);
+    setAccountsError(null);
+    setContactsError(null);
+    setDealsError(null);
+
     try {
-      const [reqData, leadsData, accountsData, contactsData, dealsData, usersData] =
-        await Promise.all([
-          getSoftwareRequirements(),
-          getLeads().catch(() => []),
-          getAccounts().catch(() => []),
-          getContacts().catch(() => []),
-          getDeals().catch(() => []),
-          getUsers().catch(() => []),
+      const [reqRes, leadsRes, accountsRes, contactsRes, dealsRes, usersRes] =
+        await Promise.allSettled([
+          getSoftwareRequirements(undefined, { forceRetry }),
+          getLeads(),
+          getAccounts(),
+          getContacts(),
+          getDeals(),
+          getUsers(),
         ]);
 
-      setRequirements(Array.isArray(reqData) ? reqData : []);
-      setLeads(Array.isArray(leadsData) ? leadsData : []);
-      setAccounts(Array.isArray(accountsData) ? accountsData : []);
-      setContacts(Array.isArray(contactsData) ? contactsData : []);
-      setDeals(Array.isArray(dealsData) ? dealsData : []);
-      setUsers(Array.isArray(usersData) ? usersData : []);
-    } catch (err: any) {
-      setError(extractErrorMessage(err));
+      // Software Requirements
+      if (reqRes.status === "fulfilled") {
+        const list = Array.isArray(reqRes.value) ? reqRes.value : [];
+        setRequirements(list);
+        setIsForbidden(false);
+        setForbiddenDetail(null);
+      } else {
+        const err = reqRes.reason;
+        if (err?.response?.status === 403 || err?.isCachedForbidden) {
+          setIsForbidden(true);
+          setForbiddenDetail(extractErrorMessage(err));
+        } else {
+          setError(extractErrorMessage(err));
+        }
+      }
+
+      // Leads
+      if (leadsRes.status === "fulfilled") {
+        setLeads(Array.isArray(leadsRes.value) ? leadsRes.value : []);
+        setLeadsError(null);
+      } else {
+        setLeadsError(extractErrorMessage(leadsRes.reason));
+      }
+      setLeadsLoading(false);
+
+      // Accounts
+      if (accountsRes.status === "fulfilled") {
+        setAccounts(Array.isArray(accountsRes.value) ? accountsRes.value : []);
+        setAccountsError(null);
+      } else {
+        setAccountsError(extractErrorMessage(accountsRes.reason));
+      }
+      setAccountsLoading(false);
+
+      // Contacts
+      if (contactsRes.status === "fulfilled") {
+        setContacts(Array.isArray(contactsRes.value) ? contactsRes.value : []);
+        setContactsError(null);
+      } else {
+        setContactsError(extractErrorMessage(contactsRes.reason));
+      }
+      setContactsLoading(false);
+
+      // Deals
+      if (dealsRes.status === "fulfilled") {
+        setDeals(Array.isArray(dealsRes.value) ? dealsRes.value : []);
+        setDealsError(null);
+      } else {
+        setDealsError(extractErrorMessage(dealsRes.reason));
+      }
+      setDealsLoading(false);
+
+      // Users
+      if (usersRes.status === "fulfilled") {
+        setUsers(Array.isArray(usersRes.value) ? usersRes.value : []);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData(false);
   }, [loadData]);
+
+  // Option Label Formatters
+  const formatLeadLabel = (l: Lead): string => {
+    const name = (l.full_name || (l as any).name || (l as any).first_name || "Unnamed Lead").trim();
+    const email = l.email ? ` — ${l.email.trim()}` : "";
+    return `${name}${email}`;
+  };
+
+  const formatAccountLabel = (a: Account): string => {
+    const name = (a.name || "Unnamed Account").trim();
+    const email = a.email ? ` — ${a.email.trim()}` : "";
+    return `${name}${email}`;
+  };
+
+  const formatContactLabel = (c: Contact): string => {
+    const name = (c.full_name || `${(c as any).first_name || ""} ${(c as any).last_name || ""}`.trim() || "Unnamed Contact").trim();
+    const email = c.email ? ` — ${c.email.trim()}` : "";
+    return `${name}${email}`;
+  };
+
+  const formatDealLabel = (d: Deal): string => {
+    return (d.name || "Unnamed Deal").trim();
+  };
 
   // Name Resolvers
   const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
-  const leadMap = useMemo(() => new Map(leads.map((l) => [l.id, l.full_name])), [leads]);
-  const contactMap = useMemo(() => new Map(contacts.map((c) => [c.id, c.full_name])), [contacts]);
+  const leadMap = useMemo(() => new Map(leads.map((l) => [l.id, l.full_name || (l as any).name || (l as any).first_name || "Lead"])), [leads]);
+  const contactMap = useMemo(() => new Map(contacts.map((c) => [c.id, c.full_name || `${(c as any).first_name || ""} ${(c as any).last_name || ""}`.trim() || "Contact"])), [contacts]);
   const dealMap = useMemo(() => new Map(deals.map((d) => [d.id, d.name])), [deals]);
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.full_name])), [users]);
 
   const resolveClient = useCallback((req: SoftwareRequirement | null | undefined): string => {
     if (!req) return "—";
-    if (req.account_id && accountMap.has(req.account_id)) return accountMap.get(req.account_id) || "—";
-    if (req.lead_id && leadMap.has(req.lead_id)) return leadMap.get(req.lead_id) || "—";
-    if (req.contact_id && contactMap.has(req.contact_id)) return contactMap.get(req.contact_id) || "—";
-    if (req.deal_id && dealMap.has(req.deal_id)) return dealMap.get(req.deal_id) || "—";
+    if (req.lead_id && leadMap.has(req.lead_id)) {
+      return `Lead: ${leadMap.get(req.lead_id)}`;
+    }
+    if (req.account_id && accountMap.has(req.account_id)) {
+      return `Account: ${accountMap.get(req.account_id)}`;
+    }
+    if (req.contact_id && contactMap.has(req.contact_id)) {
+      return `Contact: ${contactMap.get(req.contact_id)}`;
+    }
+    if (req.deal_id && dealMap.has(req.deal_id)) {
+      return `Deal: ${dealMap.get(req.deal_id)}`;
+    }
     if (typeof req.notes === "string" && req.notes.includes("Client: ")) {
       return req.notes.replace("Client: ", "");
     }
@@ -188,7 +337,7 @@ function SoftwareRequirementsContent() {
       software_type: "Web Application",
       deal_id: null,
       lead_id: null,
-      account_id: accounts[0]?.id || null,
+      account_id: null,
       contact_id: null,
       assigned_to: users[0]?.id || null,
       platforms: "",
@@ -245,7 +394,18 @@ function SoftwareRequirementsContent() {
       setFormError("Description is required.");
       return;
     }
-    if (!formData.deal_id && !formData.lead_id && !formData.account_id && !formData.contact_id) {
+
+    const cleanRelationId = (val?: string | null) =>
+      val && typeof val === "string" && val.trim().length > 0 && val.trim() !== "None"
+        ? val.trim()
+        : null;
+
+    const leadId = cleanRelationId(formData.lead_id);
+    const accountId = cleanRelationId(formData.account_id);
+    const contactId = cleanRelationId(formData.contact_id);
+    const dealId = cleanRelationId(formData.deal_id);
+
+    if (!leadId && !accountId && !contactId && !dealId) {
       setFormError("Please link the requirement to at least one entity: Account, Lead, Deal, or Contact.");
       return;
     }
@@ -268,11 +428,11 @@ function SoftwareRequirementsContent() {
         title: cleanTitle,
         description: cleanDesc,
         software_type: formData.software_type,
-        deal_id: formData.deal_id || null,
-        lead_id: formData.lead_id || null,
-        account_id: formData.account_id || null,
-        contact_id: formData.contact_id || null,
-        assigned_to: formData.assigned_to || null,
+        deal_id: dealId,
+        lead_id: leadId,
+        account_id: accountId,
+        contact_id: contactId,
+        assigned_to: cleanRelationId(formData.assigned_to),
         platforms: formData.platforms?.trim() || null,
         integrations: formData.integrations?.trim() || null,
         min_budget: numMin,
@@ -294,6 +454,7 @@ function SoftwareRequirementsContent() {
         setSuccessMessage(`Requirement "${created.title || payload.title}" created successfully.`);
       }
       setIsModalOpen(false);
+      await loadData(true);
     } catch (err: any) {
       setFormError(extractErrorMessage(err));
     } finally {
@@ -323,7 +484,11 @@ function SoftwareRequirementsContent() {
         <div className="sw-module-title-box">
           <h1>
             Software Requirements
-            <span className="sw-count-badge">{requirements.length} Total</span>
+            <span className="sw-count-badge">
+              {filteredList.length === requirements.length
+                ? `${requirements.length} Total`
+                : `${filteredList.length} of ${requirements.length} Filtered`}
+            </span>
           </h1>
           <p>Define software specifications, technology stacks, budgets, and client deliverables.</p>
         </div>
@@ -369,7 +534,7 @@ function SoftwareRequirementsContent() {
         <select
           className="sw-filter-select"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => handleStatusFilterChange(e.target.value)}
         >
           <option value="">All Statuses</option>
           {SOFTWARE_REQUIREMENT_STATUSES.map((st) => (
@@ -387,6 +552,21 @@ function SoftwareRequirementsContent() {
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
+
+        {(Boolean(searchTerm) || Boolean(statusFilter) || Boolean(typeFilter)) && (
+          <button
+            type="button"
+            className="sw-btn-secondary"
+            style={{ padding: "8px 14px", fontSize: "0.82rem" }}
+            onClick={() => {
+              setSearchTerm("");
+              handleStatusFilterChange("");
+              setTypeFilter("");
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Table Card */}
@@ -395,14 +575,74 @@ function SoftwareRequirementsContent() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             Loading software requirements...
           </div>
+        ) : isForbidden ? (
+          <div className="sw-forbidden-card">
+            <div className="sw-forbidden-icon-box">🔒</div>
+            <h3>Software Requirements Access Restricted</h3>
+            <p>
+              Backend access to software requirements is governed by tenant industry authorization policy.
+            </p>
+            {forbiddenDetail && (
+              <div className="sw-forbidden-detail">{forbiddenDetail}</div>
+            )}
+            <div style={{ maxWidth: "560px", fontSize: "0.85rem", color: "#64748b", margin: "4px 0 12px 0", lineHeight: "1.5" }}>
+              Backend access for software requirements is strictly restricted to tenants classified as <strong>Software Services</strong> or <strong>IT Consulting</strong>. If your tenant is registered as &quot;Software Company&quot;, an administrator can update the tenant industry configuration in the database or settings.
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
+              <button
+                type="button"
+                className="sw-btn-secondary"
+                onClick={() => void loadData(true)}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: "6px" }}>
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                Retry Access
+              </button>
+              <button
+                type="button"
+                className="sw-btn-primary"
+                onClick={handleOpenCreate}
+              >
+                Draft Requirement Anyway
+              </button>
+            </div>
+          </div>
         ) : error ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#ef4444" }}>
             <p style={{ marginBottom: "12px" }}>{error}</p>
-            <button className="sw-btn-secondary" onClick={loadData}>Retry</button>
+            <button className="sw-btn-secondary" onClick={() => void loadData(true)}>Retry</button>
           </div>
         ) : filteredList.length === 0 ? (
-          <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
-            No software requirements found matching your criteria.
+          <div style={{ padding: "48px 24px", textAlign: "center", color: "#94a3b8" }}>
+            {requirements.length > 0 ? (
+              <>
+                <p style={{ margin: "0 0 12px 0", fontSize: "0.95rem" }}>
+                  No software requirements match your current filter criteria.
+                </p>
+                <button
+                  type="button"
+                  className="sw-btn-secondary"
+                  onClick={() => {
+                    setSearchTerm("");
+                    handleStatusFilterChange("");
+                    setTypeFilter("");
+                  }}
+                >
+                  Reset Filters ({requirements.length} available)
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: "0 0 14px 0", fontSize: "0.95rem" }}>
+                  No software requirements created yet.
+                </p>
+                <button type="button" className="sw-btn-primary" onClick={handleOpenCreate}>
+                  Create First Requirement
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <table className="sw-data-table">
@@ -487,7 +727,35 @@ function SoftwareRequirementsContent() {
             </div>
             <form className="sw-modal-form" onSubmit={handleSubmit}>
               <div className="sw-modal-body">
-                {formError && <div className="sw-error-banner">{formError}</div>}
+                {isForbidden && !formError && (
+                  <div className="sw-warning-banner" style={{ marginBottom: "16px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                      <span style={{ fontSize: "1.1rem" }}>⚠️</span>
+                      <div>
+                        <strong>Tenant Industry Authorization Notice:</strong> {forbiddenDetail || "This module is available only to Software Services companies."}
+                        <div style={{ fontSize: "0.8rem", marginTop: "4px", opacity: 0.9 }}>
+                          Backend software requirement APIs require tenant industry to be &quot;Software Services&quot; or &quot;IT Consulting&quot;. You can still draft and link real CRM records (Accounts, Leads, Contacts, Deals), but saving to the server requires eligible tenant authorization.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {formError && (
+                  <div className="sw-error-banner" style={{ marginBottom: "16px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                      <span style={{ fontSize: "1.1rem" }}>⛔</span>
+                      <div>
+                        <strong>Save Failed:</strong> {formError}
+                        {formError.toLowerCase().includes("software services") && (
+                          <div style={{ fontSize: "0.8rem", marginTop: "4px", opacity: 0.9 }}>
+                            Your tenant is currently saved with an industry string that does not match the backend&apos;s strict eligibility list (&quot;Software Services&quot;, &quot;IT Consulting&quot;). Please have an administrator align the tenant&apos;s industry classification in the database or settings. Your form entries above have been preserved.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="sw-form-group">
                   <label>Requirement Title *</label>
@@ -516,15 +784,31 @@ function SoftwareRequirementsContent() {
                   </div>
 
                   <div className="sw-form-group">
-                    <label>Client Account</label>
+                    <label>
+                      Client Account
+                      {accountsLoading && <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "6px" }}>(Loading...)</span>}
+                      {accountsError && <span style={{ fontSize: "0.75rem", color: "#ef4444", marginLeft: "6px" }}>(Failed to load)</span>}
+                    </label>
                     <select
                       className="sw-form-select"
                       value={formData.account_id || ""}
-                      onChange={(e) => setFormData({ ...formData, account_id: e.target.value || null })}
+                      onChange={(e) => {
+                        const val = e.target.value.trim() ? e.target.value.trim() : null;
+                        setFormData((prev) => ({ ...prev, account_id: val }));
+                        if (val && formError?.includes("link the requirement")) {
+                          setFormError(null);
+                        }
+                      }}
+                      disabled={accountsLoading}
                     >
                       <option value="">None</option>
+                      {accountsLoading && <option value="" disabled>Loading accounts...</option>}
+                      {accountsError && <option value="" disabled>Error loading accounts ({accountsError})</option>}
+                      {!accountsLoading && !accountsError && accounts.length === 0 && (
+                        <option value="" disabled>No accounts available</option>
+                      )}
                       {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>{a.name}</option>
+                        <option key={a.id} value={a.id}>{formatAccountLabel(a)}</option>
                       ))}
                     </select>
                   </div>
@@ -533,29 +817,61 @@ function SoftwareRequirementsContent() {
                 {/* Additional Relationship Linkages: Lead, Deal, Contact */}
                 <div className="sw-form-row">
                   <div className="sw-form-group">
-                    <label>Related Lead</label>
+                    <label>
+                      Related Lead
+                      {leadsLoading && <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "6px" }}>(Loading...)</span>}
+                      {leadsError && <span style={{ fontSize: "0.75rem", color: "#ef4444", marginLeft: "6px" }}>(Failed to load)</span>}
+                    </label>
                     <select
                       className="sw-form-select"
                       value={formData.lead_id || ""}
-                      onChange={(e) => setFormData({ ...formData, lead_id: e.target.value || null })}
+                      onChange={(e) => {
+                        const val = e.target.value.trim() ? e.target.value.trim() : null;
+                        setFormData((prev) => ({ ...prev, lead_id: val }));
+                        if (val && formError?.includes("link the requirement")) {
+                          setFormError(null);
+                        }
+                      }}
+                      disabled={leadsLoading}
                     >
                       <option value="">None</option>
+                      {leadsLoading && <option value="" disabled>Loading leads...</option>}
+                      {leadsError && <option value="" disabled>Error loading leads ({leadsError})</option>}
+                      {!leadsLoading && !leadsError && leads.length === 0 && (
+                        <option value="" disabled>No leads available</option>
+                      )}
                       {leads.map((l) => (
-                        <option key={l.id} value={l.id}>{l.full_name}</option>
+                        <option key={l.id} value={l.id}>{formatLeadLabel(l)}</option>
                       ))}
                     </select>
                   </div>
 
                   <div className="sw-form-group">
-                    <label>Related Contact</label>
+                    <label>
+                      Related Contact
+                      {contactsLoading && <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "6px" }}>(Loading...)</span>}
+                      {contactsError && <span style={{ fontSize: "0.75rem", color: "#ef4444", marginLeft: "6px" }}>(Failed to load)</span>}
+                    </label>
                     <select
                       className="sw-form-select"
                       value={formData.contact_id || ""}
-                      onChange={(e) => setFormData({ ...formData, contact_id: e.target.value || null })}
+                      onChange={(e) => {
+                        const val = e.target.value.trim() ? e.target.value.trim() : null;
+                        setFormData((prev) => ({ ...prev, contact_id: val }));
+                        if (val && formError?.includes("link the requirement")) {
+                          setFormError(null);
+                        }
+                      }}
+                      disabled={contactsLoading}
                     >
                       <option value="">None</option>
+                      {contactsLoading && <option value="" disabled>Loading contacts...</option>}
+                      {contactsError && <option value="" disabled>Error loading contacts ({contactsError})</option>}
+                      {!contactsLoading && !contactsError && contacts.length === 0 && (
+                        <option value="" disabled>No contacts available</option>
+                      )}
                       {contacts.map((c) => (
-                        <option key={c.id} value={c.id}>{c.full_name}</option>
+                        <option key={c.id} value={c.id}>{formatContactLabel(c)}</option>
                       ))}
                     </select>
                   </div>
@@ -563,15 +879,31 @@ function SoftwareRequirementsContent() {
 
                 <div className="sw-form-row">
                   <div className="sw-form-group">
-                    <label>Related Deal</label>
+                    <label>
+                      Related Deal
+                      {dealsLoading && <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "6px" }}>(Loading...)</span>}
+                      {dealsError && <span style={{ fontSize: "0.75rem", color: "#ef4444", marginLeft: "6px" }}>(Failed to load)</span>}
+                    </label>
                     <select
                       className="sw-form-select"
                       value={formData.deal_id || ""}
-                      onChange={(e) => setFormData({ ...formData, deal_id: e.target.value || null })}
+                      onChange={(e) => {
+                        const val = e.target.value.trim() ? e.target.value.trim() : null;
+                        setFormData((prev) => ({ ...prev, deal_id: val }));
+                        if (val && formError?.includes("link the requirement")) {
+                          setFormError(null);
+                        }
+                      }}
+                      disabled={dealsLoading}
                     >
                       <option value="">None</option>
+                      {dealsLoading && <option value="" disabled>Loading deals...</option>}
+                      {dealsError && <option value="" disabled>Error loading deals ({dealsError})</option>}
+                      {!dealsLoading && !dealsError && deals.length === 0 && (
+                        <option value="" disabled>No deals available</option>
+                      )}
                       {deals.map((d) => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
+                        <option key={d.id} value={d.id}>{formatDealLabel(d)}</option>
                       ))}
                     </select>
                   </div>

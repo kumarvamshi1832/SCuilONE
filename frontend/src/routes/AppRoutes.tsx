@@ -44,9 +44,9 @@ import Tasks from "../pages/tasks/Tasks";
 
 /* Keep these pages as placeholders */
 import {
-  Settings,
   Help,
 } from "../pages/dashboard/Placeholders";
+import IndustrySettings from "../pages/settings/IndustrySettings";
 import Reports from "../pages/dashboard/Reports";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";
@@ -437,7 +437,7 @@ export default function AppRoutes() {
             path="/:industry/settings"
             element={
               <DashboardLayout>
-                <Settings />
+                <IndustrySettings />
               </DashboardLayout>
             }
           />

@@ -1,0 +1,262 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   SCuilONE Industry Settings Styles — Cyan + Navy Enterprise UI
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.settings-container {
+  padding: 0 0 40px 0;
+  animation: settingsFadeIn 0.25s ease-out;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .settings-container,
+.dark .settings-container {
+  color: #f8fafc;
+}
+
+@keyframes settingsFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.settings-header h1 {
+  font-size: 1.65rem;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .settings-header h1,
+.dark .settings-header h1 {
+  color: #f8fafc;
+}
+
+.settings-header p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.dashboard-wrapper.dark .settings-header p,
+.dark .settings-header p {
+  color: #94a3b8;
+}
+
+.settings-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.settings-meta-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.dashboard-wrapper.dark .settings-meta-card,
+.dark .settings-meta-card {
+  background: #111a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.settings-meta-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+}
+
+.dashboard-wrapper.dark .settings-meta-label,
+.dark .settings-meta-label {
+  color: #94a3b8;
+}
+
+.settings-meta-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0ea5e9;
+  margin-top: 4px;
+}
+
+.settings-section-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.dashboard-wrapper.dark .settings-section-card,
+.dark .settings-section-card {
+  background: #111a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.settings-section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .settings-section-title,
+.dark .settings-section-title {
+  color: #f8fafc;
+}
+
+.settings-section-desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0 0 20px 0;
+}
+
+.dashboard-wrapper.dark .settings-section-desc,
+.dark .settings-section-desc {
+  color: #94a3b8;
+}
+
+.modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.module-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.dashboard-wrapper.dark .module-toggle-card,
+.dark .module-toggle-card {
+  background: #0d1527;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.module-toggle-card:hover {
+  border-color: #0ea5e9;
+}
+
+.module-info h4 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0 0 2px 0;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .module-info h4,
+.dark .module-info h4 {
+  color: #f8fafc;
+}
+
+.module-info span {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-family: monospace;
+}
+
+.dashboard-wrapper.dark .module-info span,
+.dark .module-info span {
+  color: #94a3b8;
+}
+
+/* Switch toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: .3s;
+  border-radius: 24px;
+}
+
+.dashboard-wrapper.dark .slider,
+.dark .slider {
+  background-color: #334155;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #0ea5e9;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #0ea5e9;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.settings-btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0ea5e9;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
+}
+
+.settings-btn-save:hover:not(:disabled) {
+  background: #0284c7;
+  transform: translateY(-1px);
+}
+
+.settings-btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

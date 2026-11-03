@@ -379,9 +379,10 @@ body.dark .tasks-table-row:hover {
 }
 
 .tasks-main-table .col-actions {
-  width: 50px;
-  min-width: 50px;
-  text-align: right;
+  width: 120px;
+  min-width: 110px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* Cell Elements */
