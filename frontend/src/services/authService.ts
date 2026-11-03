@@ -23,6 +23,9 @@ import type {
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? "",
+  headers: {
+    Accept: "application/json",
+  },
 });
 
 // Attach Authorization header from sessionStorage or localStorage to all authenticated API requests
@@ -41,18 +44,50 @@ apiClient.interceptors.request.use(
       requestUrl.includes("/api/v1/auth/verify-reset-otp") ||
       requestUrl.includes("/api/v1/auth/reset-password");
 
+    if (!config.headers) {
+      config.headers = new axios.AxiosHeaders();
+    }
+
     if (!isAuthEndpoint) {
       const token =
         sessionStorage.getItem("access_token") ||
         localStorage.getItem("access_token");
       if (token) {
-        if (!config.headers) {
-          config.headers = new axios.AxiosHeaders();
-        }
         if (typeof config.headers.set === "function") {
           config.headers.set("Authorization", `Bearer ${token}`);
         } else {
           config.headers["Authorization"] = `Bearer ${token}`;
+        }
+      }
+
+      // Ensure X-Tenant-ID header is attached for tenant identification
+      let tenantId: string | null =
+        sessionStorage.getItem("tenant_id") ||
+        localStorage.getItem("tenant_id");
+      if (!tenantId) {
+        try {
+          const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
+          if (userStr) {
+            const userObj = JSON.parse(userStr);
+            tenantId = userObj.tenant_id || userObj.tenant?.id || null;
+          }
+        } catch {}
+      }
+      if (!tenantId) {
+        try {
+          const tenantStr = sessionStorage.getItem("tenant") || localStorage.getItem("tenant");
+          if (tenantStr) {
+            const tObj = JSON.parse(tenantStr);
+            tenantId = tObj.id || null;
+          }
+        } catch {}
+      }
+
+      if (tenantId) {
+        if (typeof config.headers.set === "function") {
+          config.headers.set("X-Tenant-ID", tenantId);
+        } else {
+          config.headers["X-Tenant-ID"] = tenantId;
         }
       }
     }

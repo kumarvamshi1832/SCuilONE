@@ -3,6 +3,7 @@ export type SoftwareInvoiceStatus =
   | "Sent"
   | "Partially Paid"
   | "Paid"
+  | "Credited"
   | "Void";
 
 export interface SoftwareInvoiceItem {
@@ -39,6 +40,10 @@ export interface SoftwareInvoicePayment {
   transaction_reference?: string | null;
   payment_date: string;
   notes?: string | null;
+  status: string; // "Received" | "Reversed"
+  reversed_at?: string | null;
+  reversed_by?: string | null;
+  reversal_reason?: string | null;
   created_at: string;
 }
 
@@ -48,6 +53,27 @@ export interface SoftwareInvoicePaymentCreate {
   transaction_reference?: string | null;
   payment_date?: string | null;
   notes?: string | null;
+}
+
+export interface SoftwareInvoicePaymentReverse {
+  reason: string;
+}
+
+export interface SoftwareCreditNote {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  created_by?: string | null;
+  credit_note_number: string;
+  issue_date: string;
+  amount: number;
+  reason: string;
+  created_at: string;
+}
+
+export interface SoftwareCreditNoteCreate {
+  amount: number;
+  reason: string;
 }
 
 export interface SoftwareInvoice {
@@ -65,17 +91,21 @@ export interface SoftwareInvoice {
   tax_total: number;
   total_amount: number;
   amount_paid: number;
+  credited_amount: number;
   balance_due: number;
+  is_overdue: boolean;
+  days_overdue: number;
   notes?: string | null;
   sent_at?: string | null;
   created_at: string;
   updated_at: string;
   items: SoftwareInvoiceItem[];
   payments: SoftwareInvoicePayment[];
+  credit_notes: SoftwareCreditNote[];
 }
 
 export interface SoftwareInvoiceCreate {
-  invoice_number: string;
+  invoice_number?: string | null;
   project_id: string;
   software_contract_id?: string | null;
   issue_date?: string | null;
@@ -91,6 +121,21 @@ export interface SoftwareInvoiceStatusUpdate {
 export interface SoftwareInvoiceFilterParams {
   status?: string;
   project_id?: string;
+  overdue?: boolean;
+}
+
+export interface BillingSummaryItem {
+  currency: string;
+  invoiced: number | string;
+  received: number | string;
+  credited: number | string;
+  outstanding: number | string;
+  overdue_amount: number | string;
+  overdue_invoice_count: number;
+}
+
+export interface BillingSummaryResponse {
+  items: BillingSummaryItem[];
 }
 
 export const SOFTWARE_INVOICE_STATUSES: SoftwareInvoiceStatus[] = [
@@ -98,6 +143,6 @@ export const SOFTWARE_INVOICE_STATUSES: SoftwareInvoiceStatus[] = [
   "Sent",
   "Partially Paid",
   "Paid",
+  "Credited",
   "Void",
 ];
-

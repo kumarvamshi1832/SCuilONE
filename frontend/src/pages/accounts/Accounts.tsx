@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Account } from "../../types/account";
 import { User } from "../../types/user";
@@ -51,11 +51,6 @@ export default function Accounts() {
   const [viewAccount, setViewAccount] = useState<Account | null>(null);
   const [deleteAccountState, setDeleteAccountState] = useState<Account | null>(null);
 
-  // Actions dropdown
-  const [openActionId, setOpenActionId] = useState<string | null>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
-  const actionsRef = useRef<HTMLDivElement | null>(null);
-  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -96,79 +91,7 @@ export default function Accounts() {
   }, [fetchData]);
 
   // Recalculate dropdown position from trigger button
-  const calcDropdownPos = useCallback((accountId: string) => {
-    const btn = triggerRefs.current[accountId];
-    if (!btn) return null;
-    const rect = btn.getBoundingClientRect();
-    const dropdownHeight = 150;
-    const dropdownWidth = 192;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openUp = spaceBelow < dropdownHeight + 8;
-    let left = rect.right - dropdownWidth;
-    if (left < 8) left = 8;
-    if (left + dropdownWidth > window.innerWidth - 8) {
-      left = window.innerWidth - dropdownWidth - 8;
-    }
-    return {
-      top: openUp ? rect.top : rect.bottom + 4,
-      left,
-      openUp,
-    };
-  }, []);
-
-  // Close actions dropdown on outside click
-  useEffect(() => {
-    if (!openActionId) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const triggerBtn = triggerRefs.current[openActionId];
-      if (triggerBtn && triggerBtn.contains(e.target as Node)) return;
-      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    const handleScrollOrResize = () => {
-      const pos = calcDropdownPos(openActionId);
-      if (pos) {
-        setDropdownPos(pos);
-      } else {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    window.addEventListener("scroll", handleScrollOrResize, true);
-    window.addEventListener("resize", handleScrollOrResize);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("scroll", handleScrollOrResize, true);
-      window.removeEventListener("resize", handleScrollOrResize);
-    };
-  }, [openActionId, calcDropdownPos]);
-
   // Toggle actions dropdown for an account row
-  const toggleActions = (accountId: string) => {
-    if (openActionId === accountId) {
-      setOpenActionId(null);
-      setDropdownPos(null);
-      return;
-    }
-    const pos = calcDropdownPos(accountId);
-    if (pos) setDropdownPos(pos);
-    setOpenActionId(accountId);
-  };
-
   /* ─── Helpers ─── */
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -250,19 +173,16 @@ export default function Accounts() {
   };
 
   const handleView = (account: Account) => {
-    setOpenActionId(null);
     setViewAccount(account);
   };
 
   const handleEdit = (account: Account) => {
-    setOpenActionId(null);
     setViewAccount(null);
     setEditAccount(account);
     setIsFormOpen(true);
   };
 
   const handleDeleteClick = (account: Account) => {
-    setOpenActionId(null);
     setDeleteAccountState(account);
   };
 
@@ -559,21 +479,62 @@ export default function Accounts() {
                       </div>
                     </td>
                     <td className="actions-cell">
-                      <button 
-                        className="btn-icon" 
-                        ref={(el) => (triggerRefs.current[account.id] = el)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleActions(account.id);
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="1"></circle>
-                          <circle cx="12" cy="5" r="1"></circle>
-                          <circle cx="12" cy="19" r="1"></circle>
-                        </svg>
-                      </button>
-                    </td>
+                    <div className="crm-inline-actions">
+                      {permissions.view && (
+                        <button
+                          type="button"
+                          className="crm-action-btn view-btn"
+                          title="View Account"
+                          aria-label="View Account"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleView(account);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                          </svg>
+                        </button>
+                      )}
+                      {permissions.update && (
+                        <button
+                          type="button"
+                          className="crm-action-btn edit-btn"
+                          title="Edit Account"
+                          aria-label="Edit Account"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(account);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
+                      )}
+                      {permissions.delete && (
+                        <button
+                          type="button"
+                          className="crm-action-btn delete-btn"
+                          title="Delete Account"
+                          aria-label="Delete Account"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(account);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   </tr>
                 );
               })}
@@ -591,60 +552,7 @@ export default function Accounts() {
       )}
       </div>
 
-      {/* Actions Dropdown — rendered outside the table to avoid overflow clipping */}
-      {openActionId && dropdownPos && (() => {
-        const activeAccount = accounts.find(a => a.id === openActionId);
-        if (!activeAccount) return null;
-        return (
-          <div
-            ref={actionsRef}
-            className="actions-dropdown actions-dropdown-fixed"
-            style={{
-              position: "fixed",
-              top: dropdownPos.openUp ? undefined : dropdownPos.top,
-              bottom: dropdownPos.openUp ? window.innerHeight - dropdownPos.top + 4 : undefined,
-              left: dropdownPos.left,
-              zIndex: 9999,
-            }}
-          >
-            {permissions.view && (
-              <button onClick={() => handleView(activeAccount)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-                View Details
-              </button>
-            )}
-            {permissions.update && (
-              <button onClick={() => handleEdit(activeAccount)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-                Edit Account
-              </button>
-            )}
-            {permissions.delete && (
-              <>
-                <div className="actions-dropdown-separator" />
-                <button className="delete-action" onClick={() => handleDeleteClick(activeAccount)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                  Delete Account
-                </button>
-              </>
-            )}
-            {!permissions.view && !permissions.update && !permissions.delete && (
-              <div style={{ padding: '10px 16px', color: '#718096', fontSize: '0.875rem' }}>
-                No actions available
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      
 
       {/* Modals */}
       {isFormOpen && (

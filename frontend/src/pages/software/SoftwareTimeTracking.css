@@ -1,0 +1,696 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   SCuilONE CRM — Real-Time Software Time Tracking Styles
+   Cyan + Navy Enterprise UI (Theme-Aware, Real-Time Clock, Responsive)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Live Timer Main Card */
+.sw-timer-card {
+  padding: 22px 26px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-wrapper.dark .sw-timer-card,
+.dark .sw-timer-card {
+  background: #111a2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* Active running state for timer card */
+.sw-timer-card.is-active {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.06) 0%, rgba(16, 185, 129, 0.06) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.45);
+  box-shadow: 0 6px 24px rgba(14, 165, 233, 0.12);
+}
+
+.dashboard-wrapper.dark .sw-timer-card.is-active,
+.dark .sw-timer-card.is-active {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(16, 185, 129, 0.10) 100%);
+  border-color: rgba(14, 165, 233, 0.5);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Header & Status Indicator */
+.sw-timer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.sw-timer-status-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .sw-timer-status-title,
+.dark .sw-timer-status-title {
+  color: #f8fafc;
+}
+
+.sw-timer-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #94a3b8;
+  display: inline-block;
+  transition: all 0.25s ease;
+}
+
+.sw-timer-dot.active {
+  background: #10b981;
+  box-shadow: 0 0 12px #10b981;
+  animation: swTimerPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes swTimerPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* Digital Clock Display */
+.sw-digital-timer {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  padding: 8px 22px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 175px;
+  text-align: center;
+  box-shadow: inset 0 2px 4px rgba(14, 165, 233, 0.08);
+}
+
+.dashboard-wrapper.dark .sw-digital-timer,
+.dark .sw-digital-timer {
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+/* Active Timer Info Details */
+.sw-active-timer-details {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 0.88rem;
+}
+
+.sw-timer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.sw-timer-badge.project {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-timer-badge.project,
+.dark .sw-timer-badge.project {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.sw-timer-badge.billable {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-timer-badge.billable,
+.dark .sw-timer-badge.billable {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.sw-timer-badge.non-billable {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-timer-badge.non-billable,
+.dark .sw-timer-badge.non-billable {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+/* Running row in table */
+.sw-running-row {
+  background: rgba(14, 165, 233, 0.05) !important;
+}
+
+.dashboard-wrapper.dark .sw-running-row,
+.dark .sw-running-row {
+  background: rgba(14, 165, 233, 0.12) !important;
+}
+
+.sw-running-duration {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 700;
+  color: #10b981;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sw-running-duration .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  display: inline-block;
+  animation: swTimerPulse 1.6s infinite ease-in-out;
+}
+
+/* Start Live Timer Form Row */
+.sw-timer-start-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.sw-timer-select {
+  flex: 1 1 220px;
+  min-width: 180px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.dashboard-wrapper.dark .sw-timer-select,
+.dark .sw-timer-select {
+  background: #162036;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+.sw-timer-select:focus {
+  border-color: #0ea5e9;
+}
+
+.sw-timer-input {
+  flex: 1 1 200px;
+  min-width: 160px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.dashboard-wrapper.dark .sw-timer-input,
+.dark .sw-timer-input {
+  background: #162036;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+.sw-timer-input:focus {
+  border-color: #0ea5e9;
+}
+
+.sw-timer-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.dashboard-wrapper.dark .sw-timer-checkbox-label,
+.dark .sw-timer-checkbox-label {
+  color: #cbd5e1;
+}
+
+.sw-timer-btn-start {
+  height: 42px;
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #0ea5e9;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 10px rgba(14, 165, 233, 0.3);
+  white-space: nowrap;
+}
+
+.sw-timer-btn-start:hover:not(:disabled) {
+  background: #0284c7;
+  transform: translateY(-1px);
+}
+
+.sw-timer-btn-start:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sw-timer-btn-stop {
+  height: 44px;
+  padding: 0 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+  white-space: nowrap;
+}
+
+.sw-timer-btn-stop:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.sw-timer-btn-stop:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Three-Dot Action Menu & Dropdown Styles
+   ══════════════════════════════════════════════════════════════════════════ */
+.sw-action-menu-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  padding: 0;
+}
+
+.dashboard-wrapper.dark .sw-action-menu-btn,
+.dark .sw-action-menu-btn {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+}
+
+.sw-action-menu-btn:hover,
+.sw-action-menu-btn.active {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.2);
+}
+
+.dashboard-wrapper.dark .sw-action-menu-btn:hover,
+.dashboard-wrapper.dark .sw-action-menu-btn.active,
+.dark .sw-action-menu-btn:hover,
+.dark .sw-action-menu-btn.active {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Floating Actions Dropdown */
+.sw-action-dropdown {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 210px;
+  box-shadow: 0 14px 34px -4px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  animation: swDropdownFade 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dashboard-wrapper.dark .sw-action-dropdown,
+.dark .sw-action-dropdown {
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 40px -4px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+@keyframes swDropdownFade {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sw-action-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #1e293b;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.dashboard-wrapper.dark .sw-action-dropdown-item,
+.dark .sw-action-dropdown-item {
+  color: #f1f5f9;
+}
+
+.sw-action-dropdown-item:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0ea5e9;
+}
+
+.dashboard-wrapper.dark .sw-action-dropdown-item:hover:not(:disabled),
+.dark .sw-action-dropdown-item:hover:not(:disabled) {
+  background: #1e293b;
+  color: #38bdf8;
+}
+
+.sw-action-dropdown-item.approve-item:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.sw-action-dropdown-item.stop-item {
+  color: #ef4444;
+}
+
+.sw-action-dropdown-item.stop-item:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.sw-action-dropdown-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sw-action-dropdown-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 6px 0;
+}
+
+.dashboard-wrapper.dark .sw-action-dropdown-divider,
+.dark .sw-action-dropdown-divider {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Billing Status Section in Action Menu
+   ══════════════════════════════════════════════════════════════════════════ */
+.sw-dropdown-section-header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  padding: 6px 10px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard-wrapper.dark .sw-dropdown-section-header,
+.dark .sw-dropdown-section-header {
+  color: #94a3b8;
+}
+
+.sw-dropdown-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.sw-dropdown-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  transition: all 0.15s ease;
+  user-select: none;
+  border: 1px solid transparent;
+  outline: none;
+  cursor: pointer;
+}
+
+.sw-dropdown-status-row:hover:not(.is-current) {
+  background: #f1f5f9;
+}
+
+.dashboard-wrapper.dark .sw-dropdown-status-row:hover:not(.is-current),
+.dark .sw-dropdown-status-row:hover:not(.is-current) {
+  background: #1e293b;
+}
+
+.sw-dropdown-status-row.is-current {
+  background: rgba(14, 165, 233, 0.08);
+  border-color: rgba(14, 165, 233, 0.28);
+}
+
+.dashboard-wrapper.dark .sw-dropdown-status-row.is-current,
+.dark .sw-dropdown-status-row.is-current {
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.sw-dropdown-status-row.is-clickable {
+  cursor: pointer;
+}
+
+.sw-dropdown-status-row.is-clickable:hover {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.dashboard-wrapper.dark .sw-dropdown-status-row.is-clickable:hover,
+.dark .sw-dropdown-status-row.is-clickable:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+/* Status Badges */
+.sw-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* Unreviewed — Amber */
+.sw-status-pill.unreviewed {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.dashboard-wrapper.dark .sw-status-pill.unreviewed,
+.dark .sw-status-pill.unreviewed {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+/* Approved — Green */
+.sw-status-pill.approved {
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.dashboard-wrapper.dark .sw-status-pill.approved,
+.dark .sw-status-pill.approved {
+  background: rgba(16, 185, 129, 0.22);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+/* Rejected — Red */
+.sw-status-pill.rejected {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.dashboard-wrapper.dark .sw-status-pill.rejected,
+.dark .sw-status-pill.rejected {
+  background: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+/* Status Indicator Tag / Action Hint */
+.sw-status-indicator {
+  font-size: 0.72rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sw-status-indicator.current-tag {
+  color: #0284c7;
+  font-weight: 700;
+}
+
+.dashboard-wrapper.dark .sw-status-indicator.current-tag,
+.dark .sw-status-indicator.current-tag {
+  color: #38bdf8;
+}
+
+.sw-status-indicator.action-hint {
+  color: #059669;
+  font-weight: 700;
+}
+
+.dashboard-wrapper.dark .sw-status-indicator.action-hint,
+.dark .sw-status-indicator.action-hint {
+  color: #34d399;
+}
+
+/* Time Entry View Modal Styles */
+.sw-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sw-detail-field label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.dashboard-wrapper.dark .sw-detail-field label,
+.dark .sw-detail-field label {
+  color: #94a3b8;
+}
+
+.sw-detail-field p {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.dashboard-wrapper.dark .sw-detail-field p,
+.dark .sw-detail-field p {
+  color: #f8fafc;
+}
+
+.sw-notes-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #334155;
+  white-space: pre-wrap;
+  margin-top: 6px;
+}
+
+.dashboard-wrapper.dark .sw-notes-box,
+.dark .sw-notes-box {
+  background: #162036;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+

@@ -188,6 +188,10 @@ export default function DashboardLayout({
   const isSoftwareRoute =
     industry === "software-company" ||
     industry === "software_company" ||
+    industry === "software-services" ||
+    industry === "software_services" ||
+    industry === "software services" ||
+    industry === "it-consulting" ||
     location.pathname.startsWith("/software-company") ||
     location.pathname.startsWith("/software-");
 

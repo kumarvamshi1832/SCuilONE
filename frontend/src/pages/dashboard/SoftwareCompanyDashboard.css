@@ -358,6 +358,22 @@ body.dark .sw-dashboard-container {
   border-radius: 6px;
   border: 1px solid var(--sw-dash-select-border);
   cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+}
+
+.sw-select-filter.is-interactive:hover {
+  border-color: #0ea5e9;
+  color: #0ea5e9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.18);
+}
+
+.sw-select-filter.is-interactive:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 1px;
 }
 
 .sw-select-filter svg {
@@ -389,23 +405,49 @@ body.dark .sw-dashboard-container {
   pointer-events: none;
 }
 
+.sw-donut-center-label.is-interactive {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.sw-donut-center-label.is-interactive:hover .sw-donut-center-num {
+  color: #0ea5e9;
+  transform: scale(1.08);
+}
+
+.sw-donut-center-label.is-interactive:hover .sw-donut-center-text {
+  color: #0ea5e9;
+  font-weight: 600;
+}
+
+.sw-donut-center-label.is-interactive:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
 .sw-donut-center-num {
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--sw-dash-donut-center);
   line-height: 1.1;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
 
 .sw-donut-center-text {
   font-size: 0.72rem;
   color: var(--sw-dash-subtitle);
   font-weight: 500;
+  transition: color 0.15s ease;
 }
 
 .sw-donut-legend {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
@@ -415,6 +457,43 @@ body.dark .sw-dashboard-container {
   align-items: center;
   justify-content: space-between;
   font-size: 0.77rem;
+}
+
+.sw-legend-item.is-interactive {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  user-select: none;
+  outline: none;
+  border: 1px solid transparent;
+}
+
+.sw-legend-item.is-interactive:hover {
+  background: rgba(14, 165, 233, 0.08);
+  border-color: rgba(14, 165, 233, 0.2);
+  transform: translateX(3px);
+}
+
+.sw-legend-item.is-interactive:hover .sw-legend-name {
+  color: #0ea5e9;
+  font-weight: 600;
+}
+
+.sw-legend-item.is-interactive:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 1px;
+}
+
+.dashboard-wrapper.dark .sw-legend-item.is-interactive:hover,
+.dark .sw-legend-item.is-interactive:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.dashboard-wrapper.dark .sw-legend-item.is-interactive:hover .sw-legend-name,
+.dark .sw-legend-item.is-interactive:hover .sw-legend-name {
+  color: #38bdf8;
 }
 
 .sw-legend-left {
@@ -429,10 +508,16 @@ body.dark .sw-dashboard-container {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.sw-legend-item.is-interactive:hover .sw-legend-dot {
+  transform: scale(1.25);
 }
 
 .sw-legend-name {
   white-space: nowrap;
+  transition: color 0.15s ease;
 }
 
 .sw-legend-right {
@@ -440,6 +525,62 @@ body.dark .sw-dashboard-container {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   margin-left: 8px;
+}
+
+/* ─── Donut Chart Custom Tooltip ─── */
+.sw-chart-custom-tooltip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.dashboard-wrapper.dark .sw-chart-custom-tooltip,
+.dark .sw-chart-custom-tooltip {
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.sw-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.sw-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.sw-tooltip-title {
+  font-weight: 700;
+  color: var(--sw-dash-title);
+  font-size: 0.84rem;
+}
+
+.sw-tooltip-count {
+  font-size: 0.76rem;
+  color: var(--sw-dash-subtitle);
+  margin-bottom: 4px;
+}
+
+.sw-tooltip-hint {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #0ea5e9;
+}
+
+.dashboard-wrapper.dark .sw-tooltip-hint,
+.dark .sw-tooltip-hint {
+  color: #38bdf8;
 }
 
 /* ─── Bottom Section: Compact Tables Grid ─── */
@@ -855,4 +996,94 @@ body.dark .sw-dashboard-container {
   color: var(--sw-dash-subtitle);
   font-size: 0.84rem;
   gap: 8px;
+}
+
+/* ─── Access Restricted (403 Forbidden) States ─── */
+.sw-restricted-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 24px 16px;
+  text-align: center;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.sw-restricted-state .sw-restricted-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.sw-restricted-state .sw-restricted-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--sw-dash-text);
+  margin: 0;
+}
+
+.sw-restricted-state .sw-restricted-detail {
+  font-size: 0.8rem;
+  color: var(--sw-dash-subtitle);
+  max-width: 380px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.sw-kpi-restricted {
+  font-size: 0.82rem !important;
+  color: #f59e0b !important;
+  font-weight: 600 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sw-kpi-error {
+  font-size: 0.82rem !important;
+  color: #ef4444 !important;
+  font-weight: 600 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sw-kpi-loading {
+  font-size: 1.1rem !important;
+  color: var(--sw-dash-subtitle) !important;
+  opacity: 0.6;
+}
+
+.sw-table-restricted-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  text-align: center;
+}
+
+.sw-table-restricted-notice span {
+  font-size: 0.82rem;
+  color: var(--sw-dash-subtitle);
+  line-height: 1.4;
+  max-width: 440px;
+}
+
+.sw-btn-retry-inline {
+  background: var(--sw-dash-retry-bg);
+  border: 1px solid var(--sw-dash-retry-border);
+  color: var(--sw-dash-retry-text);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sw-btn-retry-inline:hover {
+  background: var(--sw-dash-retry-hover);
 }

@@ -2,12 +2,16 @@ import { apiClient } from "./authService";
 import type { Account, AccountCreate, AccountUpdate, AccountDetails } from "../types/account";
 
 const getHeaders = () => {
-  const token = sessionStorage.getItem("access_token");
-  return {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  };
+  const token =
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token");
+  return token
+    ? {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    : {};
 };
 
 /* ─── Endpoints ─── */
@@ -21,13 +25,25 @@ const ACCOUNTS_ENDPOINTS = {
 /* ─── Service Functions ─── */
 
 export const getAccounts = async (): Promise<Account[]> => {
-  const response = await apiClient.get<Account[]>(ACCOUNTS_ENDPOINTS.LIST, getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(ACCOUNTS_ENDPOINTS.LIST, getHeaders());
+  if (Array.isArray(response.data)) {
+    return response.data;
+  }
+  if (response.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  if (response.data && Array.isArray(response.data.items)) {
+    return response.data.items;
+  }
+  if (response.data && Array.isArray(response.data.results)) {
+    return response.data.results;
+  }
+  return [];
 };
 
 export const getAccountById = async (id: string): Promise<AccountDetails> => {
-  const response = await apiClient.get<AccountDetails>(ACCOUNTS_ENDPOINTS.DETAIL(id), getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(ACCOUNTS_ENDPOINTS.DETAIL(id), getHeaders());
+  return response.data?.data || response.data;
 };
 
 export const createAccount = async (data: AccountCreate): Promise<Account> => {

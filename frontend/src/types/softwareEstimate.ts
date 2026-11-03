@@ -121,3 +121,29 @@ export const SOFTWARE_ESTIMATE_STATUSES: SoftwareEstimateStatus[] = [
   "Expired",
   "Withdrawn",
 ];
+
+export const ESTIMATE_STATUS_TRANSITIONS: Record<SoftwareEstimateStatus, SoftwareEstimateStatus[]> = {
+  Draft: ["Sent", "Withdrawn"],
+  Sent: ["Accepted", "Rejected", "Expired", "Withdrawn"],
+  Accepted: [],
+  Rejected: [],
+  Expired: [],
+  Withdrawn: [],
+};
+
+/**
+ * Returns the list of permitted next statuses based on the current estimate status.
+ * - For new estimates: only "Draft" is allowed.
+ * - For existing estimates: includes current status (to allow keeping it) plus valid next transitions.
+ */
+export function getAvailableEstimateStatuses(
+  currentStatus?: SoftwareEstimateStatus | string | null
+): SoftwareEstimateStatus[] {
+  if (!currentStatus) {
+    return ["Draft"];
+  }
+  const status = currentStatus as SoftwareEstimateStatus;
+  const transitions = ESTIMATE_STATUS_TRANSITIONS[status] || [];
+  return [status, ...transitions];
+}
+

@@ -4,6 +4,13 @@ import type {
   SoftwareRequirementCreate,
   SoftwareRequirementUpdate,
 } from "../types/softwareRequirement";
+import {
+
+  executeSoftwareRequest,
+  extractBackendDetail,
+  notifySoftwareDataChanged,
+  type SoftwareRequestOptions,
+} from "./softwareRequestManager";
 
 export interface SoftwareRequirementFilterParams {
   status?: string;
@@ -20,134 +27,76 @@ export interface SoftwareRequirementFilterParams {
 }
 
 const BASE_URL = "/api/v1/software-requirements";
-const STORAGE_PREFIX = "scuilone_software_requirements_tenant_";
 
 /**
  * Extracts human-readable error messages from FastAPI/Pydantic validation errors or standard errors.
- * Ensures arrays of error objects never crash React render trees.
  */
 export function extractErrorMessage(err: any): string {
-  if (!err) return "An unexpected error occurred.";
-  if (typeof err === "string") return err;
-
-  const detail = err?.response?.data?.detail;
-  if (typeof detail === "string") return detail;
-
-  if (Array.isArray(detail)) {
-    return detail
-      .map((item: any) => {
-        if (typeof item === "string") return item;
-        const loc = Array.isArray(item.loc)
-          ? item.loc.filter((l: any) => l !== "body").join(".")
-          : "";
-        const msg = item.msg || item.message || "Invalid value";
-        return loc ? `${loc}: ${msg}` : msg;
-      })
-      .join("; ");
-  }
-
-  if (detail && typeof detail === "object") {
-    return detail.message || detail.error || JSON.stringify(detail);
-  }
-
-  return err?.message || "Failed to process request.";
-}
-
-function getCurrentTenantId(): string {
-  try {
-    const raw = sessionStorage.getItem("tenant") || localStorage.getItem("tenant");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.id) return String(parsed.id);
-    }
-  } catch {}
-  return "";
-}
-
-function getLocalRequirements(): SoftwareRequirement[] {
-  const tenantId = getCurrentTenantId();
-  const key = `${STORAGE_PREFIX}${tenantId || "default"}`;
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
-  return [];
-}
-
-function saveLocalRequirements(items: SoftwareRequirement[]): void {
-  const tenantId = getCurrentTenantId();
-  const key = `${STORAGE_PREFIX}${tenantId || "default"}`;
-  try {
-    localStorage.setItem(key, JSON.stringify(items));
-  } catch {}
+  return extractBackendDetail(err);
 }
 
 export const getSoftwareRequirements = async (
-  params?: SoftwareRequirementFilterParams
+  params?: SoftwareRequirementFilterParams,
+  options?: SoftwareRequestOptions
 ): Promise<SoftwareRequirement[]> => {
-  try {
-    const query = new URLSearchParams();
-    if (params?.status) query.append("status", params.status);
-    if (params?.software_type) query.append("software_type", params.software_type);
-    if (params?.priority) query.append("priority", params.priority);
-    if (params?.assigned_to) query.append("assigned_to", params.assigned_to);
-    if (params?.lead_id) query.append("lead_id", params.lead_id);
-    if (params?.account_id) query.append("account_id", params.account_id);
-    if (params?.deal_id) query.append("deal_id", params.deal_id);
-    if (params?.search) query.append("search", params.search);
+  const query = new URLSearchParams();
+  if (params?.status) query.append("status", params.status);
+  if (params?.software_type) query.append("software_type", params.software_type);
+  if (params?.priority) query.append("priority", params.priority);
+  if (params?.assigned_to) query.append("assigned_to", params.assigned_to);
+  if (params?.lead_id) query.append("lead_id", params.lead_id);
+  if (params?.account_id) query.append("account_id", params.account_id);
+  if (params?.deal_id) query.append("deal_id", params.deal_id);
+  if (params?.search) query.append("search", params.search);
 
-    const offsetVal = params?.offset ?? params?.skip;
-    if (offsetVal !== undefined) query.append("offset", String(offsetVal));
-    if (params?.limit !== undefined) query.append("limit", String(params.limit));
+  const offsetVal = params?.offset ?? params?.skip;
+  if (offsetVal !== undefined) query.append("offset", String(offsetVal));
+  if (params?.limit !== undefined) query.append("limit", String(params.limit));
 
-    const qs = query.toString();
-    const url = qs ? `${BASE_URL}/?${qs}` : `${BASE_URL}/`;
-    const response = await apiClient.get<any>(url);
+  const qs = query.toString();
+  const url = qs ? `${BASE_URL}/?${qs}` : `${BASE_URL}/`;
+  const requestKey = `reqs:${url}`;
 
-    let list: SoftwareRequirement[] = [];
-    if (Array.isArray(response.data)) {
-      list = response.data;
-    } else if (response.data && Array.isArray(response.data.data)) {
-      list = response.data.data;
-    } else if (response.data && Array.isArray(response.data.items)) {
-      list = response.data.items;
-    } else if (response.data && Array.isArray(response.data.results)) {
-      list = response.data.results;
-    }
+  return executeSoftwareRequest(
+    "software_requirements",
+    requestKey,
+    async () => {
+      const response = await apiClient.get<any>(url, { signal: options?.signal });
 
-    if (list.length > 0) {
-      saveLocalRequirements(list);
-    }
-    return list;
-  } catch (err: any) {
-    // If backend returns 404 or network issue, fallback to cached list
-    const cached = getLocalRequirements();
-    if (cached.length > 0) {
-      return cached;
-    }
-    throw new Error(extractErrorMessage(err));
-  }
+      const d = response.data;
+      if (Array.isArray(d)) {
+        return d;
+      } else if (d && Array.isArray(d.data)) {
+        return d.data;
+      } else if (d && Array.isArray(d.items)) {
+        return d.items;
+      } else if (d && Array.isArray(d.results)) {
+        return d.results;
+      } else if (d && Array.isArray(d.requirements)) {
+        return d.requirements;
+      } else if (d && Array.isArray(d.software_requirements)) {
+        return d.software_requirements;
+      }
+      return [];
+    },
+    options
+  );
 };
 
 export const getSoftwareRequirement = async (
-  id: string
+  id: string,
+  options?: SoftwareRequestOptions
 ): Promise<SoftwareRequirement> => {
-  try {
-    const response = await apiClient.get<any>(`${BASE_URL}/${id}`);
-    const item = response.data?.data || response.data;
-    if (item && item.id) return item;
-  } catch (err: any) {
-    const cached = getLocalRequirements().find((r) => r.id === id);
-    if (cached) return cached;
-    throw new Error(extractErrorMessage(err));
-  }
-
-  const found = getLocalRequirements().find((r) => r.id === id);
-  if (!found) throw new Error(`Requirement with id ${id} not found.`);
-  return found;
+  const requestKey = `req:${id}`;
+  return executeSoftwareRequest(
+    "software_requirements",
+    requestKey,
+    async () => {
+      const response = await apiClient.get<any>(`${BASE_URL}/${id}`, { signal: options?.signal });
+      return response.data?.data || response.data;
+    },
+    options
+  );
 };
 
 /**
@@ -189,15 +138,11 @@ export const createSoftwareRequirement = async (
   data: SoftwareRequirementCreate
 ): Promise<SoftwareRequirement> => {
   const payload = sanitizeRequirementData(data);
-
   try {
     const response = await apiClient.post<any>(`${BASE_URL}/`, payload);
-    const created: SoftwareRequirement =
-      response.data?.data || response.data;
-
+    const created: SoftwareRequirement = response.data?.data || response.data;
     if (created && created.id) {
-      const list = getLocalRequirements();
-      saveLocalRequirements([created, ...list]);
+      notifySoftwareDataChanged("software_requirements");
       return created;
     }
     throw new Error("Invalid response received from server when creating requirement.");
@@ -211,21 +156,11 @@ export const updateSoftwareRequirement = async (
   data: SoftwareRequirementUpdate
 ): Promise<SoftwareRequirement> => {
   const payload = sanitizeRequirementData(data);
-
   try {
     const response = await apiClient.put<any>(`${BASE_URL}/${id}`, payload);
-    const updated: SoftwareRequirement =
-      response.data?.data || response.data;
-
+    const updated: SoftwareRequirement = response.data?.data || response.data;
     if (updated && updated.id) {
-      const list = getLocalRequirements();
-      const idx = list.findIndex((r) => r.id === id);
-      if (idx !== -1) {
-        list[idx] = updated;
-      } else {
-        list.unshift(updated);
-      }
-      saveLocalRequirements(list);
+      notifySoftwareDataChanged("software_requirements");
       return updated;
     }
     throw new Error("Invalid response received from server when updating requirement.");
@@ -237,8 +172,7 @@ export const updateSoftwareRequirement = async (
 export const deleteSoftwareRequirement = async (id: string): Promise<void> => {
   try {
     await apiClient.delete(`${BASE_URL}/${id}`);
-    const list = getLocalRequirements();
-    saveLocalRequirements(list.filter((r) => r.id !== id));
+    notifySoftwareDataChanged("software_requirements");
   } catch (err: any) {
     throw new Error(extractErrorMessage(err));
   }

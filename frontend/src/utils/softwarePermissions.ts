@@ -5,6 +5,12 @@
  * - software_contract.create
  * - software_contract.update
  * - software_contract.delete
+ * - software_invoice.view
+ * - software_invoice.create
+ * - software_invoice.update
+ * - software_payment.record
+ * - software_payment.reverse
+ * - software_credit_note.create
  */
 
 export interface SoftwarePermissions {
@@ -18,7 +24,10 @@ export interface SoftwarePermissions {
   canCreateInvoices: boolean;
   canUpdateInvoices: boolean;
   canRecordPayment: boolean;
+  canReversePayment: boolean;
+  canCreateCreditNote: boolean;
   isAdmin: boolean;
+  hasPermission: (perm: string) => boolean;
 }
 
 export function getSoftwarePermissions(): SoftwarePermissions {
@@ -35,18 +44,29 @@ export function getSoftwarePermissions(): SoftwarePermissions {
       canCreateInvoices: false,
       canUpdateInvoices: false,
       canRecordPayment: false,
+      canReversePayment: false,
+      canCreateCreditNote: false,
       isAdmin: false,
+      hasPermission: () => false,
     };
   }
 
   try {
     const user = JSON.parse(userStr);
-    const role = (user.role || "").toUpperCase();
+    const rawRole = typeof user.role === "string" ? user.role : user?.role?.name || user?.role_name || "";
+    const role = String(rawRole).trim().toUpperCase();
     const isAdmin =
+      user.is_superuser === true ||
+      user.is_admin === true ||
       role === "ADMIN" ||
       role === "SUPERADMIN" ||
       role === "TENANT_ADMIN" ||
-      role === "OWNER";
+      role === "TENANT ADMIN" ||
+      role === "TENANT_OWNER" ||
+      role === "TENANT OWNER" ||
+      role === "OWNER" ||
+      role.includes("OWNER") ||
+      role.includes("ADMIN");
 
     // If tenant admin or superadmin, grant full permissions by default
     if (isAdmin) {
@@ -61,7 +81,10 @@ export function getSoftwarePermissions(): SoftwarePermissions {
         canCreateInvoices: true,
         canUpdateInvoices: true,
         canRecordPayment: true,
+        canReversePayment: true,
+        canCreateCreditNote: true,
         isAdmin: true,
+        hasPermission: () => true,
       };
     }
 
@@ -74,13 +97,18 @@ export function getSoftwarePermissions(): SoftwarePermissions {
       perms = user.role_permissions;
     }
 
-    const hasPerm = (permName: string) => {
+    const hasPerm = (permName: string): boolean => {
       // If user has wildcard permissions or no permissions array is restricted
       if (perms.length === 0) return true; // Default fallback to allow access if permissions are not strictly populated on token
       return perms.some((p) => {
-        if (typeof p === "string") return p.toLowerCase() === permName.toLowerCase();
-        if (p && typeof p === "object" && p.name) return p.name.toLowerCase() === permName.toLowerCase();
-        return false;
+        const pName = typeof p === "string" ? p : p?.name || "";
+        const lower = pName.toLowerCase();
+        return (
+          lower === permName.toLowerCase() ||
+          lower === "*" ||
+          lower === "software.*" ||
+          lower === "software_contract.*"
+        );
       });
     };
 
@@ -89,6 +117,13 @@ export function getSoftwarePermissions(): SoftwarePermissions {
     const updateContract = hasPerm("software_contract.update");
     const deleteContract = hasPerm("software_contract.delete");
 
+    const viewInvoice = hasPerm("software_invoice.view");
+    const createInvoice = hasPerm("software_invoice.create");
+    const updateInvoice = hasPerm("software_invoice.update");
+    const recordPayment = hasPerm("software_payment.record") || updateInvoice;
+    const reversePayment = hasPerm("software_payment.reverse");
+    const createCreditNote = hasPerm("software_credit_note.create");
+
     return {
       canViewContracts: viewContract,
       canCreateContracts: createContract,
@@ -96,11 +131,14 @@ export function getSoftwarePermissions(): SoftwarePermissions {
       canDeleteContracts: deleteContract,
       canMarkMilestoneReady: updateContract,
       canGenerateMilestoneInvoice: createContract,
-      canViewInvoices: viewContract,
-      canCreateInvoices: createContract,
-      canUpdateInvoices: updateContract,
-      canRecordPayment: updateContract,
+      canViewInvoices: viewInvoice,
+      canCreateInvoices: createInvoice,
+      canUpdateInvoices: updateInvoice,
+      canRecordPayment: recordPayment,
+      canReversePayment: reversePayment,
+      canCreateCreditNote: createCreditNote,
       isAdmin: false,
+      hasPermission: hasPerm,
     };
   } catch {
     return {
@@ -114,8 +152,10 @@ export function getSoftwarePermissions(): SoftwarePermissions {
       canCreateInvoices: true,
       canUpdateInvoices: true,
       canRecordPayment: true,
+      canReversePayment: true,
+      canCreateCreditNote: true,
       isAdmin: false,
+      hasPermission: () => true,
     };
   }
 }
-

@@ -14,7 +14,9 @@ export function isKnownIndustry(rawIndustry?: string | null): boolean {
   const cleaned = rawIndustry
     .trim()
     .toLowerCase()
-    .replace(/[_\s]+/g, '-');
+    .replace(/[/\\&]+/g, '-')
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
 
   return (
     cleaned === 'insurance-agency' ||
@@ -43,6 +45,17 @@ export function isKnownIndustry(rawIndustry?: string | null): boolean {
     cleaned === 'software-development' ||
     cleaned === 'software_development' ||
     cleaned === 'softwaredevelopment' ||
+    cleaned === 'software-services' ||
+    cleaned === 'software_services' ||
+    cleaned === 'softwareservices' ||
+    cleaned === 'software-services-it-consulting' ||
+    cleaned === 'it-consulting' ||
+    cleaned === 'it_consulting' ||
+    cleaned === 'itconsulting' ||
+    cleaned === 'it-services' ||
+    cleaned === 'it_services' ||
+    cleaned === 'itservices' ||
+    cleaned === 'tech-consulting' ||
     cleaned === 'software' ||
     cleaned === 'real-estate' ||
     cleaned === 'real_estate' ||
@@ -73,7 +86,9 @@ export function normalizeIndustry(rawIndustry?: string | null): SupportedIndustr
   const cleaned = rawIndustry
     .trim()
     .toLowerCase()
-    .replace(/[_\s]+/g, '-');
+    .replace(/[/\\&]+/g, '-')
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
 
   if (
     cleaned === 'insurance-agency' ||
@@ -122,6 +137,18 @@ export function normalizeIndustry(rawIndustry?: string | null): SupportedIndustr
     cleaned === 'software-development' ||
     cleaned === 'software_development' ||
     cleaned === 'softwaredevelopment' ||
+    cleaned === 'software-services' ||
+    cleaned === 'software_services' ||
+    cleaned === 'softwareservices' ||
+    cleaned === 'software-services-it-consulting' ||
+    cleaned.startsWith('software-services') ||
+    cleaned === 'it-consulting' ||
+    cleaned === 'it_consulting' ||
+    cleaned === 'itconsulting' ||
+    cleaned === 'it-services' ||
+    cleaned === 'it_services' ||
+    cleaned === 'itservices' ||
+    cleaned === 'tech-consulting' ||
     cleaned === 'software'
   ) {
     return 'software-company';
@@ -150,7 +177,9 @@ export function getIndustryDisplayName(industry?: string | null): string {
   const cleaned = industry
     .trim()
     .toLowerCase()
-    .replace(/[_\s]+/g, '-');
+    .replace(/[/\\&]+/g, '-')
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
 
   if (
     cleaned === 'automobile-dealer' ||
@@ -203,4 +232,3 @@ export function getIndustryDisplayName(industry?: string | null): string {
       return 'Real Estate';
   }
 }
-

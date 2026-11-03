@@ -1,0 +1,739 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCuilONE CRM — Activity & Task Form Modal Styles
+   Enterprise SaaS Typography, Visual Hierarchy, Theme Variables & Responsive Design
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Modal Overlay ─── */
+.activity-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  animation: activityModalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes activityModalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ─── Modal Card Container ─── */
+.activity-modal-card {
+  width: 100%;
+  max-width: 760px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: activityModalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+@keyframes activityModalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ─── Dark Mode Card ─── */
+.activity-modal-card.dark,
+body.dark .activity-modal-card,
+.dashboard-wrapper.dark .activity-modal-card,
+.dark .activity-modal-card {
+  background: #0f172a;
+  color: #f8fafc;
+  box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Modal Header ─── */
+.activity-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.activity-modal-card.dark .activity-modal-header,
+body.dark .activity-modal-card .activity-modal-header,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-header {
+  background: #0f172a;
+  border-bottom-color: rgba(51, 65, 85, 0.7);
+}
+
+.activity-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.activity-modal-header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.12) 0%, rgba(14, 165, 233, 0.18) 100%);
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.activity-modal-card.dark .activity-modal-header-icon,
+body.dark .activity-modal-card .activity-modal-header-icon,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-header-icon {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(2, 132, 199, 0.3) 100%);
+  color: #38bdf8;
+}
+
+.activity-modal-header-text {
+  min-width: 0;
+}
+
+.activity-modal-title {
+  font-size: 1.18rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+  color: #0f172a;
+  letter-spacing: -0.015em;
+}
+
+.activity-modal-card.dark .activity-modal-title,
+body.dark .activity-modal-card .activity-modal-title,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-title {
+  color: #f8fafc;
+}
+
+.activity-modal-subtitle {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 2px 0 0 0;
+  line-height: 1.35;
+}
+
+.activity-modal-card.dark .activity-modal-subtitle,
+body.dark .activity-modal-card .activity-modal-subtitle,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-subtitle {
+  color: #94a3b8;
+}
+
+.activity-modal-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.activity-modal-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.activity-modal-card.dark .activity-modal-close-btn,
+body.dark .activity-modal-card .activity-modal-close-btn,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-close-btn {
+  color: #94a3b8;
+}
+
+.activity-modal-card.dark .activity-modal-close-btn:hover,
+body.dark .activity-modal-card .activity-modal-close-btn:hover,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-close-btn:hover {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+/* ─── Modal Form & Scrollable Body ─── */
+.activity-modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.activity-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 22px 24px;
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+.activity-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.activity-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.activity-modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.activity-modal-card.dark .activity-modal-body::-webkit-scrollbar-thumb,
+body.dark .activity-modal-card .activity-modal-body::-webkit-scrollbar-thumb,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-body::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+/* ─── Global Error Banner ─── */
+.activity-modal-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.835rem;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+.activity-modal-card.dark .activity-modal-error-banner,
+body.dark .activity-modal-card .activity-modal-error-banner,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-error-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+/* ─── Form Section Container ─── */
+.activity-form-section {
+  margin-bottom: 20px;
+}
+
+.activity-form-section:last-child {
+  margin-bottom: 4px;
+}
+
+/* ─── Section Heading ─── */
+.activity-form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.activity-form-section-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(2, 132, 199, 0.08);
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.activity-modal-card.dark .activity-form-section-icon,
+body.dark .activity-modal-card .activity-form-section-icon,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-section-icon {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+.activity-form-section-title-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.activity-form-section-title {
+  font-size: 0.925rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+.activity-modal-card.dark .activity-form-section-title,
+body.dark .activity-modal-card .activity-form-section-title,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-section-title {
+  color: #f1f5f9;
+}
+
+.activity-form-section-subtitle {
+  font-size: 0.745rem;
+  color: #64748b;
+  margin: 1px 0 0 0;
+  line-height: 1.35;
+}
+
+.activity-modal-card.dark .activity-form-section-subtitle,
+body.dark .activity-modal-card .activity-form-section-subtitle,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-section-subtitle {
+  color: #94a3b8;
+}
+
+/* ─── Section Card Panel (Grouped Fields) ─── */
+.activity-form-section-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.activity-modal-card.dark .activity-form-section-card,
+body.dark .activity-modal-card .activity-form-section-card,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-section-card {
+  background: rgba(30, 41, 59, 0.55);
+  border-color: rgba(51, 65, 85, 0.75);
+}
+
+/* ─── Form Groups & Labels ─── */
+.activity-form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
+.activity-form-group.full-width {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.activity-form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.activity-form-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #334155;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.25;
+}
+
+.activity-modal-card.dark .activity-form-label,
+body.dark .activity-modal-card .activity-form-label,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-label {
+  color: #cbd5e1;
+}
+
+.activity-form-label-req {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* ─── Inputs, Selects, and Textarea ─── */
+.activity-form-input,
+.activity-form-select,
+.activity-form-textarea {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.activity-form-textarea {
+  height: auto;
+  min-height: 85px;
+  resize: vertical;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.activity-modal-card.dark .activity-form-input,
+.activity-modal-card.dark .activity-form-select,
+.activity-modal-card.dark .activity-form-textarea,
+body.dark .activity-modal-card .activity-form-input,
+body.dark .activity-modal-card .activity-form-select,
+body.dark .activity-modal-card .activity-form-textarea,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-input,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-select,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-textarea {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.activity-form-input::placeholder,
+.activity-form-textarea::placeholder {
+  color: #94a3b8;
+}
+
+.activity-modal-card.dark .activity-form-input::placeholder,
+.activity-modal-card.dark .activity-form-textarea::placeholder,
+body.dark .activity-modal-card .activity-form-input::placeholder,
+body.dark .activity-modal-card .activity-form-textarea::placeholder,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-input::placeholder,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-textarea::placeholder {
+  color: #64748b;
+}
+
+.activity-form-input:hover:not(:disabled),
+.activity-form-select:hover:not(:disabled),
+.activity-form-textarea:hover:not(:disabled) {
+  border-color: #94a3b8;
+}
+
+.activity-modal-card.dark .activity-form-input:hover:not(:disabled),
+.activity-modal-card.dark .activity-form-select:hover:not(:disabled),
+.activity-modal-card.dark .activity-form-textarea:hover:not(:disabled),
+body.dark .activity-modal-card .activity-form-input:hover:not(:disabled),
+body.dark .activity-modal-card .activity-form-select:hover:not(:disabled),
+body.dark .activity-modal-card .activity-form-textarea:hover:not(:disabled),
+.dashboard-wrapper.dark .activity-modal-card .activity-form-input:hover:not(:disabled),
+.dashboard-wrapper.dark .activity-modal-card .activity-form-select:hover:not(:disabled),
+.dashboard-wrapper.dark .activity-modal-card .activity-form-textarea:hover:not(:disabled) {
+  border-color: #475569;
+}
+
+.activity-form-input:focus,
+.activity-form-select:focus,
+.activity-form-textarea:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.activity-modal-card.dark .activity-form-input:focus,
+.activity-modal-card.dark .activity-form-select:focus,
+.activity-modal-card.dark .activity-form-textarea:focus,
+body.dark .activity-modal-card .activity-form-input:focus,
+body.dark .activity-modal-card .activity-form-select:focus,
+body.dark .activity-modal-card .activity-form-textarea:focus,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-input:focus,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-select:focus,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-textarea:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+}
+
+.activity-form-input.has-error,
+.activity-form-select.has-error {
+  border-color: #ef4444 !important;
+}
+
+.activity-form-input:disabled,
+.activity-form-select:disabled,
+.activity-form-textarea:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.activity-modal-card.dark .activity-form-input:disabled,
+.activity-modal-card.dark .activity-form-select:disabled,
+.activity-modal-card.dark .activity-form-textarea:disabled,
+body.dark .activity-modal-card .activity-form-input:disabled,
+body.dark .activity-modal-card .activity-form-select:disabled,
+body.dark .activity-modal-card .activity-form-textarea:disabled,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-input:disabled,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-select:disabled,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-textarea:disabled {
+  background-color: #172033;
+  color: #64748b;
+  border-color: #1e293b;
+}
+
+/* ─── Grid Systems ─── */
+.activity-form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.activity-form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* ─── Field Error, Hint, and Inline Action Texts ─── */
+.activity-form-error-text {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  display: block;
+  line-height: 1.3;
+}
+
+.activity-form-hint-text {
+  font-size: 0.745rem;
+  color: #64748b;
+  margin-top: 4px;
+  display: block;
+  line-height: 1.35;
+}
+
+.activity-modal-card.dark .activity-form-hint-text,
+body.dark .activity-modal-card .activity-form-hint-text,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-hint-text {
+  color: #94a3b8;
+}
+
+.activity-form-retry-btn {
+  font-size: 0.745rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: #0284c7;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+.activity-form-retry-btn:hover {
+  color: #0369a1;
+}
+
+.activity-modal-card.dark .activity-form-retry-btn,
+body.dark .activity-modal-card .activity-form-retry-btn,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-retry-btn {
+  color: #38bdf8;
+}
+
+.activity-modal-card.dark .activity-form-retry-btn:hover,
+body.dark .activity-modal-card .activity-form-retry-btn:hover,
+.dashboard-wrapper.dark .activity-modal-card .activity-form-retry-btn:hover {
+  color: #7dd3fc;
+}
+
+/* ─── Modal Footer ─── */
+.activity-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.activity-modal-card.dark .activity-modal-footer,
+body.dark .activity-modal-card .activity-modal-footer,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-footer {
+  background: #0b1120;
+  border-top-color: rgba(51, 65, 85, 0.7);
+}
+
+.activity-modal-btn-cancel {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.activity-modal-btn-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.activity-modal-card.dark .activity-modal-btn-cancel,
+body.dark .activity-modal-card .activity-modal-btn-cancel,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-btn-cancel {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+.activity-modal-card.dark .activity-modal-btn-cancel:hover:not(:disabled),
+body.dark .activity-modal-card .activity-modal-btn-cancel:hover:not(:disabled),
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-btn-cancel:hover:not(:disabled) {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+.activity-modal-btn-submit {
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 7px;
+  border: none;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.activity-modal-btn-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);
+  transform: translateY(-0.5px);
+}
+
+.activity-modal-btn-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.activity-modal-card.dark .activity-modal-btn-submit,
+body.dark .activity-modal-card .activity-modal-btn-submit,
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-btn-submit {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35);
+}
+
+.activity-modal-card.dark .activity-modal-btn-submit:hover:not(:disabled),
+body.dark .activity-modal-card .activity-modal-btn-submit:hover:not(:disabled),
+.dashboard-wrapper.dark .activity-modal-card .activity-modal-btn-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.45);
+}
+
+.activity-modal-btn-cancel:disabled,
+.activity-modal-btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ─── Responsive Layout Breakpoints ─── */
+@media (max-width: 768px) {
+  .activity-modal-card {
+    max-width: 96%;
+    max-height: 94vh;
+    border-radius: 12px;
+  }
+
+  .activity-modal-header {
+    padding: 16px 18px;
+  }
+
+  .activity-modal-body {
+    padding: 16px 18px;
+  }
+
+  .activity-modal-footer {
+    padding: 14px 18px;
+  }
+
+  .activity-form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activity-form-grid-3 > :last-child {
+    grid-column: span 2;
+  }
+
+  .activity-form-section-card {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .activity-modal-card {
+    max-width: 100%;
+    max-height: 98vh;
+    border-radius: 10px;
+  }
+
+  .activity-modal-header {
+    padding: 14px 16px;
+  }
+
+  .activity-modal-title {
+    font-size: 1.05rem;
+  }
+
+  .activity-modal-body {
+    padding: 14px 16px;
+  }
+
+  .activity-form-grid-3,
+  .activity-form-grid-2 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .activity-form-grid-3 > :last-child {
+    grid-column: span 1;
+  }
+
+  .activity-modal-footer {
+    padding: 12px 16px;
+    flex-direction: column-reverse;
+  }
+
+  .activity-modal-btn-cancel,
+  .activity-modal-btn-submit {
+    width: 100%;
+  }
+}
+

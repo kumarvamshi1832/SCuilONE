@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type { Lead } from "../../types/lead";
 import { User } from "../../types/user";
@@ -29,7 +29,7 @@ function getStatusClass(status: string): string {
 
 
 export default function Leads() {
-  /* â”€â”€â”€ Permissions â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Permissions ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
   const permissions = useMemo(() => getLeadPermissions(), []);
 
   const { industry } = useParams();
@@ -45,7 +45,7 @@ export default function Leads() {
   const currentIndustry = industry || tenantIndustry;
   const isEdu = currentIndustry === "education-consulting";
 
-  /* â”€â”€â”€ State â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ State ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,22 +78,10 @@ export default function Leads() {
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [viewLead, setViewLead] = useState<Lead | null>(null);
   const [deleteLead, setDeleteLead] = useState<Lead | null>(null);
-
-  // Actions dropdown
-  const [openActionId, setOpenActionId] = useState<string | null>(null);
-  const [dropdownPos, setDropdownPos] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-    openUp: boolean;
-  } | null>(null);
-  const actionsRef = useRef<HTMLDivElement | null>(null);
-  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  /* â”€â”€â”€ Data Fetching â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Data Fetching ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -131,73 +119,7 @@ export default function Leads() {
     fetchData();
   }, [fetchData]);
 
-  // Close actions dropdown on outside click, escape key, or scroll
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target?.closest && target.closest(".btn-actions-trigger")) {
-        return;
-      }
-      if (actionsRef.current && !actionsRef.current.contains(target as Node)) {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    const handleScroll = (e: Event) => {
-      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
-        setOpenActionId(null);
-        setDropdownPos(null);
-      }
-    };
-    if (openActionId) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
-      window.addEventListener("scroll", handleScroll, true);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [openActionId]);
-
-  // Calculate dropdown position from the trigger button
-  const toggleActions = (leadId: string) => {
-    if (openActionId === leadId) {
-      setOpenActionId(null);
-      setDropdownPos(null);
-      return;
-    }
-    const btn = triggerRefs.current[leadId];
-    if (btn) {
-      const rect = btn.getBoundingClientRect();
-      const dropdownHeight = 140; // approximate height of the 3-item menu
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const openUp = spaceBelow < dropdownHeight + 8;
-      const menuWidth = 148;
-      let left = rect.right - menuWidth;
-      if (left < 8) left = Math.max(8, rect.left);
-      if (left + menuWidth > window.innerWidth - 8) {
-        left = Math.max(8, window.innerWidth - menuWidth - 8);
-      }
-
-      setDropdownPos({
-        top: openUp ? undefined : Math.round(rect.bottom + 4),
-        bottom: openUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
-        left: Math.round(left),
-        openUp,
-      });
-    }
-    setOpenActionId(leadId);
-  };
-
-  /* â”€â”€â”€ Helpers â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Helpers ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setNotification({ message, type });
@@ -205,11 +127,11 @@ export default function Leads() {
   };
 
   const getUserDisplay = (userId?: string | null): { name: string; role: string } => {
-    if (!userId) return { name: "â€”", role: "" };
+    if (!userId) return { name: "├óΓé¼ΓÇ¥", role: "" };
     const user = users.find((u) => u.id === userId);
     return user
       ? { name: user.full_name, role: user.role }
-      : { name: "â€”", role: "" };
+      : { name: "├óΓé¼ΓÇ¥", role: "" };
   };
 
   const clearFilters = () => {
@@ -222,7 +144,7 @@ export default function Leads() {
 
   const hasActiveFilters = search || statusFilter || sourceFilter || assignedFilter;
 
-  /* â”€â”€â”€ Filtering (client-side) â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Filtering (client-side) ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   const filteredLeads = leads.filter((lead) => {
     // Text search
@@ -264,7 +186,7 @@ export default function Leads() {
   // Collect unique sources from data
   const uniqueSources = Array.from(new Set(leads.map((l) => l.source).filter(Boolean))) as string[];
 
-  /* â”€â”€â”€ Action Handlers â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Action Handlers ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   const handleCreate = () => {
     setEditLead(null);
@@ -272,21 +194,17 @@ export default function Leads() {
   };
 
   const handleView = (lead: Lead) => {
-    setOpenActionId(null);
-    setDropdownPos(null);
     console.log("Opening lead:", lead.id, lead.full_name);
     setViewLead(lead);
   };
 
   const handleEdit = (lead: Lead) => {
-    setOpenActionId(null);
     setViewLead(null);
     setEditLead(lead);
     setIsFormOpen(true);
   };
 
   const handleDeleteClick = (lead: Lead) => {
-    setOpenActionId(null);
     setDeleteLead(lead);
   };
 
@@ -308,7 +226,7 @@ export default function Leads() {
     showToast("Lead deleted successfully");
   };
 
-  /* â”€â”€â”€ Render â”€â”€â”€ */
+  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Render ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   return (
     <div className="leads-page">
@@ -363,7 +281,7 @@ export default function Leads() {
           </svg>
           <input
             type="text"
-            placeholder="Search leads by name, email, phone, sourceâ€¦"
+            placeholder="Search leads by name, email, phone, source├óΓé¼┬ª"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             id="leads-search-input"
@@ -433,7 +351,7 @@ export default function Leads() {
         {loading ? (
           <div className="leads-loading">
             <div className="leads-loading-spinner" />
-            Loading leadsâ€¦
+            Loading leads├óΓé¼┬ª
           </div>
         ) : error ? (
           <div className="error-state" style={{ padding: "60px 20px", textAlign: "center" }}>
@@ -534,18 +452,59 @@ export default function Leads() {
                   </td>
                   <td className="text-dim">{formatDateTime(lead.created_at)}</td>
                   <td className="actions-cell">
-                    <button
-                      className="btn-actions-trigger"
-                      ref={(el) => { triggerRefs.current[leadId] = el; }}
-                      onClick={() => toggleActions(leadId)}
-                      id={`lead-actions-${leadId}`}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                        <circle cx="12" cy="12" r="1"></circle>
-                        <circle cx="19" cy="12" r="1"></circle>
-                        <circle cx="5" cy="12" r="1"></circle>
-                      </svg>
-                    </button>
+                    <div className="crm-inline-actions">
+                      <button
+                        type="button"
+                        className="crm-action-btn view-btn"
+                        title="View Lead"
+                        aria-label="View Lead"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleView(lead);
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                      </button>
+                      {permissions.canEdit && (
+                        <button
+                          type="button"
+                          className="crm-action-btn edit-btn"
+                          title="Edit Lead"
+                          aria-label="Edit Lead"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(lead);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button
+                          type="button"
+                          className="crm-action-btn delete-btn"
+                          title="Delete Lead"
+                          aria-label="Delete Lead"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(lead);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -563,59 +522,6 @@ export default function Leads() {
         </>
       )}
       </div>
-
-      {/* Actions Dropdown — rendered outside the table to avoid overflow clipping */}
-      {openActionId && dropdownPos && (() => {
-        const targetLead = leads.find((l) => {
-          const lid = String(l.id || (l as any).lead_id || (l as any)._id || (l as any).uuid || "");
-          return lid === openActionId || (lid && openActionId && lid.toLowerCase() === openActionId.toLowerCase());
-        });
-        if (!targetLead) return null;
-        return (
-          <div
-            ref={actionsRef}
-            className={`actions-dropdown actions-dropdown-fixed ${dropdownPos.openUp ? "open-up" : ""}`}
-            style={{
-              position: "fixed",
-              top: dropdownPos.top !== undefined ? `${dropdownPos.top}px` : "auto",
-              bottom: dropdownPos.bottom !== undefined ? `${dropdownPos.bottom}px` : "auto",
-              left: `${dropdownPos.left}px`,
-              right: "auto",
-              marginTop: 0,
-              zIndex: 9999,
-            }}
-          >
-            <button onClick={() => handleView(targetLead)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-              View
-            </button>
-            {permissions.canEdit && (
-              <button onClick={() => handleEdit(targetLead)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-                Edit
-              </button>
-            )}
-            {permissions.canDelete && (
-              <>
-                <div className="actions-dropdown-separator" />
-                <button className="delete-action" onClick={() => handleDeleteClick(targetLead)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                  Delete
-                </button>
-              </>
-            )}
-          </div>
-        );
-      })()}
 
 
       {/* Create / Edit Modal */}

@@ -8,6 +8,7 @@ import {
   markContractMilestoneReady,
   invoiceContractMilestone,
 } from "../../services/softwareContractService";
+import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareEstimates } from "../../services/softwareEstimateService";
 import { getUsers } from "../../services/userService";
 import { getSoftwarePermissions } from "../../utils/softwarePermissions";
@@ -49,6 +50,8 @@ export default function SoftwareContracts() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [estimatesLoading, setEstimatesLoading] = useState(false);
+  const [estimatesError, setEstimatesError] = useState<string | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -101,31 +104,117 @@ export default function SoftwareContracts() {
     payment_milestones: [],
   });
 
-  const loadData = useCallback(async () => {
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [forbiddenDetail, setForbiddenDetail] = useState<string | null>(null);
+
+  const loadEstimates = useCallback(async (force = false) => {
+    setEstimatesLoading(true);
+    setEstimatesError(null);
+    try {
+      const list = await getSoftwareEstimates(undefined, { forceRetry: force });
+      const valid = Array.isArray(list) ? list : [];
+      setEstimates(valid);
+      return valid;
+    } catch (err: any) {
+      const msg = extractBackendDetail(err) || "Failed to load software estimates";
+      setEstimatesError(msg);
+      return [];
+    } finally {
+      setEstimatesLoading(false);
+    }
+  }, []);
+
+  const loadData = useCallback(async (forceRetry = false) => {
     setLoading(true);
     setError(null);
+    if (forceRetry) {
+      clearSoftwareForbidden("software_contracts");
+      clearSoftwareForbidden("software_estimates");
+      setIsForbidden(false);
+      setForbiddenDetail(null);
+    }
+
+    setEstimatesLoading(true);
+    setEstimatesError(null);
+
     try {
-      const [contData, estData, usersData] = await Promise.all([
-        getSoftwareContracts(),
-        getSoftwareEstimates().catch(() => []),
-        getUsers().catch(() => []),
+      const [contRes, estRes, usersRes] = await Promise.allSettled([
+        getSoftwareContracts(undefined, { forceRetry }),
+        getSoftwareEstimates(undefined, { forceRetry }),
+        getUsers(),
       ]);
 
-      setContracts(contData);
-      setEstimates(estData);
-      setUsers(usersData);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || "Failed to load software contracts");
+      if (contRes.status === "fulfilled") {
+        setContracts(Array.isArray(contRes.value) ? contRes.value : []);
+        setIsForbidden(false);
+        setForbiddenDetail(null);
+      } else {
+        const err = contRes.reason;
+        if (err?.response?.status === 403 || err?.isCachedForbidden) {
+          setIsForbidden(true);
+          setForbiddenDetail(extractBackendDetail(err));
+        } else {
+          setError(extractBackendDetail(err));
+        }
+      }
+
+      if (estRes.status === "fulfilled") {
+        const estList = Array.isArray(estRes.value) ? estRes.value : [];
+        setEstimates(estList);
+        setEstimatesError(null);
+      } else {
+        setEstimates([]);
+        setEstimatesError(extractBackendDetail(estRes.reason));
+      }
+
+      if (usersRes.status === "fulfilled") {
+        setUsers(Array.isArray(usersRes.value) ? usersRes.value : []);
+      }
     } finally {
       setLoading(false);
+      setEstimatesLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData(false);
+  }, [loadData]);
+
+  useEffect(() => {
+    const handleSoftwareDataChanged = (e: any) => {
+      const moduleKey = e?.detail?.moduleKey;
+      if (!moduleKey || moduleKey === "software_estimates" || moduleKey === "software_contracts") {
+        void loadData(true);
+      }
+    };
+    window.addEventListener("scuilone:software_data_changed", handleSoftwareDataChanged);
+    return () => {
+      window.removeEventListener("scuilone:software_data_changed", handleSoftwareDataChanged);
+    };
   }, [loadData]);
 
   const estMap = useMemo(() => new Map(estimates.map((e) => [e.id, e.title])), [estimates]);
+  const contractedEstimateMap = useMemo(() => {
+    const map = new Map<string, SoftwareContract>();
+    for (const c of contracts) {
+      if (c.software_estimate_id) {
+        if (!editingItem || c.id !== editingItem.id) {
+          map.set(c.software_estimate_id, c);
+        }
+      }
+    }
+    return map;
+  }, [contracts, editingItem]);
+
+  const selectedEstimate = useMemo(
+    () => estimates.find((e) => e.id === formData.software_estimate_id),
+    [estimates, formData.software_estimate_id]
+  );
+  const selectedEstimateContract = useMemo(() => {
+    if (!formData.software_estimate_id) return null;
+    return contractedEstimateMap.get(formData.software_estimate_id) || null;
+  }, [contractedEstimateMap, formData.software_estimate_id]);
+
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.full_name])), [users]);
 
   // Filtered List
@@ -153,26 +242,62 @@ export default function SoftwareContracts() {
     return Math.round(sum * 100) / 100;
   }, [formData.payment_milestones]);
 
-  const handleOpenCreate = () => {
+  const handleOpenCreate = async () => {
     setEditingItem(null);
     setFormError(null);
+
+    // Immediate initial state using currently loaded estimates
+    const currentEligible =
+      estimates.find(
+        (e) => e.status === "Accepted" && !contractedEstimateMap.has(e.id)
+      ) || estimates[0];
+
     setFormData({
-      software_estimate_id: estimates[0]?.id || "",
-      title: "",
-      description: "",
-      assigned_to: users[0]?.id || null,
+      software_estimate_id: currentEligible?.id || "",
+      title: currentEligible ? `${currentEligible.title} Contract` : "",
+      description: currentEligible?.description || "",
+      assigned_to: currentEligible?.assigned_to || users[0]?.id || null,
       issue_date: new Date().toISOString().slice(0, 10),
       start_date: new Date().toISOString().slice(0, 10),
-      end_date: "",
-      scope_of_work: "",
-      deliverables: "",
-      payment_terms: "",
+      end_date: currentEligible?.expiry_date || "",
+      scope_of_work: currentEligible?.description || "",
+      deliverables: currentEligible ? `Deliverables as defined in ${currentEligible.title}` : "",
+      payment_terms: currentEligible?.terms_and_conditions || "",
       terms_and_conditions: "",
-      notes: "",
+      notes: currentEligible?.notes || "",
       status: "Draft",
-      payment_milestones: [], // Starts completely empty
+      payment_milestones: [],
     });
     setIsModalOpen(true);
+
+    clearSoftwareForbidden("software_estimates");
+    const freshEstimates = await loadEstimates(true);
+    if (freshEstimates.length > 0) {
+      setFormData((prev) => {
+        // Auto-select eligible estimate if user has not manually picked one
+        if (!prev.software_estimate_id) {
+          const freshEligible =
+            freshEstimates.find(
+              (e) => e.status === "Accepted" && !contractedEstimateMap.has(e.id)
+            ) || freshEstimates[0];
+          if (freshEligible) {
+            return {
+              ...prev,
+              software_estimate_id: freshEligible.id,
+              title: prev.title || `${freshEligible.title} Contract`,
+              scope_of_work: prev.scope_of_work || freshEligible.description || "",
+              deliverables:
+                prev.deliverables || `Deliverables as defined in ${freshEligible.title}`,
+              payment_terms:
+                prev.payment_terms || freshEligible.terms_and_conditions || "",
+              assigned_to: prev.assigned_to || freshEligible.assigned_to || null,
+              end_date: prev.end_date || freshEligible.expiry_date || "",
+            };
+          }
+        }
+        return prev;
+      });
+    }
   };
 
   const handleOpenEdit = (item: SoftwareContract) => {
@@ -243,6 +368,19 @@ export default function SoftwareContracts() {
 
     if (!formData.software_estimate_id) {
       setFormError("Please select a linked Software Estimate.");
+      return;
+    }
+    const matchEst = estimates.find((e) => e.id === formData.software_estimate_id);
+    if (!editingItem && matchEst && matchEst.status !== "Accepted") {
+      setFormError(
+        `Estimate "${matchEst.title}" is in "${matchEst.status}" status. Backend business rules require an estimate to be in "Accepted" status to create a contract. Please accept the estimate in Software Estimates first.`
+      );
+      return;
+    }
+    if (!editingItem && selectedEstimateContract) {
+      setFormError(
+        `Contract "${selectedEstimateContract.contract_number}" already exists for this estimate. An estimate can only have one contract.`
+      );
       return;
     }
     if (!formData.scope_of_work.trim()) {
@@ -343,7 +481,7 @@ export default function SoftwareContracts() {
       }
       setIsModalOpen(false);
     } catch (err: any) {
-      setFormError(err?.response?.data?.detail || err?.message || "Failed to save contract");
+      setFormError(extractBackendDetail(err) || "Failed to save contract");
     } finally {
       setSubmitting(false);
     }
@@ -571,10 +709,28 @@ export default function SoftwareContracts() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             Loading software contracts...
           </div>
+        ) : isForbidden ? (
+          <div className="sw-forbidden-card">
+            <div className="sw-forbidden-icon-box">🔒</div>
+            <h3>Software Contracts Access Restricted</h3>
+            <p>
+              This module is not enabled for your tenant industry or your user role does not have view permission.
+            </p>
+            {forbiddenDetail && (
+              <div className="sw-forbidden-detail">{forbiddenDetail}</div>
+            )}
+            <button
+              className="sw-btn-secondary"
+              style={{ marginTop: "8px" }}
+              onClick={() => void loadData(true)}
+            >
+              Retry Access
+            </button>
+          </div>
         ) : error ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#ef4444" }}>
             <p>{error}</p>
-            <button className="sw-btn-secondary" onClick={loadData}>
+            <button className="sw-btn-secondary" onClick={() => void loadData(true)}>
               Retry
             </button>
           </div>
@@ -716,39 +872,243 @@ export default function SoftwareContracts() {
               <div className="sw-modal-body">
                 {formError && <div className="sw-error-banner">{formError}</div>}
 
+                {/* Section 1: Estimate & Title (2 columns) */}
                 <div className="sw-form-row">
                   <div className="sw-form-group">
-                    <label>Software Estimate *</label>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      <label style={{ margin: 0 }}>Software Estimate *</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        {estimatesLoading && (
+                          <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            ⏳ Loading...
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#0ea5e9",
+                            fontSize: "0.75rem",
+                            cursor: "pointer",
+                            padding: 0,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "3px",
+                            fontWeight: 600,
+                          }}
+                          onClick={async () => {
+                            clearSoftwareForbidden("software_estimates");
+                            const fresh = await loadEstimates(true);
+                            if (fresh.length > 0 && !formData.software_estimate_id) {
+                              const pref =
+                                fresh.find(
+                                  (e) => e.status === "Accepted" && !contractedEstimateMap.has(e.id)
+                                ) || fresh[0];
+                              if (pref) {
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  software_estimate_id: pref.id,
+                                  title: prev.title || `${pref.title} Contract`,
+                                  scope_of_work:
+                                    prev.scope_of_work || pref.description || "",
+                                  deliverables:
+                                    prev.deliverables || `Deliverables as defined in ${pref.title}`,
+                                  payment_terms:
+                                    prev.payment_terms || pref.terms_and_conditions || "",
+                                  assigned_to: prev.assigned_to || pref.assigned_to || null,
+                                }));
+                              }
+                            }
+                          }}
+                          title="Refresh estimates from server"
+                        >
+                          🔄 Refresh
+                        </button>
+                      </div>
+                    </div>
+
                     <select
                       className="sw-form-select"
                       required
                       value={formData.software_estimate_id}
-                      onChange={(e) =>
-                        setFormData({ ...formData, software_estimate_id: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const match = estimates.find((est) => est.id === val);
+                        setFormData((prev) => ({
+                          ...prev,
+                          software_estimate_id: val,
+                          title: prev.title || (match ? `${match.title} Contract` : prev.title),
+                          scope_of_work:
+                            prev.scope_of_work || (match ? match.description || "" : prev.scope_of_work),
+                          deliverables:
+                            prev.deliverables || (match ? `Deliverables for ${match.title}` : prev.deliverables),
+                          payment_terms:
+                            prev.payment_terms || (match ? match.terms_and_conditions || "" : prev.payment_terms),
+                          assigned_to: prev.assigned_to || match?.assigned_to || null,
+                        }));
+                      }}
                       disabled={!!editingItem}
                     >
-                      <option value="">Select Estimate...</option>
-                      {estimates.map((est) => (
-                        <option key={est.id} value={est.id}>
-                          {est.title} ({formatCurrency(est.total_amount, est.currency)})
-                        </option>
-                      ))}
+                      <option value="">
+                        {estimatesLoading
+                          ? "⏳ Loading software estimates..."
+                          : estimatesError
+                          ? "⚠️ Failed to load estimates (click Refresh to retry)"
+                          : estimates.length === 0
+                          ? "-- No software estimates available --"
+                          : "Select an Estimate..."}
+                      </option>
+                      {estimates.map((est) => {
+                        const isContracted = contractedEstimateMap.has(est.id);
+                        const isAccepted = est.status === "Accepted";
+                        let statusTag = `[${est.status}]`;
+                        if (isContracted) {
+                          statusTag += " (Already Contracted)";
+                        } else if (isAccepted) {
+                          statusTag += " (✓ Ready)";
+                        }
+                        return (
+                          <option key={est.id} value={est.id}>
+                            {est.estimate_number ? `${est.estimate_number} — ` : ""}
+                            {est.title} ({formatCurrency(est.total_amount, est.currency)}) {statusTag}
+                          </option>
+                        );
+                      })}
                     </select>
+
+                    {/* Feedback Messages */}
+                    {estimatesError && (
+                      <div
+                        style={{
+                          marginTop: "6px",
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          background: "rgba(239, 68, 68, 0.1)",
+                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                          color: "#ef4444",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span>{estimatesError}</span>
+                        <button
+                          type="button"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#0ea5e9",
+                            fontSize: "0.75rem",
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            padding: 0,
+                          }}
+                          onClick={() => void loadEstimates(true)}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+
+                    {!estimatesLoading && estimates.length === 0 && !estimatesError && (
+                      <div
+                        style={{
+                          marginTop: "6px",
+                          padding: "8px 10px",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          background: "rgba(14, 165, 233, 0.1)",
+                          border: "1px solid rgba(14, 165, 233, 0.3)",
+                          color: "#38bdf8",
+                        }}
+                      >
+                        ℹ️ No software estimates found. Create an estimate in the{" "}
+                        <a
+                          href="/software-estimates"
+                          style={{ color: "#38bdf8", textDecoration: "underline", fontWeight: 600 }}
+                        >
+                          Software Estimates module
+                        </a>{" "}
+                        first.
+                      </div>
+                    )}
+
+                    {selectedEstimateContract && (
+                      <div
+                        style={{
+                          marginTop: "6px",
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          background: "rgba(239, 68, 68, 0.1)",
+                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                          color: "#f87171",
+                        }}
+                      >
+                        ⚠️ Contract <strong>{selectedEstimateContract.contract_number}</strong> already exists for this estimate. An estimate can only have one contract.
+                      </div>
+                    )}
+
+                    {selectedEstimate &&
+                      selectedEstimate.status !== "Accepted" &&
+                      !selectedEstimateContract && (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            fontSize: "0.75rem",
+                            background: "rgba(245, 158, 11, 0.12)",
+                            border: "1px solid rgba(245, 158, 11, 0.35)",
+                            color: "#f59e0b",
+                          }}
+                        >
+                          ℹ️ Note: This estimate is currently in <strong>{selectedEstimate.status}</strong> status. The contract creation API requires the estimate to be in <strong>Accepted</strong> status.
+                        </div>
+                      )}
+
+                    {selectedEstimate &&
+                      selectedEstimate.status === "Accepted" &&
+                      !selectedEstimateContract && (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            fontSize: "0.75rem",
+                            background: "rgba(16, 185, 129, 0.12)",
+                            border: "1px solid rgba(16, 185, 129, 0.35)",
+                            color: "#10b981",
+                          }}
+                        >
+                          ✓ Ready for contract: Estimate is Accepted ({formatCurrency(selectedEstimate.total_amount, selectedEstimate.currency)}).
+                        </div>
+                      )}
                   </div>
 
                   <div className="sw-form-group">
-                    <label>Contract Title</label>
+                    <label>Contract Title *</label>
                     <input
                       type="text"
                       className="sw-form-input"
                       placeholder="e.g. Master Service Agreement"
+                      required
                       value={formData.title || ""}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     />
                   </div>
                 </div>
 
+                {/* Section 2: Timeline Dates (2 columns) */}
                 <div className="sw-form-row">
                   <div className="sw-form-group">
                     <label>Start Date</label>
@@ -769,9 +1129,33 @@ export default function SoftwareContracts() {
                       onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                     />
                   </div>
+                </div>
+
+                {/* Section 3: Assignment & Contract Status (2 columns) */}
+                <div className="sw-form-row">
+                  <div className="sw-form-group">
+                    <label>Assigned Lead / Project Manager</label>
+                    <select
+                      className="sw-form-select"
+                      value={formData.assigned_to || ""}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          assigned_to: e.target.value || null,
+                        })
+                      }
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.full_name} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <div className="sw-form-group">
-                    <label>Status</label>
+                    <label>Contract Status</label>
                     <select
                       className="sw-form-select"
                       value={formData.status}

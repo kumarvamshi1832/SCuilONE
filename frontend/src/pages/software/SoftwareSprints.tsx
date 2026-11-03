@@ -5,6 +5,7 @@ import {
   updateSoftwareSprint,
   deleteSoftwareSprint,
 } from "../../services/softwareSprintService";
+import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareProjects } from "../../services/softwareProjectService";
 
 import type {
@@ -48,26 +49,44 @@ export default function SoftwareSprints() {
     status: "Planned",
   });
 
-  const loadData = useCallback(async () => {
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [forbiddenDetail, setForbiddenDetail] = useState<string | null>(null);
+
+  const loadData = useCallback(async (forceRetry = false, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
+    if (forceRetry) {
+      clearSoftwareForbidden("software_sprints");
+      setIsForbidden(false);
+      setForbiddenDetail(null);
+    }
     try {
       const [sprintData, projData] = await Promise.all([
-        getSoftwareSprints(),
-        getSoftwareProjects().catch(() => []),
+        getSoftwareSprints(undefined, { signal, forceRetry }),
+        getSoftwareProjects(undefined, { signal, forceRetry }).catch(() => []),
       ]);
 
-      setSprints(sprintData);
-      setProjects(projData);
+      setSprints(Array.isArray(sprintData) ? sprintData : []);
+      setProjects(Array.isArray(projData) ? projData : []);
+      setIsForbidden(false);
+      setForbiddenDetail(null);
     } catch (err: any) {
-      setError(err?.message || "Failed to load software sprints");
+      if (err?.name === "CanceledError" || err?.name === "AbortError") {
+        return;
+      }
+      if (err?.response?.status === 403 || err?.isCachedForbidden) {
+        setIsForbidden(true);
+        setForbiddenDetail(extractBackendDetail(err));
+      } else {
+        setError(extractBackendDetail(err));
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData(false);
   }, [loadData]);
 
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
@@ -240,10 +259,28 @@ export default function SoftwareSprints() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             Loading software sprints...
           </div>
+        ) : isForbidden ? (
+          <div className="sw-forbidden-card">
+            <div className="sw-forbidden-icon-box">🔒</div>
+            <h3>Software Sprints Access Restricted</h3>
+            <p>
+              This module is not enabled for your tenant industry or your user role does not have view permission.
+            </p>
+            {forbiddenDetail && (
+              <div className="sw-forbidden-detail">{forbiddenDetail}</div>
+            )}
+            <button
+              className="sw-btn-secondary"
+              style={{ marginTop: "8px" }}
+              onClick={() => void loadData(true)}
+            >
+              Retry Access
+            </button>
+          </div>
         ) : error ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#ef4444" }}>
-            <p>{error}</p>
-            <button className="sw-btn-secondary" onClick={loadData}>Retry</button>
+            <p style={{ marginBottom: "12px" }}>{error}</p>
+            <button className="sw-btn-secondary" onClick={() => void loadData(true)}>Retry</button>
           </div>
         ) : filteredList.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
 import {
   getSoftwareEstimates,
   createSoftwareEstimate,
@@ -6,6 +7,7 @@ import {
   deleteSoftwareEstimate,
   createEstimateRevision,
 } from "../../services/softwareEstimateService";
+import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareRequirements } from "../../services/softwareRequirementService";
 import { getUsers } from "../../services/userService";
 
@@ -16,7 +18,11 @@ import type {
   SoftwareEstimateItemCreate,
   SoftwareEstimateStatus,
 } from "../../types/softwareEstimate";
-import { SOFTWARE_ESTIMATE_STATUSES } from "../../types/softwareEstimate";
+import {
+  SOFTWARE_ESTIMATE_STATUSES,
+  ESTIMATE_STATUS_TRANSITIONS,
+  getAvailableEstimateStatuses,
+} from "../../types/softwareEstimate";
 import type { SoftwareRequirement } from "../../types/softwareRequirement";
 import type { User } from "../../types/user";
 
@@ -51,14 +57,53 @@ function formatCurrency(
 export default function SoftwareEstimates() {
   const [estimates, setEstimates] = useState<SoftwareEstimate[]>([]);
   const [requirements, setRequirements] = useState<SoftwareRequirement[]>([]);
+  const [requirementsLoading, setRequirementsLoading] = useState(false);
+  const [requirementsError, setRequirementsError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+
+  // Helper to match status string against canonical SOFTWARE_ESTIMATE_STATUSES
+  const resolveCanonicalStatus = useCallback((val: string | null | undefined): string => {
+    if (!val) return "";
+    const clean = val.trim().toLowerCase();
+    const found = SOFTWARE_ESTIMATE_STATUSES.find((s) => s.toLowerCase() === clean);
+    return found || "";
+  }, []);
+
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const fromParam = searchParams.get("status");
+    const fromState = (location.state as any)?.status;
+    return resolveCanonicalStatus(fromParam || fromState);
+  });
+
+  // Sync with URL query parameter changes (supports Back / Forward navigation)
+  useEffect(() => {
+    const fromParam = searchParams.get("status");
+    const fromState = (location.state as any)?.status;
+    const resolved = resolveCanonicalStatus(fromParam || fromState);
+    setStatusFilter(resolved);
+  }, [searchParams, location.state, resolveCanonicalStatus]);
+
+  const handleStatusFilterChange = (newStatus: string) => {
+    const resolved = resolveCanonicalStatus(newStatus);
+    setStatusFilter(resolved);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (resolved) {
+        next.set("status", resolved);
+      } else {
+        next.delete("status");
+      }
+      return next;
+    });
+  };
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,28 +152,90 @@ export default function SoftwareEstimates() {
     ],
   });
 
-  const loadData = useCallback(async () => {
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [forbiddenDetail, setForbiddenDetail] = useState<string | null>(null);
+
+  const isLockedAfterDraft = useMemo(() => {
+    return Boolean(editingItem && editingItem.status !== "Draft");
+  }, [editingItem]);
+
+  const availableStatuses = useMemo(() => {
+    if (!editingItem) {
+      return ["Draft"] as SoftwareEstimateStatus[];
+    }
+    return getAvailableEstimateStatuses(editingItem.status);
+  }, [editingItem]);
+
+  const loadRequirements = useCallback(async (force = false) => {
+    setRequirementsLoading(true);
+    setRequirementsError(null);
+    try {
+      const reqs = await getSoftwareRequirements(undefined, { forceRetry: force });
+      const validReqs = Array.isArray(reqs) ? reqs : [];
+      setRequirements(validReqs);
+      return validReqs;
+    } catch (err: any) {
+      const msg = extractBackendDetail(err) || "Failed to load software requirements";
+      setRequirementsError(msg);
+      return [];
+    } finally {
+      setRequirementsLoading(false);
+    }
+  }, []);
+
+  const loadData = useCallback(async (forceRetry = false) => {
     setLoading(true);
     setError(null);
+    if (forceRetry) {
+      clearSoftwareForbidden("software_estimates");
+      setIsForbidden(false);
+      setForbiddenDetail(null);
+    }
+
+    setRequirementsLoading(true);
+    setRequirementsError(null);
+
     try {
-      const [estData, reqData, usersData] = await Promise.all([
-        getSoftwareEstimates(),
-        getSoftwareRequirements().catch(() => []),
-        getUsers().catch(() => []),
+      const [estRes, reqRes, usersRes] = await Promise.allSettled([
+        getSoftwareEstimates(undefined, { forceRetry }),
+        getSoftwareRequirements(undefined, { forceRetry }),
+        getUsers(),
       ]);
 
-      setEstimates(estData);
-      setRequirements(reqData);
-      setUsers(usersData);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load estimates");
+      if (estRes.status === "fulfilled") {
+        setEstimates(Array.isArray(estRes.value) ? estRes.value : []);
+        setIsForbidden(false);
+        setForbiddenDetail(null);
+      } else {
+        const err = estRes.reason;
+        if (err?.response?.status === 403 || err?.isCachedForbidden) {
+          setIsForbidden(true);
+          setForbiddenDetail(extractBackendDetail(err));
+        } else {
+          setError(extractBackendDetail(err));
+        }
+      }
+
+      if (reqRes.status === "fulfilled") {
+        const list = Array.isArray(reqRes.value) ? reqRes.value : [];
+        setRequirements(list);
+        setRequirementsError(null);
+      } else {
+        setRequirements([]);
+        setRequirementsError(extractBackendDetail(reqRes.reason) || "Failed to load software requirements");
+      }
+
+      if (usersRes.status === "fulfilled") {
+        setUsers(Array.isArray(usersRes.value) ? usersRes.value : []);
+      }
     } finally {
       setLoading(false);
+      setRequirementsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData(false);
   }, [loadData]);
 
   const reqMap = useMemo(() => new Map(requirements.map((r) => [r.id, r.title])), [requirements]);
@@ -220,11 +327,15 @@ export default function SoftwareEstimates() {
     return { subtotal, taxTotal, grandTotal };
   }, [formData.items, formData.discount_amount]);
 
-  const handleOpenCreate = () => {
+  const handleOpenCreate = async () => {
     setEditingItem(null);
     setFormError(null);
+    let activeReqs = requirements;
+    if (activeReqs.length === 0) {
+      activeReqs = await loadRequirements(true);
+    }
     setFormData({
-      software_requirement_id: requirements[0]?.id || "",
+      software_requirement_id: activeReqs[0]?.id || "",
       title: "",
       description: "",
       assigned_to: users[0]?.id || null,
@@ -307,24 +418,76 @@ export default function SoftwareEstimates() {
       return;
     }
 
+    // Client-side status transition guard based on backend state machine
+    if (editingItem) {
+      const currentStatus = (editingItem.status as SoftwareEstimateStatus) || "Draft";
+      const targetStatus = (formData.status as SoftwareEstimateStatus) || currentStatus;
+
+      if (targetStatus !== currentStatus) {
+        const allowed = ESTIMATE_STATUS_TRANSITIONS[currentStatus] || [];
+        if (!allowed.includes(targetStatus)) {
+          setFormError(
+            `Cannot change estimate status from '${currentStatus}' to '${targetStatus}'. Permitted transitions: ${
+              allowed.length > 0 ? allowed.join(", ") : "None (terminal status)"
+            }`
+          );
+          return;
+        }
+
+        // Validate expiry date if transitioning to Sent or Accepted
+        if (["Sent", "Accepted"].includes(targetStatus)) {
+          const effectiveExpiry = formData.expiry_date || editingItem.expiry_date;
+          if (!effectiveExpiry) {
+            setFormError(`An expiry date is required before marking an estimate as ${targetStatus}.`);
+            return;
+          }
+          const todayStr = new Date().toISOString().slice(0, 10);
+          if (effectiveExpiry < todayStr) {
+            setFormError(`The expiry date (${effectiveExpiry}) cannot be in the past. Please update it to today or a future date.`);
+            return;
+          }
+        }
+      }
+    } else {
+      // New estimates must start as Draft
+      if (formData.status && formData.status !== "Draft") {
+        setFormError("A new estimate must start as Draft.");
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       if (editingItem) {
-        const payload: SoftwareEstimateUpdate = {
-          title: formData.title,
-          description: formData.description,
-          assigned_to: formData.assigned_to,
-          currency: formData.currency,
-          issue_date: formData.issue_date,
-          expiry_date: formData.expiry_date || null,
-          status: formData.status,
-          discount_amount: formData.discount_amount,
-          terms_and_conditions: formData.terms_and_conditions,
-          notes: formData.notes,
-          items: formData.items,
-        };
+        let payload: SoftwareEstimateUpdate;
+        if (editingItem.status === "Draft") {
+          // In Draft status, commercial fields can be updated
+          payload = {
+            title: formData.title,
+            description: formData.description,
+            assigned_to: formData.assigned_to,
+            currency: formData.currency,
+            issue_date: formData.issue_date,
+            expiry_date: formData.expiry_date || null,
+            status: formData.status,
+            discount_amount: formData.discount_amount,
+            terms_and_conditions: formData.terms_and_conditions,
+            notes: formData.notes,
+            items: formData.items,
+          };
+        } else {
+          // Commercial fields are locked after Draft (Sent, Accepted, Rejected, Expired, Withdrawn)
+          // Only status, notes, and assigned_to are editable
+          payload = {
+            status: formData.status,
+            notes: formData.notes || null,
+            assigned_to: formData.assigned_to || null,
+          };
+        }
+
         const updated = await updateSoftwareEstimate(editingItem.id, payload);
         setEstimates((prev) => prev.map((e) => (e.id === editingItem.id ? updated : e)));
+        setIsModalOpen(false);
       } else {
         const payload: SoftwareEstimateCreate = {
           software_requirement_id: formData.software_requirement_id,
@@ -334,7 +497,7 @@ export default function SoftwareEstimates() {
           currency: formData.currency,
           issue_date: formData.issue_date,
           expiry_date: formData.expiry_date || null,
-          status: formData.status,
+          status: "Draft",
           discount_amount: formData.discount_amount,
           terms_and_conditions: formData.terms_and_conditions,
           notes: formData.notes,
@@ -342,10 +505,12 @@ export default function SoftwareEstimates() {
         };
         const created = await createSoftwareEstimate(payload);
         setEstimates((prev) => [created, ...prev]);
+        setIsModalOpen(false);
       }
-      setIsModalOpen(false);
     } catch (err: any) {
-      setFormError(err?.response?.data?.detail || err?.message || "Failed to save estimate");
+      // Keep modal open, preserve all entered form values, display exact backend message
+      const errorMsg = extractBackendDetail(err) || err?.message || "Failed to save estimate";
+      setFormError(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -417,13 +582,27 @@ export default function SoftwareEstimates() {
         <select
           className="sw-filter-select"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => handleStatusFilterChange(e.target.value)}
         >
           <option value="">All Statuses</option>
           {SOFTWARE_ESTIMATE_STATUSES.map((st) => (
             <option key={st} value={st}>{st}</option>
           ))}
         </select>
+
+        {(Boolean(searchTerm) || Boolean(statusFilter)) && (
+          <button
+            type="button"
+            className="sw-btn-secondary"
+            style={{ padding: "8px 14px", fontSize: "0.82rem" }}
+            onClick={() => {
+              setSearchTerm("");
+              handleStatusFilterChange("");
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Table Card */}
@@ -432,14 +611,45 @@ export default function SoftwareEstimates() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             Loading software estimates...
           </div>
+        ) : isForbidden ? (
+          <div className="sw-forbidden-card">
+            <div className="sw-forbidden-icon-box">🔒</div>
+            <h3>Software Estimates Access Restricted</h3>
+            <p>
+              This module is not enabled for your tenant industry or your user role does not have view permission.
+            </p>
+            {forbiddenDetail && (
+              <div className="sw-forbidden-detail">{forbiddenDetail}</div>
+            )}
+            <button
+              className="sw-btn-secondary"
+              style={{ marginTop: "8px" }}
+              onClick={() => void loadData(true)}
+            >
+              Retry Access
+            </button>
+          </div>
         ) : error ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#ef4444" }}>
-            <p>{error}</p>
-            <button className="sw-btn-secondary" onClick={loadData}>Retry</button>
+            <p style={{ marginBottom: "12px" }}>{error}</p>
+            <button className="sw-btn-secondary" onClick={() => void loadData(true)}>Retry</button>
           </div>
         ) : filteredList.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
-            No software estimates found matching your criteria.
+            <p>No software estimates found matching your criteria.</p>
+            {(Boolean(searchTerm) || Boolean(statusFilter)) && (
+              <button
+                type="button"
+                className="sw-btn-secondary"
+                style={{ marginTop: "12px", padding: "6px 14px", fontSize: "0.82rem" }}
+                onClick={() => {
+                  setSearchTerm("");
+                  handleStatusFilterChange("");
+                }}
+              >
+                Reset Filters ({estimates.length} available)
+              </button>
+            )}
           </div>
         ) : (
           <table className="sw-data-table">
@@ -553,25 +763,83 @@ export default function SoftwareEstimates() {
               <div className="sw-modal-body">
                 {formError && <div className="sw-error-banner">{formError}</div>}
 
+                {isLockedAfterDraft && (
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "6px",
+                      background: "rgba(14, 165, 233, 0.12)",
+                      border: "1px solid rgba(14, 165, 233, 0.35)",
+                      color: "#38bdf8",
+                      fontSize: "0.82rem",
+                      marginBottom: "16px",
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    🔒 <strong>Commercial content is locked for {editingItem?.status} estimates.</strong> Only status, notes, and assignee can be updated. To change items, prices, or scope, use the <em>Revise Estimate</em> action to generate a new revision.
+                  </div>
+                )}
+
                 {/* 2-Column Responsive Form Grid */}
                 <div className="sw-estimate-form-grid">
                   <div className="sw-form-group">
-                    <label>Software Requirement *</label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <label style={{ margin: 0 }}>Software Requirement *</label>
+                      {requirementsLoading && (
+                        <span style={{ fontSize: "0.75rem", color: "#64748b" }}>(Loading...)</span>
+                      )}
+                      {requirementsError && (
+                        <button
+                          type="button"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#0ea5e9",
+                            fontSize: "0.75rem",
+                            cursor: "pointer",
+                            textDecoration: "underline",
+                            padding: 0,
+                          }}
+                          onClick={() => void loadRequirements(true)}
+                        >
+                          Retry Loading
+                        </button>
+                      )}
+                    </div>
                     <select
                       className="sw-form-select"
                       required
                       value={formData.software_requirement_id}
-                      onChange={(e) =>
-                        setFormData({ ...formData, software_requirement_id: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData((prev) => ({ ...prev, software_requirement_id: val }));
+                        if (val && formError?.includes("Requirement")) {
+                          setFormError(null);
+                        }
+                      }}
+                      disabled={isLockedAfterDraft || requirementsLoading}
                     >
                       <option value="">Select Requirement</option>
+                      {requirementsLoading && (
+                        <option value="" disabled>Loading requirements...</option>
+                      )}
+                      {requirementsError && (
+                        <option value="" disabled>Error loading requirements ({requirementsError})</option>
+                      )}
+                      {!requirementsLoading && !requirementsError && requirements.length === 0 && (
+                        <option value="" disabled>No software requirements available (Create one first)</option>
+                      )}
                       {requirements.map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.title} ({r.software_type})
                         </option>
                       ))}
                     </select>
+                    {requirementsError && (
+                      <div style={{ fontSize: "0.78rem", color: "#ef4444", marginTop: "4px" }}>
+                        {requirementsError}
+                      </div>
+                    )}
                   </div>
 
                   <div className="sw-form-group">
@@ -582,6 +850,7 @@ export default function SoftwareEstimates() {
                       required
                       placeholder="e.g. CRM Customization Proposal"
                       value={formData.title}
+                      disabled={isLockedAfterDraft}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     />
                   </div>
@@ -611,6 +880,7 @@ export default function SoftwareEstimates() {
                     <select
                       className="sw-form-select"
                       value={formData.status}
+                      disabled={availableStatuses.length <= 1}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
@@ -618,12 +888,37 @@ export default function SoftwareEstimates() {
                         })
                       }
                     >
-                      {SOFTWARE_ESTIMATE_STATUSES.map((st) => (
+                      {availableStatuses.map((st) => (
                         <option key={st} value={st}>
-                          {st}
+                          {st} {editingItem && st === editingItem.status ? "(Current)" : ""}
                         </option>
                       ))}
                     </select>
+                    {!editingItem && (
+                      <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px", display: "block" }}>
+                        New estimates must start as <strong>Draft</strong>.
+                      </span>
+                    )}
+                    {editingItem?.status === "Draft" && (
+                      <span style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px", display: "block" }}>
+                        Workflow: <strong>Draft → Sent → Accepted</strong>. Save as <strong>Sent</strong> first to enable acceptance.
+                      </span>
+                    )}
+                    {editingItem?.status === "Sent" && (
+                      <span style={{ fontSize: "0.75rem", color: "#0ea5e9", marginTop: "4px", display: "block" }}>
+                        Active proposal. Permitted: <strong>Accepted</strong>, <strong>Rejected</strong>, <strong>Expired</strong>, <strong>Withdrawn</strong>.
+                      </span>
+                    )}
+                    {editingItem?.status === "Accepted" && (
+                      <span style={{ fontSize: "0.75rem", color: "#10b981", marginTop: "4px", display: "block" }}>
+                        ✅ Accepted (Terminal). Estimate is ready for contract creation in Software Contracts.
+                      </span>
+                    )}
+                    {editingItem && ["Rejected", "Expired", "Withdrawn"].includes(editingItem.status) && (
+                      <span style={{ fontSize: "0.75rem", color: "#f59e0b", marginTop: "4px", display: "block" }}>
+                        Terminal status ({editingItem.status}). Use "Revise Estimate" to make commercial adjustments.
+                      </span>
+                    )}
                   </div>
 
                   <div className="sw-form-group">
@@ -631,6 +926,7 @@ export default function SoftwareEstimates() {
                     <select
                       className="sw-form-select"
                       value={formData.currency}
+                      disabled={isLockedAfterDraft}
                       onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                     >
                       <option value="INR">INR (₹)</option>

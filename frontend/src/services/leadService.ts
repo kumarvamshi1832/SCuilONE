@@ -2,12 +2,16 @@ import { apiClient } from "./authService";
 import type { Lead, CreateLeadRequest, UpdateLeadRequest } from "../types/lead";
 
 const getHeaders = () => {
-  const token = sessionStorage.getItem("access_token");
-  return {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  };
+  const token =
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token");
+  return token
+    ? {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    : {};
 };
 
 /* ─── Endpoints ─── */
@@ -21,18 +25,42 @@ const LEADS_ENDPOINTS = {
 /* ─── Service Functions ─── */
 
 export const getLeads = async (): Promise<Lead[]> => {
-  const response = await apiClient.get<Lead[]>(LEADS_ENDPOINTS.LIST, getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(LEADS_ENDPOINTS.LIST, getHeaders());
+  if (Array.isArray(response.data)) {
+    return response.data;
+  }
+  if (response.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  if (response.data && Array.isArray(response.data.items)) {
+    return response.data.items;
+  }
+  if (response.data && Array.isArray(response.data.results)) {
+    return response.data.results;
+  }
+  return [];
 };
 
 export const getMyLeads = async (): Promise<Lead[]> => {
-  const response = await apiClient.get<Lead[]>(LEADS_ENDPOINTS.MY_LEADS, getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(LEADS_ENDPOINTS.MY_LEADS, getHeaders());
+  if (Array.isArray(response.data)) {
+    return response.data;
+  }
+  if (response.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  if (response.data && Array.isArray(response.data.items)) {
+    return response.data.items;
+  }
+  if (response.data && Array.isArray(response.data.results)) {
+    return response.data.results;
+  }
+  return [];
 };
 
 export const getLead = async (id: string): Promise<Lead> => {
-  const response = await apiClient.get<Lead>(LEADS_ENDPOINTS.DETAIL(id), getHeaders());
-  return response.data;
+  const response = await apiClient.get<any>(LEADS_ENDPOINTS.DETAIL(id), getHeaders());
+  return response.data?.data || response.data;
 };
 
 export const createLead = async (data: CreateLeadRequest): Promise<Lead> => {

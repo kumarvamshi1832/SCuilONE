@@ -73,7 +73,6 @@ export function clearPortalAuthSession(): void {
   localStorage.removeItem(PORTAL_TENANT_ID_KEY);
 }
 
-/* ─── Dedicated Isolated Portal Axios Client ─── */
 export const portalApiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? "",
 });

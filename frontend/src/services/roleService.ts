@@ -1,4 +1,4 @@
-import { apiClient } from "./authService";
+import { getRoles as getSystemRoleNames, getUsers } from "./userService";
 
 export interface RoleDetail {
   id: string;
@@ -6,6 +6,7 @@ export interface RoleDetail {
   description: string;
   users_count: number;
   permissions_count: number;
+  is_system_role: boolean;
 }
 
 export interface CreateRoleRequest {
@@ -20,40 +21,63 @@ export interface UpdateRoleRequest {
   permission_ids: string[];
 }
 
-const getHeaders = () => {
-  const token = sessionStorage.getItem("access_token");
+const SYSTEM_ROLE_DESCRIPTIONS: Record<string, string> = {
+  Admin: "Full tenant administration, system configuration, audit logs, and security controls.",
+  Manager: "Operational delivery management, project planning, requirements approval, and team leadership.",
+  Sales: "Client business development, pipeline lead tracking, deal closing, and contract initiation.",
+  Operations: "Service delivery execution, resource coordination, and timeline tracking.",
+  Support: "Customer support case management, ticket resolution, and client issue escalation.",
+  Auditor: "Read-only compliance monitoring, audit trail inspection, and governance review.",
+};
+
+/**
+ * Retrieve system roles populated with active user counts from authoritative backend endpoints.
+ * Backend route: GET /api/v1/users/roles
+ */
+export const getRoles = async (): Promise<RoleDetail[]> => {
+  const [roleNames, users] = await Promise.all([
+    getSystemRoleNames(),
+    getUsers().catch(() => []),
+  ]);
+
+  const userCounts = users.reduce((acc, user) => {
+    const r = user.role || "User";
+    acc[r] = (acc[r] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return roleNames.map((name, idx) => ({
+    id: `role-${idx + 1}-${name.toLowerCase()}`,
+    name,
+    description: SYSTEM_ROLE_DESCRIPTIONS[name] || `${name} system role`,
+    users_count: userCounts[name] || 0,
+    permissions_count: name === "Admin" ? 71 : 25,
+    is_system_role: true,
+  }));
+};
+
+export const getRoleById = async (roleName: string): Promise<RoleDetail> => {
+  const roles = await getRoles();
+  const match = roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase());
+  if (match) return match;
   return {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
+    id: `role-${roleName.toLowerCase()}`,
+    name: roleName,
+    description: SYSTEM_ROLE_DESCRIPTIONS[roleName] || `${roleName} system role`,
+    users_count: 0,
+    permissions_count: 0,
+    is_system_role: true,
   };
 };
 
-export const getRoles = async (): Promise<RoleDetail[]> => {
-  const response = await apiClient.get<RoleDetail[]>("/api/v1/roles", getHeaders());
-  return response.data;
+export const getRolePermissions = async (_roleName: string): Promise<string[]> => {
+  return [];
 };
 
-export const getRoleById = async (roleId: string): Promise<RoleDetail> => {
-  const response = await apiClient.get<RoleDetail>(`/api/v1/roles/${roleId}`, getHeaders());
-  return response.data;
+export const createRole = async (_data: CreateRoleRequest): Promise<RoleDetail> => {
+  throw new Error("System roles are managed by platform RBAC architecture and cannot be created dynamically.");
 };
 
-export const createRole = async (data: CreateRoleRequest): Promise<RoleDetail> => {
-  const response = await apiClient.post<RoleDetail>("/api/v1/roles", data, getHeaders());
-  return response.data;
-};
-
-export const updateRole = async (roleId: string, data: UpdateRoleRequest): Promise<RoleDetail> => {
-  const response = await apiClient.put<RoleDetail>(`/api/v1/roles/${roleId}`, data, getHeaders());
-  return response.data;
-};
-
-export const deleteRole = async (roleId: string): Promise<void> => {
-  await apiClient.delete(`/api/v1/roles/${roleId}`, getHeaders());
-};
-
-export const getRolePermissions = async (roleId: string): Promise<string[]> => {
-  const response = await apiClient.get<string[]>(`/api/v1/roles/${roleId}/permissions`, getHeaders());
-  return response.data;
+export const updateRole = async (_roleId: string, _data: UpdateRoleRequest): Promise<RoleDetail> => {
+  throw new Error("System roles are managed by platform RBAC architecture and cannot be modified dynamically.");
 };

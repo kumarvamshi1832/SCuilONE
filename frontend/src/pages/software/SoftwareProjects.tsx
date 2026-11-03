@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
 import {
   getSoftwareProjects,
   createSoftwareProject,
   updateSoftwareProject,
   deleteSoftwareProject,
 } from "../../services/softwareProjectService";
+import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareContracts } from "../../services/softwareContractService";
 import { getUsers } from "../../services/userService";
 
@@ -38,10 +40,47 @@ export default function SoftwareProjects() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+
+  // Helper to match status string against canonical SOFTWARE_PROJECT_STATUSES
+  const resolveCanonicalStatus = useCallback((val: string | null | undefined): string => {
+    if (!val) return "";
+    const clean = val.trim().toLowerCase();
+    const found = SOFTWARE_PROJECT_STATUSES.find((s) => s.toLowerCase() === clean);
+    return found || "";
+  }, []);
+
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const fromParam = searchParams.get("status");
+    const fromState = (location.state as any)?.status;
+    return resolveCanonicalStatus(fromParam || fromState);
+  });
   const [priorityFilter, setPriorityFilter] = useState("");
+
+  // Sync with URL query parameter changes (supports Back / Forward navigation)
+  useEffect(() => {
+    const fromParam = searchParams.get("status");
+    const fromState = (location.state as any)?.status;
+    const resolved = resolveCanonicalStatus(fromParam || fromState);
+    setStatusFilter(resolved);
+  }, [searchParams, location.state, resolveCanonicalStatus]);
+
+  const handleStatusFilterChange = (newStatus: string) => {
+    const resolved = resolveCanonicalStatus(newStatus);
+    setStatusFilter(resolved);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (resolved) {
+        next.set("status", resolved);
+      } else {
+        next.delete("status");
+      }
+      return next;
+    });
+  };
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,28 +103,46 @@ export default function SoftwareProjects() {
     status: "Planned",
   });
 
-  const loadData = useCallback(async () => {
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [forbiddenDetail, setForbiddenDetail] = useState<string | null>(null);
+
+  const loadData = useCallback(async (forceRetry = false, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
+    if (forceRetry) {
+      clearSoftwareForbidden("software_projects");
+      setIsForbidden(false);
+      setForbiddenDetail(null);
+    }
     try {
       const [projData, contData, usersData] = await Promise.all([
-        getSoftwareProjects(),
-        getSoftwareContracts().catch(() => []),
+        getSoftwareProjects(undefined, { signal, forceRetry }),
+        getSoftwareContracts(undefined, { signal, forceRetry }).catch(() => []),
         getUsers().catch(() => []),
       ]);
 
-      setProjects(projData);
-      setContracts(contData);
-      setUsers(usersData);
+      setProjects(Array.isArray(projData) ? projData : []);
+      setContracts(Array.isArray(contData) ? contData : []);
+      setUsers(Array.isArray(usersData) ? usersData : []);
+      setIsForbidden(false);
+      setForbiddenDetail(null);
     } catch (err: any) {
-      setError(err?.message || "Failed to load software delivery projects");
+      if (err?.name === "CanceledError" || err?.name === "AbortError") {
+        return;
+      }
+      if (err?.response?.status === 403 || err?.isCachedForbidden) {
+        setIsForbidden(true);
+        setForbiddenDetail(extractBackendDetail(err));
+      } else {
+        setError(extractBackendDetail(err));
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData(false);
   }, [loadData]);
 
   const contractMap = useMemo(() => new Map(contracts.map((c) => [c.id, c.title])), [contracts]);
@@ -249,7 +306,7 @@ export default function SoftwareProjects() {
         <select
           className="sw-filter-select"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => handleStatusFilterChange(e.target.value)}
         >
           <option value="">All Statuses</option>
           {SOFTWARE_PROJECT_STATUSES.map((st) => (
@@ -267,6 +324,21 @@ export default function SoftwareProjects() {
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
+
+        {(Boolean(searchTerm) || Boolean(statusFilter) || Boolean(priorityFilter)) && (
+          <button
+            type="button"
+            className="sw-btn-secondary"
+            style={{ padding: "8px 14px", fontSize: "0.82rem" }}
+            onClick={() => {
+              setSearchTerm("");
+              handleStatusFilterChange("");
+              setPriorityFilter("");
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Table Card */}
@@ -275,14 +347,46 @@ export default function SoftwareProjects() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             Loading software delivery projects...
           </div>
+        ) : isForbidden ? (
+          <div className="sw-forbidden-card">
+            <div className="sw-forbidden-icon-box">🔒</div>
+            <h3>Software Projects Access Restricted</h3>
+            <p>
+              This module is not enabled for your tenant industry or your user role does not have view permission.
+            </p>
+            {forbiddenDetail && (
+              <div className="sw-forbidden-detail">{forbiddenDetail}</div>
+            )}
+            <button
+              className="sw-btn-secondary"
+              style={{ marginTop: "8px" }}
+              onClick={() => void loadData(true)}
+            >
+              Retry Access
+            </button>
+          </div>
         ) : error ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#ef4444" }}>
-            <p>{error}</p>
-            <button className="sw-btn-secondary" onClick={loadData}>Retry</button>
+            <p style={{ marginBottom: "12px" }}>{error}</p>
+            <button className="sw-btn-secondary" onClick={() => void loadData(true)}>Retry</button>
           </div>
         ) : filteredList.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
-            No software delivery projects found matching your criteria.
+            <p>No software delivery projects found matching your criteria.</p>
+            {(Boolean(searchTerm) || Boolean(statusFilter) || Boolean(priorityFilter)) && (
+              <button
+                type="button"
+                className="sw-btn-secondary"
+                style={{ marginTop: "12px", padding: "6px 14px", fontSize: "0.82rem" }}
+                onClick={() => {
+                  setSearchTerm("");
+                  handleStatusFilterChange("");
+                  setPriorityFilter("");
+                }}
+              >
+                Reset Filters ({projects.length} available)
+              </button>
+            )}
           </div>
         ) : (
           <table className="sw-data-table">
