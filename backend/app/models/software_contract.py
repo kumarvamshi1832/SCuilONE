@@ -24,6 +24,11 @@ class SoftwareContract(Base):
     __tablename__ = "software_contracts"
     __table_args__ = (
         CheckConstraint(
+            "(billing_type = 'Time & Material' AND hourly_rate IS NOT NULL AND hourly_rate > 0) "
+            "OR (billing_type = 'Fixed Price' AND hourly_rate IS NULL)",
+            name="ck_software_contracts_hourly_rate_matches_billing_type",
+        ),
+        CheckConstraint(
             "milestone_billing_mode IN ('Sequential', 'Parallel')",
             name="ck_software_contracts_milestone_billing_mode",
         ),

@@ -10,7 +10,10 @@ from alembic import op
 revision: str = "ab91c3d2e4f7"
 down_revision: Union[str, Sequence[str], None] = "d4e7b3a91c58"
 branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+# The billing_type column is created by 9c4a7f2d1b60, which is on a parallel branch.
+# depends_on makes Alembic always run that migration first, without changing the
+# revision history (so databases already stamped at the merge revision keep working).
+depends_on: Union[str, Sequence[str], None] = "9c4a7f2d1b60"
 
 
 def upgrade() -> None:

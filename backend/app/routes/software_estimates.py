@@ -10,6 +10,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.software_estimate import SoftwareEstimate
+from app.models.deal import Deal
 from app.models.software_estimate_item import SoftwareEstimateItem
 from app.models.software_contract import SoftwareContract
 from app.models.software_requirement import SoftwareRequirement
@@ -657,6 +658,16 @@ def update_estimate(
                 estimate.id,
                 calculation["items"],
             )
+
+        # Once the estimate is accepted, synchronize its agreed value to the linked CRM deal.
+        # Draft/Sent estimates intentionally do not change the deal amount.
+        if changes.get("status") == "Accepted" and estimate.deal_id:
+            deal = db.query(Deal).filter(
+                Deal.id == estimate.deal_id, Deal.tenant_id == tenant_id
+            ).with_for_update().first()
+            if deal:
+                deal.amount = estimate.total_amount
+                deal.updated_at = datetime.utcnow()
 
         estimate.updated_at = datetime.utcnow()
 

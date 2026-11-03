@@ -12,6 +12,7 @@ from app.core.industry_modules import require_enabled_module
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.software_contract import SoftwareContract
+from app.models.deal import Deal
 from app.models.software_contract_milestone import SoftwareContractMilestone
 from app.models.software_invoice import (
     SoftwareCreditNote, SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment,
@@ -401,6 +402,35 @@ def record_invoice_payment(invoice_id: uuid.UUID, data: SoftwareInvoicePaymentCr
               "Recorded invoice payment", before_data={"amount_paid": paid_before, "status": old_status},
               after_data={"payment_amount": amount, "amount_paid": paid_before + amount, "status": invoice.status,
                           "payment_method": payment_method, "transaction_reference": transaction_reference})
+    # A deal is Won only when received payments cover its full agreed amount.
+    # Resolve the deal through the invoice's contract and keep the lookup tenant-scoped.
+    if invoice.status == "Paid":
+        contract = db.query(SoftwareContract).filter(
+            SoftwareContract.id == invoice.software_contract_id,
+            SoftwareContract.tenant_id == tenant_id,
+        ).first()
+        if contract and contract.deal_id:
+            deal = db.query(Deal).filter(
+                Deal.id == contract.deal_id, Deal.tenant_id == tenant_id
+            ).with_for_update().first()
+            if deal and deal.amount is not None:
+                # Include received payments on all invoices for this deal, not just this invoice.
+                deal_invoice_ids = db.query(SoftwareInvoice.id).join(
+                    SoftwareContract, SoftwareContract.id == SoftwareInvoice.software_contract_id
+                ).filter(
+                    SoftwareInvoice.tenant_id == tenant_id,
+                    SoftwareContract.tenant_id == tenant_id,
+                    SoftwareContract.deal_id == deal.id,
+                ).subquery()
+                deal_paid = db.query(func.coalesce(func.sum(SoftwareInvoicePayment.amount), 0)).filter(
+                    SoftwareInvoicePayment.tenant_id == tenant_id,
+                    SoftwareInvoicePayment.invoice_id.in_(db.query(deal_invoice_ids.c.id)),
+                    SoftwareInvoicePayment.status == "Received",
+                ).scalar() or Decimal("0.00")
+                if money(Decimal(str(deal_paid))) >= money(Decimal(str(deal.amount))):
+                    deal.stage = "Won"
+                    deal.updated_at = datetime.utcnow()
+
     try:
         db.commit()
     except IntegrityError as exc:

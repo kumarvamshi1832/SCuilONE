@@ -3,15 +3,25 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SoftwareInvoiceItemCreate(BaseModel):
-    description: str = Field(min_length=1, max_length=300)
-    quantity: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
-    unit_price: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    # For time-entry lines these three are optional: the description defaults to the task
+    # title, the quantity to the hours worked and the price to the contract hourly rate.
+    description: str | None = Field(default=None, min_length=1, max_length=300)
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=4)
+    unit_price: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     tax_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100, max_digits=5, decimal_places=2)
     time_entry_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def require_details_for_manual_lines(self):
+        if self.time_entry_id is None:
+            missing = [name for name in ("description", "quantity", "unit_price") if getattr(self, name) is None]
+            if missing:
+                raise ValueError(f"{', '.join(missing)} required unless the line is a time entry")
+        return self
 
 
 class SoftwareInvoiceCreate(BaseModel):
