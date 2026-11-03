@@ -264,6 +264,13 @@ def create_software_contract(
             detail="A contract already exists for this estimate",
         )
 
+    if estimate.billing_type == "Fixed Price" and not payload.payment_milestones:
+        raise HTTPException(status_code=422, detail="Fixed Price contracts require a payment milestone plan")
+    if estimate.billing_type == "Time & Material" and payload.payment_milestones:
+        raise HTTPException(status_code=422, detail="Time & Material contracts cannot have payment milestones")
+    if estimate.billing_type == "Time & Material" and estimate.hourly_rate is None:
+        raise HTTPException(status_code=422, detail="Time & Material estimates require an hourly rate")
+
     validate_assignee(db, tenant_id, payload.assigned_to)
 
     contract = SoftwareContract(
