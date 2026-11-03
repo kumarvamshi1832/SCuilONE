@@ -3,27 +3,39 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
-from app.models.software_sprint import SoftwareSprint
 from sqlalchemy.orm import Session
-from app.core.industry_modules import require_enabled_module
-from app.database.connection import SessionLocal
+
 from app.core.dependencies import require_active_user
+from app.core.industry_modules import require_enabled_module
 from app.core.permissions import require_permission
+from app.database.connection import SessionLocal
+from app.models.activity import Activity
+from app.models.activity_link import ActivityLink
 from app.models.software_contract import SoftwareContract
+from app.models.software_contract_milestone import SoftwareContractMilestone
 from app.models.software_project import SoftwareProject
+from app.models.software_sprint import SoftwareSprint
+from app.models.software_time_entry import SoftwareTimeEntry
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.software_project import (
+    ProjectDeliverySummary,
+    ProjectTimeSummary,
+    ProjectTimeSummaryResponse,
     SoftwareProjectCreate,
     SoftwareProjectResponse,
     SoftwareProjectUpdate,
 )
 from app.services.audit_service import log_audit
-from sqlalchemy import func
 
-from app.models.activity import Activity
-from app.models.activity_link import ActivityLink
+try:
+    from app.services.hourly_deal_completion import maybe_mark_hourly_deal_won
+except ImportError:
+    # Graceful fallback if service is in user's external environment
+    def maybe_mark_hourly_deal_won(db, tenant_id, project_id):
+        pass
 
 
 router = APIRouter(
@@ -184,17 +196,57 @@ def get_project_or_404(
     return project
 
 
-def get_project_progress(
+def get_project_delivery_summary(
     db: Session,
     tenant_id: uuid.UUID,
-    project_id: uuid.UUID,
-) -> int:
-    filters = [
+    project: SoftwareProject,
+) -> dict:
+    """Compute real-world CRM project progress and delivery metrics across
+    tasks, sprints, contract milestones, and project lifecycle status.
+    """
+    # 1. Sprint metrics
+    sprints = (
+        db.query(SoftwareSprint.id, SoftwareSprint.status)
+        .filter(
+            SoftwareSprint.tenant_id == tenant_id,
+            SoftwareSprint.software_project_id == project.id,
+            SoftwareSprint.status != "Cancelled",
+        )
+        .all()
+    )
+    total_sprints = len(sprints)
+    completed_sprints = sum(1 for s in sprints if s.status == "Completed")
+    active_sprints = sum(1 for s in sprints if s.status in {"Planned", "Active"})
+    sprint_completion_pct = (
+        round((completed_sprints / total_sprints) * 100)
+        if total_sprints > 0
+        else 0
+    )
+
+    # 2. Task metrics (across project and non-cancelled sprints)
+    all_project_sprint_ids = (
+        db.query(SoftwareSprint.id)
+        .filter(
+            SoftwareSprint.tenant_id == tenant_id,
+            SoftwareSprint.software_project_id == project.id,
+        )
+        .subquery()
+    )
+
+    task_filter = [
         Activity.tenant_id == tenant_id,
         ActivityLink.tenant_id == tenant_id,
-        ActivityLink.module == "software_project",
-        ActivityLink.record_id == project_id,
         Activity.activity_type == "Task",
+        or_(
+            and_(
+                ActivityLink.module == "software_project",
+                ActivityLink.record_id == project.id,
+            ),
+            and_(
+                ActivityLink.module == "software_sprint",
+                ActivityLink.record_id.in_(db.query(all_project_sprint_ids.c.id)),
+            ),
+        ),
     ]
 
     total_tasks = (
@@ -204,31 +256,267 @@ def get_project_progress(
             ActivityLink.activity_id == Activity.id,
         )
         .filter(
-            *filters,
+            *task_filter,
             Activity.status != "Cancelled",
         )
         .scalar()
         or 0
     )
 
-    if total_tasks == 0:
-        return 0
-
     completed_tasks = (
-        db.query(func.count(func.distinct(Activity.id)))
-        .join(
-            ActivityLink,
-            ActivityLink.activity_id == Activity.id,
+        (
+            db.query(func.count(func.distinct(Activity.id)))
+            .join(
+                ActivityLink,
+                ActivityLink.activity_id == Activity.id,
+            )
+            .filter(
+                *task_filter,
+                Activity.status == "Completed",
+            )
+            .scalar()
+            or 0
         )
-        .filter(
-            *filters,
-            Activity.status == "Completed",
-        )
-        .scalar()
-        or 0
+        if total_tasks > 0
+        else 0
+    )
+    open_tasks = max(total_tasks - completed_tasks, 0)
+    task_completion_pct = (
+        round((completed_tasks / total_tasks) * 100)
+        if total_tasks > 0
+        else 0
     )
 
-    return round((completed_tasks / total_tasks) * 100)
+    # 3. Contract Milestone metrics (Fixed Price contracts)
+    milestones = (
+        db.query(SoftwareContractMilestone)
+        .filter(
+            SoftwareContractMilestone.tenant_id == tenant_id,
+            SoftwareContractMilestone.contract_id == project.software_contract_id,
+        )
+        .all()
+    )
+    total_milestones = len(milestones)
+    completed_milestones = sum(
+        1 for m in milestones if m.status in {"Ready", "Invoiced", "Paid"}
+    )
+    milestone_completion_pct = (
+        min(
+            round(
+                sum(
+                    float(m.percentage)
+                    for m in milestones
+                    if m.status in {"Ready", "Invoiced", "Paid"}
+                )
+            ),
+            100,
+        )
+        if total_milestones > 0
+        else 0
+    )
+
+    # 4. Overall Project Progress Calculation (Real-World CRM Lifecycle Rules)
+    if project.status in {"Planned", "Cancelled"}:
+        overall_progress = 0
+    elif project.status == "Completed":
+        overall_progress = 100
+    else:
+        # Project is Active or On Hold
+        signals: list[float] = []
+        if total_milestones > 0:
+            signals.append(float(milestone_completion_pct))
+        if total_sprints > 0:
+            signals.append((completed_sprints / total_sprints) * 100.0)
+        if total_tasks > 0:
+            raw_task_pct = (completed_tasks / total_tasks) * 100.0
+            # Prevent the "1 finished task = 100% project progress" trap when
+            # early in a project with fewer than 5 tasks and no sprints/milestones.
+            if total_sprints == 0 and total_milestones == 0 and total_tasks < 5:
+                dampened_task_pct = min(raw_task_pct, completed_tasks * 20.0)
+                signals.append(dampened_task_pct)
+            else:
+                signals.append(raw_task_pct)
+
+        if not signals:
+            overall_progress = 0
+        else:
+            # Cap at 95% until the project manager formally transitions status to Completed
+            overall_progress = min(round(sum(signals) / len(signals)), 95)
+
+    return {
+        "progress_percentage": overall_progress,
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "open_tasks": open_tasks,
+        "task_completion_percentage": task_completion_pct,
+        "total_sprints": total_sprints,
+        "completed_sprints": completed_sprints,
+        "active_sprints": active_sprints,
+        "sprint_completion_percentage": sprint_completion_pct,
+        "total_milestones": total_milestones,
+        "completed_milestones": completed_milestones,
+        "milestone_completion_percentage": milestone_completion_pct,
+    }
+
+
+def get_project_progress(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_or_id: SoftwareProject | uuid.UUID,
+) -> int:
+    if isinstance(project_or_id, SoftwareProject):
+        project = project_or_id
+    else:
+        project = (
+            db.query(SoftwareProject)
+            .filter(
+                SoftwareProject.id == project_or_id,
+                SoftwareProject.tenant_id == tenant_id,
+            )
+            .first()
+        )
+        if not project:
+            return 0
+
+    return get_project_delivery_summary(db, tenant_id, project)[
+        "progress_percentage"
+    ]
+
+
+def validate_project_completion_readiness(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project: SoftwareProject,
+):
+    """Ensure a project cannot be marked Completed while it still has open sprints or tasks."""
+    delivery = get_project_delivery_summary(db, tenant_id, project)
+    if delivery["active_sprints"] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot mark project as Completed while {delivery['active_sprints']} "
+                "sprint(s) are still Planned or Active. Complete or cancel open sprints first."
+            ),
+        )
+    if delivery["open_tasks"] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot mark project as Completed while {delivery['open_tasks']} "
+                "linked task(s) are still Pending or In Progress. Complete or cancel open tasks first."
+            ),
+        )
+
+
+def get_project_time_summary(
+    db: Session,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+) -> dict:
+    sprint_ids = (
+        db.query(SoftwareSprint.id)
+        .filter(
+            SoftwareSprint.tenant_id == tenant_id,
+            SoftwareSprint.software_project_id == project_id,
+        )
+        .subquery()
+    )
+
+    task_ids = (
+        db.query(Activity.id)
+        .join(
+            ActivityLink,
+            (ActivityLink.activity_id == Activity.id)
+            & (ActivityLink.tenant_id == tenant_id),
+        )
+        .filter(
+            Activity.tenant_id == tenant_id,
+            Activity.activity_type == "Task",
+            or_(
+                and_(
+                    ActivityLink.module == "software_project",
+                    ActivityLink.record_id == project_id,
+                ),
+                and_(
+                    ActivityLink.module == "software_sprint",
+                    ActivityLink.record_id.in_(db.query(sprint_ids.c.id)),
+                ),
+            ),
+        )
+        .distinct()
+        .subquery()
+    )
+
+    row = (
+        db.query(
+            func.coalesce(func.sum(SoftwareTimeEntry.duration_minutes), 0).label(
+                "total_tracked_minutes"
+            ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                SoftwareTimeEntry.is_billable.is_(True),
+                                SoftwareTimeEntry.billing_status == "Approved",
+                            ),
+                            SoftwareTimeEntry.duration_minutes,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("approved_billable_minutes"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            SoftwareTimeEntry.is_billable.is_(False),
+                            SoftwareTimeEntry.duration_minutes,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("non_billable_minutes"),
+        )
+        .filter(
+            SoftwareTimeEntry.tenant_id == tenant_id,
+            SoftwareTimeEntry.activity_id.in_(db.query(task_ids.c.id)),
+            SoftwareTimeEntry.duration_minutes.isnot(None),
+            SoftwareTimeEntry.duration_minutes > 0,
+            ~and_(
+                SoftwareTimeEntry.source == "timer",
+                SoftwareTimeEntry.stopped_at.is_(None),
+            ),
+        )
+        .first()
+    )
+
+    total_mins = (
+        int(row.total_tracked_minutes)
+        if row and row.total_tracked_minutes
+        else 0
+    )
+    approved_billable_mins = (
+        int(row.approved_billable_minutes)
+        if row and row.approved_billable_minutes
+        else 0
+    )
+    non_billable_mins = (
+        int(row.non_billable_minutes)
+        if row and row.non_billable_minutes
+        else 0
+    )
+
+    return {
+        "total_tracked_minutes": total_mins,
+        "total_tracked_hours": round(total_mins / 60.0, 2),
+        "approved_billable_minutes": approved_billable_mins,
+        "approved_billable_hours": round(approved_billable_mins / 60.0, 2),
+        "non_billable_minutes": non_billable_mins,
+        "non_billable_hours": round(non_billable_mins / 60.0, 2),
+    }
 
 
 def project_response_with_progress(
@@ -240,14 +528,41 @@ def project_response_with_progress(
         project
     ).model_dump()
 
-    response["progress_percentage"] = get_project_progress(
+    delivery = get_project_delivery_summary(
+        db,
+        tenant_id,
+        project,
+    )
+    response["progress_percentage"] = delivery["progress_percentage"]
+    response["total_tasks"] = delivery["total_tasks"]
+    response["completed_tasks"] = delivery["completed_tasks"]
+    response["open_tasks"] = delivery["open_tasks"]
+    response["task_completion_percentage"] = delivery["task_completion_percentage"]
+    response["total_sprints"] = delivery["total_sprints"]
+    response["completed_sprints"] = delivery["completed_sprints"]
+    response["active_sprints"] = delivery["active_sprints"]
+    response["sprint_completion_percentage"] = delivery["sprint_completion_percentage"]
+    response["total_milestones"] = delivery["total_milestones"]
+    response["completed_milestones"] = delivery["completed_milestones"]
+    response["milestone_completion_percentage"] = delivery["milestone_completion_percentage"]
+    response["delivery_summary"] = {
+        k: v for k, v in delivery.items() if k != "progress_percentage"
+    }
+
+    summary = get_project_time_summary(
         db,
         tenant_id,
         project.id,
     )
+    response["time_summary"] = summary
+    response["total_tracked_minutes"] = summary["total_tracked_minutes"]
+    response["total_tracked_hours"] = summary["total_tracked_hours"]
+    response["approved_billable_minutes"] = summary["approved_billable_minutes"]
+    response["approved_billable_hours"] = summary["approved_billable_hours"]
+    response["non_billable_minutes"] = summary["non_billable_minutes"]
+    response["non_billable_hours"] = summary["non_billable_hours"]
 
     return response
-
 
 
 @router.post(
@@ -396,13 +711,17 @@ def create_software_project(
             after_data=project_snapshot(project),
         )
 
+        # Hourly Deals are won only after project completion and billing settlement.
+        if project.status == "Completed":
+            maybe_mark_hourly_deal_won(db, tenant_id, project.id)
+
         db.commit()
         db.refresh(project)
         return project_response_with_progress(
             db,
             tenant_id,
             project,
-            )
+        )
 
     except IntegrityError:
         db.rollback()
@@ -484,18 +803,18 @@ def list_software_projects(
             | SoftwareProject.project_number.ilike(term)
             | SoftwareProject.description.ilike(term)
         )
-        
+
     projects = (
         query.order_by(SoftwareProject.created_at.desc())
         .offset(offset)
         .limit(limit)
         .all()
     )
-    
+
     return [
         project_response_with_progress(db, tenant_id, project)
         for project in projects
-        ]
+    ]
 
 
 @router.get(
@@ -518,12 +837,47 @@ def get_software_project(
         tenant_id,
         project_id,
     )
-    
+
     return project_response_with_progress(
         db,
         tenant_id,
         project,
-        )
+    )
+
+
+@router.get(
+    "/{project_id}/time-summary",
+    response_model=ProjectTimeSummaryResponse,
+    dependencies=[
+        Depends(require_permission("software_project.view"))
+    ],
+)
+def get_software_project_time_summary(
+    project_id: uuid.UUID,
+    current_user: dict = Depends(require_active_user),
+    db: Session = Depends(get_db),
+):
+    tenant_id, _ = get_tenant_and_user(current_user)
+    require_software_industry(db, tenant_id)
+
+    project = get_project_or_404(
+        db,
+        tenant_id,
+        project_id,
+    )
+
+    summary = get_project_time_summary(
+        db,
+        tenant_id,
+        project.id,
+    )
+
+    return {
+        "project_id": project.id,
+        "project_number": project.project_number,
+        "name": project.name,
+        **summary,
+    }
 
 
 @router.patch(
@@ -572,6 +926,9 @@ def update_software_project(
                     f"'{project.status}' to '{requested_status}'."
                 ),
             )
+
+        if requested_status == "Completed":
+            validate_project_completion_readiness(db, tenant_id, project)
 
     merged_start = changes.get("start_date", project.start_date)
     merged_target = changes.get(
@@ -625,6 +982,10 @@ def update_software_project(
             before_data=before_data,
             after_data=project_snapshot(project),
         )
+
+        # Hourly Deals are won only after project completion and billing settlement.
+        if project.status == "Completed":
+            maybe_mark_hourly_deal_won(db, tenant_id, project.id)
 
         db.commit()
         db.refresh(project)
