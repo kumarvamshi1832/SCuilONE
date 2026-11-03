@@ -12,9 +12,8 @@ from app.core.industry_modules import require_enabled_module
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.software_contract import SoftwareContract
+from app.models.deal import Deal
 from app.models.software_contract_milestone import SoftwareContractMilestone
-from app.models.activity_link import ActivityLink
-from app.models.software_sprint import SoftwareSprint
 from app.models.software_invoice import (
     SoftwareCreditNote, SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment,
 )
@@ -197,9 +196,9 @@ def create_invoice(data: SoftwareInvoiceCreate, current_user: dict = Depends(req
     subtotal_total = Decimal("0.00")
     tax_total = Decimal("0.00")
     for item_data in data.items:
-        description = (item_data.description or "").strip()
-        quantity = Decimal(item_data.quantity or 0).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
-        unit_price = money(Decimal(item_data.unit_price)) if item_data.unit_price is not None else Decimal("0.00")
+        description = item_data.description.strip()
+        quantity = Decimal(item_data.quantity).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
+        unit_price = money(Decimal(item_data.unit_price))
         tax_percent = Decimal(item_data.tax_percent)
         time_entry_id = item_data.time_entry_id
         if time_entry_id:
@@ -221,23 +220,6 @@ def create_invoice(data: SoftwareInvoiceCreate, current_user: dict = Depends(req
             ).first()
             if not activity:
                 raise HTTPException(status_code=404, detail="Task linked to time entry was not found")
-            # The work must belong to the project being invoiced (directly or through one of its sprints),
-            # otherwise one customer could be billed for another customer's hours.
-            on_project = db.query(ActivityLink.id).filter(
-                ActivityLink.tenant_id == tenant_id, ActivityLink.activity_id == activity.id,
-                ActivityLink.module == "software_project", ActivityLink.record_id == project.id,
-            ).first()
-            if not on_project:
-                sprint_ids = [row[0] for row in db.query(ActivityLink.record_id).filter(
-                    ActivityLink.tenant_id == tenant_id, ActivityLink.activity_id == activity.id,
-                    ActivityLink.module == "software_sprint",
-                ).all()]
-                on_project = sprint_ids and db.query(SoftwareSprint.id).filter(
-                    SoftwareSprint.tenant_id == tenant_id, SoftwareSprint.id.in_(sprint_ids),
-                    SoftwareSprint.software_project_id == project.id,
-                ).first()
-            if not on_project:
-                raise HTTPException(status_code=400, detail="This time entry does not belong to the project being invoiced")
             description = description or activity.title
             quantity = (Decimal(entry.duration_minutes) / Decimal(60)).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
             # Contract rate is authoritative for Time & Material billing.
@@ -420,6 +402,35 @@ def record_invoice_payment(invoice_id: uuid.UUID, data: SoftwareInvoicePaymentCr
               "Recorded invoice payment", before_data={"amount_paid": paid_before, "status": old_status},
               after_data={"payment_amount": amount, "amount_paid": paid_before + amount, "status": invoice.status,
                           "payment_method": payment_method, "transaction_reference": transaction_reference})
+    # A deal is Won only when received payments cover its full agreed amount.
+    # Resolve the deal through the invoice's contract and keep the lookup tenant-scoped.
+    if invoice.status == "Paid":
+        contract = db.query(SoftwareContract).filter(
+            SoftwareContract.id == invoice.software_contract_id,
+            SoftwareContract.tenant_id == tenant_id,
+        ).first()
+        if contract and contract.deal_id:
+            deal = db.query(Deal).filter(
+                Deal.id == contract.deal_id, Deal.tenant_id == tenant_id
+            ).with_for_update().first()
+            if deal and deal.amount is not None:
+                # Include received payments on all invoices for this deal, not just this invoice.
+                deal_invoice_ids = db.query(SoftwareInvoice.id).join(
+                    SoftwareContract, SoftwareContract.id == SoftwareInvoice.software_contract_id
+                ).filter(
+                    SoftwareInvoice.tenant_id == tenant_id,
+                    SoftwareContract.tenant_id == tenant_id,
+                    SoftwareContract.deal_id == deal.id,
+                ).subquery()
+                deal_paid = db.query(func.coalesce(func.sum(SoftwareInvoicePayment.amount), 0)).filter(
+                    SoftwareInvoicePayment.tenant_id == tenant_id,
+                    SoftwareInvoicePayment.invoice_id.in_(db.query(deal_invoice_ids.c.id)),
+                    SoftwareInvoicePayment.status == "Received",
+                ).scalar() or Decimal("0.00")
+                if money(Decimal(str(deal_paid))) >= money(Decimal(str(deal.amount))):
+                    deal.stage = "Won"
+                    deal.updated_at = datetime.utcnow()
+
     try:
         db.commit()
     except IntegrityError as exc:
