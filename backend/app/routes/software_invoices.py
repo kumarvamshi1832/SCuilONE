@@ -166,6 +166,14 @@ def create_invoice(data: SoftwareInvoiceCreate, current_user: dict = Depends(req
         raise HTTPException(status_code=404, detail="Project or contract not found for this tenant")
     if project.software_contract_id != contract.id:
         raise HTTPException(status_code=400, detail="The selected project is not linked to this contract")
+    if contract.billing_type not in {"Fixed Price", "Time & Material"}:
+        raise HTTPException(status_code=400, detail="Contract has an unsupported billing type")
+    if contract.billing_type == "Fixed Price" and any(item.time_entry_id for item in data.items):
+        raise HTTPException(status_code=400, detail="Fixed Price contracts must be invoiced through payment milestones")
+    if contract.billing_type == "Time & Material" and any(not item.time_entry_id for item in data.items):
+        raise HTTPException(status_code=400, detail="Time & Material invoices must contain approved time entries only")
+    if contract.billing_type == "Time & Material" and contract.hourly_rate is None:
+        raise HTTPException(status_code=400, detail="Time & Material contract is missing its hourly rate")
     effective_issue_date = data.issue_date or date.today()
     if data.due_date and data.due_date < effective_issue_date:
         raise HTTPException(status_code=400, detail="due_date cannot be before issue_date")
@@ -213,6 +221,8 @@ def create_invoice(data: SoftwareInvoiceCreate, current_user: dict = Depends(req
                 raise HTTPException(status_code=404, detail="Task linked to time entry was not found")
             description = description or activity.title
             quantity = (Decimal(entry.duration_minutes) / Decimal(60)).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
+            # Contract rate is authoritative for Time & Material billing.
+            unit_price = money(Decimal(str(contract.hourly_rate)))
         line_subtotal = money(quantity * unit_price)
         line_tax = money(line_subtotal * tax_percent / Decimal(100))
         line_total = money(line_subtotal + line_tax)

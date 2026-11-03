@@ -27,6 +27,10 @@ class SoftwareContract(Base):
             "milestone_billing_mode IN ('Sequential', 'Parallel')",
             name="ck_software_contracts_milestone_billing_mode",
         ),
+        CheckConstraint(
+            "billing_type IN ('Fixed Price', 'Time & Material')",
+            name="ck_software_contracts_billing_type",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
