@@ -6,6 +6,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -197,6 +198,15 @@ class SoftwareEstimate(Base):
     
 
     __table_args__ = (
+        CheckConstraint(
+            "billing_type IN ('Fixed Price', 'Time & Material')",
+            name="ck_software_estimates_billing_type_valid",
+        ),
+        CheckConstraint(
+            "(billing_type = 'Time & Material' AND hourly_rate IS NOT NULL AND hourly_rate > 0) "
+            "OR (billing_type = 'Fixed Price' AND hourly_rate IS NULL)",
+            name="ck_software_estimates_hourly_rate_matches_billing_type",
+        ),
         UniqueConstraint(
             "tenant_id",
             "estimate_number",
