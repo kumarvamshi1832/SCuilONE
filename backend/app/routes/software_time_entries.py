@@ -3,6 +3,7 @@ from datetime import date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,13 +12,14 @@ from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.activity import Activity
 from app.models.activity_link import ActivityLink
+from app.models.software_sprint import SoftwareSprint
 from app.models.software_time_entry import SoftwareTimeEntry
-from app.services.audit_service import log_audit
 from app.schemas.software_time_entry import (
     ManualTimeEntryCreate,
     SoftwareTimeEntryResponse,
     TimerStartRequest,
 )
+from app.services.audit_service import log_audit
 
 
 router = APIRouter(
@@ -272,25 +274,48 @@ def list_time_entries(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="from_date must be on or before to_date",
         )
+
     if project_id is not None or sprint_id is not None:
-        query = query.join(
-            Activity,
-            (Activity.id == SoftwareTimeEntry.activity_id)
-            & (Activity.tenant_id == SoftwareTimeEntry.tenant_id),
-        ).join(
-            ActivityLink,
-            (ActivityLink.activity_id == Activity.id)
-            & (ActivityLink.tenant_id == tenant_id),
+        task_query = db.query(Activity.id).filter(
+            Activity.tenant_id == tenant_id,
+            Activity.activity_type == "Task",
         )
-        if project_id is not None:
-            query = query.filter(
-                ActivityLink.module == "software_project",
-                ActivityLink.record_id == project_id,
-            )
         if sprint_id is not None:
-            query = query.filter(
+            task_query = task_query.join(
+                ActivityLink,
+                (ActivityLink.activity_id == Activity.id)
+                & (ActivityLink.tenant_id == tenant_id),
+            ).filter(
                 ActivityLink.module == "software_sprint",
                 ActivityLink.record_id == sprint_id,
             )
+        if project_id is not None:
+            sprint_ids = (
+                db.query(SoftwareSprint.id)
+                .filter(
+                    SoftwareSprint.tenant_id == tenant_id,
+                    SoftwareSprint.software_project_id == project_id,
+                )
+                .subquery()
+            )
+            task_query = task_query.join(
+                ActivityLink,
+                (ActivityLink.activity_id == Activity.id)
+                & (ActivityLink.tenant_id == tenant_id),
+            ).filter(
+                or_(
+                    and_(
+                        ActivityLink.module == "software_project",
+                        ActivityLink.record_id == project_id,
+                    ),
+                    and_(
+                        ActivityLink.module == "software_sprint",
+                        ActivityLink.record_id.in_(db.query(sprint_ids.c.id)),
+                    ),
+                )
+            )
+        query = query.filter(
+            SoftwareTimeEntry.activity_id.in_(task_query.distinct().subquery())
+        )
 
     return query.order_by(SoftwareTimeEntry.work_date.desc(), SoftwareTimeEntry.created_at.desc()).all()

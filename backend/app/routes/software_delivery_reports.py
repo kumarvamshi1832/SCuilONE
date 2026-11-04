@@ -2,7 +2,7 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_active_user
@@ -64,6 +64,11 @@ def _entry_base(db: Session, tenant_id: UUID, from_date: date | None, to_date: d
     query = db.query(SoftwareTimeEntry).filter(
         SoftwareTimeEntry.tenant_id == tenant_id,
         SoftwareTimeEntry.duration_minutes.isnot(None),
+        SoftwareTimeEntry.duration_minutes > 0,
+        ~and_(
+            SoftwareTimeEntry.source == "timer",
+            SoftwareTimeEntry.stopped_at.is_(None),
+        ),
     )
     return _date_filters(query, from_date, to_date)
 
@@ -71,6 +76,21 @@ def _entry_base(db: Session, tenant_id: UUID, from_date: date | None, to_date: d
 def _totals(query):
     row = query.with_entities(
         func.coalesce(func.sum(SoftwareTimeEntry.duration_minutes), 0).label("total_minutes"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            SoftwareTimeEntry.is_billable.is_(True),
+                            SoftwareTimeEntry.billing_status == "Approved",
+                        ),
+                        SoftwareTimeEntry.duration_minutes,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("approved_billable_minutes"),
         func.coalesce(
             func.sum(case((SoftwareTimeEntry.is_billable.is_(True), SoftwareTimeEntry.duration_minutes), else_=0)),
             0,
@@ -82,17 +102,58 @@ def _totals(query):
         func.count(SoftwareTimeEntry.id).label("entry_count"),
     ).first()
     total = int(row.total_minutes or 0)
+    approved_billable = int(row.approved_billable_minutes or 0)
     billable = int(row.billable_minutes or 0)
     non_billable = int(row.non_billable_minutes or 0)
     return {
+        "total_tracked_minutes": total,
+        "total_tracked_hours": round(total / 60, 2),
+        "approved_billable_minutes": approved_billable,
+        "approved_billable_hours": round(approved_billable / 60, 2),
+        "non_billable_minutes": non_billable,
+        "non_billable_hours": round(non_billable / 60, 2),
         "total_minutes": total,
         "total_hours": round(total / 60, 2),
         "billable_minutes": billable,
         "billable_hours": round(billable / 60, 2),
-        "non_billable_minutes": non_billable,
-        "non_billable_hours": round(non_billable / 60, 2),
         "entry_count": int(row.entry_count or 0),
     }
+
+
+def _get_project_task_ids_subquery(db: Session, tenant_id: UUID, project_id: UUID):
+    sprint_ids = (
+        db.query(SoftwareSprint.id)
+        .filter(
+            SoftwareSprint.tenant_id == tenant_id,
+            SoftwareSprint.software_project_id == project_id,
+        )
+        .subquery()
+    )
+
+    return (
+        db.query(Activity.id)
+        .join(
+            ActivityLink,
+            (ActivityLink.activity_id == Activity.id)
+            & (ActivityLink.tenant_id == tenant_id),
+        )
+        .filter(
+            Activity.tenant_id == tenant_id,
+            Activity.activity_type == "Task",
+            or_(
+                and_(
+                    ActivityLink.module == "software_project",
+                    ActivityLink.record_id == project_id,
+                ),
+                and_(
+                    ActivityLink.module == "software_sprint",
+                    ActivityLink.record_id.in_(db.query(sprint_ids.c.id)),
+                ),
+            ),
+        )
+        .distinct()
+        .subquery()
+    )
 
 
 @router.get("/projects/{project_id}/time-summary")
@@ -106,18 +167,10 @@ def project_time_summary(
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
     _check_project(db, tenant_id, project_id)
-    query = _entry_base(db, tenant_id, from_date, to_date).join(
-        Activity,
-        (Activity.id == SoftwareTimeEntry.activity_id)
-        & (Activity.tenant_id == SoftwareTimeEntry.tenant_id),
-    ).join(
-        ActivityLink,
-        (ActivityLink.activity_id == Activity.id)
-        & (ActivityLink.tenant_id == tenant_id),
-    ).filter(
-        ActivityLink.module == "software_project",
-        ActivityLink.record_id == project_id,
-        Activity.activity_type == "Task",
+    task_ids = _get_project_task_ids_subquery(db, tenant_id, project_id)
+
+    query = _entry_base(db, tenant_id, from_date, to_date).filter(
+        SoftwareTimeEntry.activity_id.in_(db.query(task_ids.c.id))
     )
     return {"project_id": str(project_id), **_totals(query)}
 
@@ -133,17 +186,14 @@ def project_task_time_report(
 ):
     tenant_id = UUID(str(current_user["tenant_id"]))
     _check_project(db, tenant_id, project_id)
+    task_ids = _get_project_task_ids_subquery(db, tenant_id, project_id)
+
     query = _entry_base(db, tenant_id, from_date, to_date).join(
         Activity,
         (Activity.id == SoftwareTimeEntry.activity_id)
         & (Activity.tenant_id == SoftwareTimeEntry.tenant_id),
-    ).join(
-        ActivityLink,
-        (ActivityLink.activity_id == Activity.id)
-        & (ActivityLink.tenant_id == tenant_id),
     ).filter(
-        ActivityLink.module == "software_project",
-        ActivityLink.record_id == project_id,
+        Activity.id.in_(db.query(task_ids.c.id)),
         Activity.activity_type == "Task",
     )
     rows = query.with_entities(
@@ -211,17 +261,9 @@ def team_time_summary(
     query = _entry_base(db, tenant_id, from_date, to_date)
     if project_id is not None:
         _check_project(db, tenant_id, project_id)
-        query = query.join(
-            Activity,
-            (Activity.id == SoftwareTimeEntry.activity_id)
-            & (Activity.tenant_id == SoftwareTimeEntry.tenant_id),
-        ).join(
-            ActivityLink,
-            (ActivityLink.activity_id == Activity.id)
-            & (ActivityLink.tenant_id == tenant_id),
-        ).filter(
-            ActivityLink.module == "software_project",
-            ActivityLink.record_id == project_id,
+        task_ids = _get_project_task_ids_subquery(db, tenant_id, project_id)
+        query = query.filter(
+            SoftwareTimeEntry.activity_id.in_(db.query(task_ids.c.id))
         )
     rows = query.join(
         User,
@@ -263,16 +305,8 @@ def billing_time_summary(
     query = _entry_base(db, tenant_id, from_date, to_date)
     if project_id is not None:
         _check_project(db, tenant_id, project_id)
-        query = query.join(
-            Activity,
-            (Activity.id == SoftwareTimeEntry.activity_id)
-            & (Activity.tenant_id == SoftwareTimeEntry.tenant_id),
-        ).join(
-            ActivityLink,
-            (ActivityLink.activity_id == Activity.id)
-            & (ActivityLink.tenant_id == tenant_id),
-        ).filter(
-            ActivityLink.module == "software_project",
-            ActivityLink.record_id == project_id,
+        task_ids = _get_project_task_ids_subquery(db, tenant_id, project_id)
+        query = query.filter(
+            SoftwareTimeEntry.activity_id.in_(db.query(task_ids.c.id))
         )
     return {"project_id": str(project_id) if project_id else None, **_totals(query)}

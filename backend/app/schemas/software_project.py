@@ -1,4 +1,3 @@
-
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
@@ -21,6 +20,41 @@ SoftwareProjectPriority = Literal[
     "High",
     "Critical",
 ]
+
+
+class ProjectTimeSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total_tracked_minutes: int = 0
+    total_tracked_hours: float = 0.0
+    approved_billable_minutes: int = 0
+    approved_billable_hours: float = 0.0
+    non_billable_minutes: int = 0
+    non_billable_hours: float = 0.0
+
+
+class ProjectDeliverySummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    open_tasks: int = 0
+    task_completion_percentage: int = Field(default=0, ge=0, le=100)
+
+    total_sprints: int = 0
+    completed_sprints: int = 0
+    active_sprints: int = 0
+    sprint_completion_percentage: int = Field(default=0, ge=0, le=100)
+
+    total_milestones: int = 0
+    completed_milestones: int = 0
+    milestone_completion_percentage: int = Field(default=0, ge=0, le=100)
+
+
+class ProjectTimeSummaryResponse(ProjectTimeSummary):
+    project_id: UUID
+    project_number: str
+    name: str
 
 
 class SoftwareProjectCreate(BaseModel):
@@ -128,10 +162,26 @@ class SoftwareProjectResponse(BaseModel):
     status: SoftwareProjectStatus
     priority: SoftwareProjectPriority
     progress_percentage: int = Field(
-    default=0,
-    ge=0,
-    le=100,
-)
+        default=0,
+        ge=0,
+        le=100,
+    )
+
+    # Breakdown of tasks, sprints, and contract milestones
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    open_tasks: int = 0
+    task_completion_percentage: int = Field(default=0, ge=0, le=100)
+    total_sprints: int = 0
+    completed_sprints: int = 0
+    active_sprints: int = 0
+    sprint_completion_percentage: int = Field(default=0, ge=0, le=100)
+    total_milestones: int = 0
+    completed_milestones: int = 0
+    milestone_completion_percentage: int = Field(default=0, ge=0, le=100)
+    delivery_summary: ProjectDeliverySummary = Field(
+        default_factory=ProjectDeliverySummary
+    )
 
     budget: Decimal
     currency: str
@@ -142,6 +192,15 @@ class SoftwareProjectResponse(BaseModel):
 
     contract_snapshot: dict | None
     notes: str | None
+
+    # Project-level total time tracking summary
+    total_tracked_minutes: int = 0
+    total_tracked_hours: float = 0.0
+    approved_billable_minutes: int = 0
+    approved_billable_hours: float = 0.0
+    non_billable_minutes: int = 0
+    non_billable_hours: float = 0.0
+    time_summary: ProjectTimeSummary = Field(default_factory=ProjectTimeSummary)
 
     created_at: datetime
     updated_at: datetime
