@@ -27,6 +27,7 @@ class DocumentResponse(BaseModel):
 
     version_number: int
     is_confidential: bool
+    shared_with_customer: bool = False
     expires_at: datetime | None = None
 
     is_deleted: bool

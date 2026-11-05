@@ -93,6 +93,7 @@ def serialize_document(document: Document):
         "description": document.description,
         "version_number": document.version_number,
         "is_confidential": document.is_confidential,
+        "shared_with_customer": document.shared_with_customer,
         "expires_at": document.expires_at.isoformat() if document.expires_at else None,
         "is_deleted": document.is_deleted,
         "deleted_at": document.deleted_at.isoformat() if document.deleted_at else None,
@@ -111,6 +112,7 @@ def document_audit_data(document: Document):
         "description": document.description,
         "version_number": document.version_number,
         "is_confidential": document.is_confidential,
+        "shared_with_customer": document.shared_with_customer,
         "expires_at": document.expires_at.isoformat() if document.expires_at else None,
         "lead_id": str(document.lead_id) if document.lead_id else None,
         "contact_id": str(document.contact_id) if document.contact_id else None,
@@ -197,6 +199,7 @@ async def upload_document(
     document_type: str = Form("Other", max_length=50),
     description: str | None = Form(None),
     is_confidential: bool = Form(False),
+    shared_with_customer: bool = Form(False),
     lead_id: UUID | None = Form(None),
     contact_id: UUID | None = Form(None),
     account_id: UUID | None = Form(None),
@@ -333,6 +336,7 @@ async def upload_document(
             description=description,
             version_number=1,
             is_confidential=is_confidential,
+            shared_with_customer=shared_with_customer and not is_confidential,
             is_deleted=False,
         )
 
@@ -478,6 +482,53 @@ def download_document(
         "content_type": document.content_type,
         "download_url": document.file_url,
     }
+
+
+@router.patch("/{document_id}/sharing")
+def update_document_sharing(
+    document_id: UUID,
+    shared_with_customer: bool = Query(...),
+    current_user: dict = Depends(require_active_user),
+    permission=Depends(require_permission("document.create")),
+    db: Session = Depends(get_db),
+):
+    """Opt a document in or out of the customer portal."""
+    tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(current_user["user_id"])
+    document = get_document_or_404(db, document_id, tenant_id)
+
+    if shared_with_customer and document.is_confidential:
+        raise HTTPException(
+            status_code=409,
+            detail="Confidential documents cannot be shared with customers.",
+        )
+    if shared_with_customer and not (document.account_id or document.contact_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Only documents linked to an Account or Contact can be shared with the customer portal.",
+        )
+
+    before_data = document_audit_data(document)
+    document.shared_with_customer = shared_with_customer
+    document.updated_by = user_id
+
+    log_audit(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action="update",
+        module="documents",
+        record_id=document.id,
+        description=(
+            f"{'Shared' if shared_with_customer else 'Unshared'} document "
+            f"'{document.title}' {'with' if shared_with_customer else 'from'} the customer portal"
+        ),
+        before_data=before_data,
+        after_data={**before_data, "shared_with_customer": shared_with_customer},
+    )
+    db.commit()
+    db.refresh(document)
+    return {"message": "Document sharing updated", "document": serialize_document(document)}
 
 
 @router.delete("/{document_id}")

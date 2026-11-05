@@ -147,6 +147,14 @@ class Document(Base):
         default=False,
     )
 
+    # Opt-in: only documents explicitly shared are visible in the customer portal.
+    shared_with_customer: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,

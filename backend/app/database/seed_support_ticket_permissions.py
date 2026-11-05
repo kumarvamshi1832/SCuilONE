@@ -17,7 +17,9 @@ ROLE_ACCESS = {
     "Tenant Owner": {"support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete", "customer_portal.invite", "customer_portal.manage"},
     "Tenant Admin": {"support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete", "customer_portal.invite", "customer_portal.manage"},
     "Manager": {"support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete", "customer_portal.invite", "customer_portal.manage"},
-    "Support User": {"support_ticket.view", "support_ticket.create", "support_ticket.update"},
+    "Sales User": {"support_ticket.view", "support_ticket.create", "customer_portal.invite"},
+    "Operations User": {"support_ticket.view", "support_ticket.create", "support_ticket.update"},
+    "Support User": {"support_ticket.view", "support_ticket.create", "support_ticket.update", "customer_portal.invite"},
     "Read-only / Auditor": {"support_ticket.view"},
 }
 

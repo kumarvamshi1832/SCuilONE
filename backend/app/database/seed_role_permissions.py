@@ -7,7 +7,7 @@ from app.models.role_permission import RolePermission
 role_permissions = {
     "Tenant Owner": [
         "industry_config.update",
-        "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
+        "lead.view", "lead.create", "lead.update", "lead.delete", "lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
@@ -15,60 +15,56 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update", "activity.delete",
         "pipeline.view", "pipeline.create", "pipeline.update", "pipeline.delete",
         "user.view", "user.create", "user.update", "user.delete",
-        "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
+        "workflow.view", "workflow.create", "workflow.update", "workflow.delete", "workflow.activate",
         "workflow.execution.view",
-        "document.view","document.create","document.delete",
+        "document.view", "document.create", "document.delete",
         "audit.view",
-        "property.view","property.create","property.update","property.delete",
-        "project.view","project.create","project.update","project.delete",
-        "building.view","building.create","building.update","building.delete",
-        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
-        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "property.view", "property.create", "property.update", "property.delete",
+        "project.view", "project.create", "project.update", "project.delete",
+        "building.view", "building.create", "building.update", "building.delete",
+        "buyer_requirement.create", "buyer_requirement.view", "buyer_requirement.update", "buyer_requirement.delete",
+        "property_match.view", "property_match.create", "property_match.update", "property_match.delete",
         "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
-        "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
+        "booking.payment_plan.view", "booking.payment_plan.create", "booking.payment_plan.edit", "booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
-        "software_requirement.view","software_requirement.create",
-        "software_requirement.update","software_requirement.delete",
+        "software_requirement.view", "software_requirement.create",
+        "software_requirement.update", "software_requirement.delete",
 
-        "software_estimate.view","software_estimate.create",
-        "software_estimate.update","software_estimate.delete",
+        "software_estimate.view", "software_estimate.create",
+        "software_estimate.update", "software_estimate.delete",
 
-        "software_contract.view","software_contract.create",
-        "software_contract.update","software_contract.delete",
+        "software_contract.view", "software_contract.create",
+        "software_contract.update", "software_contract.delete",
 
-        "software_project.view","software_project.create",
-        "software_project.update","software_project.delete",
+        "software_project.view", "software_project.create",
+        "software_project.update", "software_project.delete",
 
-        "software_time.view","software_time.create",
-        "software_time.update","software_time.delete",
+        "software_time.view", "software_time.create",
+        "software_time.update", "software_time.delete",
         "software_time.approve",
 
-        
-        "software_invoice.view","software_invoice.create",
-        "software_invoice.update","software_invoice.delete",
-        "software_invoice.send","software_invoice.payment.view",
-        "software_invoice.payment.create","software_invoice.cancel",
+        "software_invoice.view", "software_invoice.create",
+        "software_invoice.update", "software_invoice.delete",
+        "software_invoice.send", "software_invoice.payment.view",
+        "software_invoice.payment.create", "software_invoice.cancel",
         "software_invoice.payment.reverse",
         "software_invoice.credit_note.create",
 
-
-                
-        "software_sprint.view","software_sprint.create","software_sprint.update",
-        "software_sprint.delete","software_sprint.manage_tasks","software_sprint.start",
+        "software_sprint.view", "software_sprint.create", "software_sprint.update",
+        "software_sprint.delete", "software_sprint.manage_tasks", "software_sprint.start",
         "software_sprint.complete",
 
-
-
-
+        "support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete",
+        "customer_portal.invite", "customer_portal.manage",
     ],
 
     "Tenant Admin": [
         "industry_config.update",
-        "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
+        "lead.view", "lead.create", "lead.update", "lead.delete", "lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
@@ -76,55 +72,55 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update", "activity.delete",
         "pipeline.view", "pipeline.create", "pipeline.update", "pipeline.delete",
         "user.view", "user.create", "user.update", "user.delete",
-        "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
+        "workflow.view", "workflow.create", "workflow.update", "workflow.delete", "workflow.activate",
         "workflow.execution.view",
-        "document.view","document.create","document.delete",
+        "document.view", "document.create", "document.delete",
         "audit.view",
-        "property.view","property.create","property.update","property.delete",
-        "project.view","project.create","project.update","project.delete",
-        "building.view","building.create","building.update","building.delete",
-        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
-        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "property.view", "property.create", "property.update", "property.delete",
+        "project.view", "project.create", "project.update", "project.delete",
+        "building.view", "building.create", "building.update", "building.delete",
+        "buyer_requirement.create", "buyer_requirement.view", "buyer_requirement.update", "buyer_requirement.delete",
+        "property_match.view", "property_match.create", "property_match.update", "property_match.delete",
         "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
-        "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
+        "booking.payment_plan.view", "booking.payment_plan.create", "booking.payment_plan.edit", "booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
-        "software_requirement.view","software_requirement.create",
-        "software_requirement.update","software_requirement.delete",
+        "software_requirement.view", "software_requirement.create",
+        "software_requirement.update", "software_requirement.delete",
 
-        "software_estimate.view","software_estimate.create",
-        "software_estimate.update","software_estimate.delete",
+        "software_estimate.view", "software_estimate.create",
+        "software_estimate.update", "software_estimate.delete",
 
-        "software_contract.view","software_contract.create",
-        "software_contract.update","software_contract.delete",
+        "software_contract.view", "software_contract.create",
+        "software_contract.update", "software_contract.delete",
 
-        "software_project.view","software_project.create",
-        "software_project.update","software_project.delete",
+        "software_project.view", "software_project.create",
+        "software_project.update", "software_project.delete",
 
-        "software_sprint.view","software_sprint.create","software_sprint.update",
-        "software_sprint.delete","software_sprint.manage_tasks","software_sprint.start",
+        "software_sprint.view", "software_sprint.create", "software_sprint.update",
+        "software_sprint.delete", "software_sprint.manage_tasks", "software_sprint.start",
         "software_sprint.complete",
 
-        "software_time.view","software_time.create",
-        "software_time.update","software_time.delete",
+        "software_time.view", "software_time.create",
+        "software_time.update", "software_time.delete",
         "software_time.approve",
 
-        
-        "software_invoice.view","software_invoice.create",
-        "software_invoice.update","software_invoice.delete",
-        "software_invoice.send","software_invoice.payment.view",
-        "software_invoice.payment.create","software_invoice.cancel",
+        "software_invoice.view", "software_invoice.create",
+        "software_invoice.update", "software_invoice.delete",
+        "software_invoice.send", "software_invoice.payment.view",
+        "software_invoice.payment.create", "software_invoice.cancel",
         "software_invoice.payment.reverse",
         "software_invoice.credit_note.create",
 
-
+        "support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete",
+        "customer_portal.invite", "customer_portal.manage",
     ],
 
     "Manager": [
-        "lead.view", "lead.create", "lead.update", "lead.delete","lead.assignment.override",
+        "lead.view", "lead.create", "lead.update", "lead.delete", "lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
         "deal.view", "deal.create", "deal.update", "deal.delete",
@@ -132,53 +128,51 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update", "activity.delete",
         "pipeline.view", "pipeline.create", "pipeline.update", "pipeline.delete",
         "user.view",
-        "workflow.view","workflow.create","workflow.update","workflow.delete","workflow.activate",
+        "workflow.view", "workflow.create", "workflow.update", "workflow.delete", "workflow.activate",
         "workflow.execution.view",
-        "document.view","document.create","document.delete",
+        "document.view", "document.create", "document.delete",
         "audit.view",
-        "property.view","property.create","property.update","property.delete",
-        "project.view","project.create","project.update","project.delete",
-        "building.view","building.create","building.update","building.delete",
-        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update","buyer_requirement.delete",
-        "property_match.view","property_match.create","property_match.update","property_match.delete",
+        "property.view", "property.create", "property.update", "property.delete",
+        "project.view", "project.create", "project.update", "project.delete",
+        "building.view", "building.create", "building.update", "building.delete",
+        "buyer_requirement.create", "buyer_requirement.view", "buyer_requirement.update", "buyer_requirement.delete",
+        "property_match.view", "property_match.create", "property_match.update", "property_match.delete",
         "site_visit.view", "site_visit.create", "site_visit.update", "site_visit.delete",
 
         "booking.view", "booking.create", "booking.update", "booking.cancel",
         "booking.payment.view", "booking.payment.create", "booking.payment.verify",
-        "booking.payment_plan.view","booking.payment_plan.create","booking.payment_plan.edit","booking.payment_plan.cancel",
+        "booking.payment_plan.view", "booking.payment_plan.create", "booking.payment_plan.edit", "booking.payment_plan.cancel",
         "booking.refund.manage", "booking.sale.complete",
 
-        "software_requirement.view","software_requirement.create",
-        "software_requirement.update","software_requirement.delete",
+        "software_requirement.view", "software_requirement.create",
+        "software_requirement.update", "software_requirement.delete",
 
-        "software_estimate.view","software_estimate.create",
-        "software_estimate.update","software_estimate.delete",
+        "software_estimate.view", "software_estimate.create",
+        "software_estimate.update", "software_estimate.delete",
 
-        "software_contract.view","software_contract.create",
-        "software_contract.update","software_contract.delete",
+        "software_contract.view", "software_contract.create",
+        "software_contract.update", "software_contract.delete",
 
-        "software_project.view","software_project.create",
-        "software_project.update","software_project.delete",
+        "software_project.view", "software_project.create",
+        "software_project.update", "software_project.delete",
 
-        "software_sprint.view","software_sprint.create","software_sprint.update",
-        "software_sprint.delete","software_sprint.manage_tasks","software_sprint.start",
+        "software_sprint.view", "software_sprint.create", "software_sprint.update",
+        "software_sprint.delete", "software_sprint.manage_tasks", "software_sprint.start",
         "software_sprint.complete",
 
-        "software_time.view","software_time.create",
-        "software_time.update","software_time.delete",
+        "software_time.view", "software_time.create",
+        "software_time.update", "software_time.delete",
         "software_time.approve",
 
-        
-        "software_invoice.view","software_invoice.create",
-        "software_invoice.update","software_invoice.delete",
-        "software_invoice.send","software_invoice.payment.view",
-        "software_invoice.payment.create","software_invoice.cancel",
+        "software_invoice.view", "software_invoice.create",
+        "software_invoice.update", "software_invoice.delete",
+        "software_invoice.send", "software_invoice.payment.view",
+        "software_invoice.payment.create", "software_invoice.cancel",
         "software_invoice.payment.reverse",
         "software_invoice.credit_note.create",
-        
 
-
-
+        "support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete",
+        "customer_portal.invite", "customer_portal.manage",
     ],
 
     "Sales User": [
@@ -190,31 +184,29 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update",
         "pipeline.view",
         "user.view",
-        "document.view","document.create",
-        "property.view","property.create","property.update",
-        "project.view","project.create","project.update",
-        "building.view","building.create","building.update",
-        "buyer_requirement.create","buyer_requirement.view","buyer_requirement.update",
-        "property_match.view","property_match.create","property_match.update",
+        "document.view", "document.create",
+        "property.view", "property.create", "property.update",
+        "project.view", "project.create", "project.update",
+        "building.view", "building.create", "building.update",
+        "buyer_requirement.create", "buyer_requirement.view", "buyer_requirement.update",
+        "property_match.view", "property_match.create", "property_match.update",
         "site_visit.view", "site_visit.create", "site_visit.update",
 
         "booking.view", "booking.create", "booking.update",
         "booking.payment.view", "booking.payment.create", "booking.payment_plan.view",
 
-        "software_requirement.view","software_requirement.create",
+        "software_requirement.view", "software_requirement.create",
         "software_requirement.update",
 
-        "software_estimate.view","software_estimate.create",
+        "software_estimate.view", "software_estimate.create",
         "software_estimate.update",
 
-        "software_contract.view","software_contract.create","software_contract.update",
+        "software_contract.view", "software_contract.create", "software_contract.update",
 
-        "software_project.view","software_project.create","software_project.update",
+        "software_project.view", "software_project.create", "software_project.update",
 
-        "software_sprint.view","software_invoice.view",
-
-
-
+        "software_sprint.view", "software_invoice.view",
+        "support_ticket.view", "support_ticket.create", "customer_portal.invite",
     ],
 
     "Operations User": [
@@ -226,12 +218,12 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update", "activity.delete",
         "pipeline.view",
         "user.view",
-        "document.view","document.create",
-        "property.view","property.create","property.update",
-        "project.view","project.create","project.update",
-        "building.view","building.create","building.update",
+        "document.view", "document.create",
+        "property.view", "property.create", "property.update",
+        "project.view", "project.create", "project.update",
+        "building.view", "building.create", "building.update",
         "buyer_requirement.view",
-        "property_match.view","property_match.create",
+        "property_match.view", "property_match.create",
         "site_visit.view", "site_visit.create",
 
         "booking.view", "booking.update", "booking.cancel",
@@ -239,22 +231,20 @@ role_permissions = {
         "booking.payment_plan.view",
         "booking.refund.manage", "booking.sale.complete",
 
-        "software_requirement.view","software_requirement.create",
+        "software_requirement.view", "software_requirement.create",
         "software_requirement.update",
 
-        "software_estimate.view","software_estimate.create",
+        "software_estimate.view", "software_estimate.create",
         "software_estimate.update",
 
-        "software_contract.view","software_contract.create","software_contract.update",
+        "software_contract.view", "software_contract.create", "software_contract.update",
 
-        "software_project.view","software_project.create","software_project.update",
+        "software_project.view", "software_project.create", "software_project.update",
 
-        "software_sprint.view","software_sprint.manage_tasks",
+        "software_sprint.view", "software_sprint.manage_tasks",
 
-        "software_time.view","software_time.create","software_time.update",
-        
-
-
+        "software_time.view", "software_time.create", "software_time.update",
+        "support_ticket.view", "support_ticket.create", "support_ticket.update",
     ],
 
     "Support User": [
@@ -266,7 +256,7 @@ role_permissions = {
         "activity.view", "activity.create", "activity.update",
         "pipeline.view",
         "user.view",
-        "document.view","document.create",
+        "document.view", "document.create",
         "property.view",
         "project.view",
         "building.view",
@@ -281,7 +271,9 @@ role_permissions = {
 
         "software_project.view",
         "software_sprint.view",
-        "software_invoice.view","software_invoice.payment.view",
+        "software_invoice.view", "software_invoice.payment.view",
+        "support_ticket.view", "support_ticket.create", "support_ticket.update",
+        "customer_portal.invite",
     ],
 
     "Read-only / Auditor": [
@@ -307,7 +299,8 @@ role_permissions = {
         "software_contract.view",
         "software_project.view",
         "software_sprint.view",
-        "software_time.view","software_invoice.view","software_invoice.payment.view",
+        "software_time.view", "software_invoice.view", "software_invoice.payment.view",
+        "support_ticket.view",
     ],
 }
 

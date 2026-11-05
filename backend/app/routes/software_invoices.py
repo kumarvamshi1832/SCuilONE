@@ -31,7 +31,7 @@ from app.services.hourly_deal_completion import maybe_mark_hourly_deal_won
 router = APIRouter(
     prefix="/api/v1/software-invoices",
     tags=["Software Invoices and Billing"],
-    dependencies=[Depends(require_enabled_module("software_contracts"))],
+    dependencies=[Depends(require_enabled_module("software_invoices"))],
 )
 CENT = Decimal("0.01")
 FOUR_PLACES = Decimal("0.0001")
