@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, DateTime
+from sqlalchemy import Boolean, String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,20 @@ class Tenant(Base):
     industry: Mapped[str] = mapped_column(
         String(100),
         nullable=False
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="Active",
+        server_default="Active"
+    )
+
+    is_platform: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false"
     )
 
     created_at: Mapped[datetime] = mapped_column(

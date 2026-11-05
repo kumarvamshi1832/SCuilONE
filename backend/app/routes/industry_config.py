@@ -28,16 +28,19 @@ SOFTWARE_MODULES = [
     {"key": "software_contracts", "label": "Software Contracts", "endpoint": "/api/v1/software-contracts"},
     {"key": "software_projects", "label": "Software Projects", "endpoint": "/api/v1/software-projects"},
     {"key": "software_sprints", "label": "Software Sprints", "endpoint": "/api/v1/software-sprints"},
+    {"key": "software_time_entries", "label": "Time Tracking", "endpoint": "/api/v1/software-time-entries"},
+    {"key": "software_invoices", "label": "Invoices & Billing", "endpoint": "/api/v1/software-invoices"},
+    {"key": "software_delivery_reports", "label": "Delivery Reports", "endpoint": "/api/v1/software-delivery-reports"},
 ]
 
 REAL_ESTATE_MODULES = [
-    {"key": "properties", "label": "Properties", "endpoint": "/api/v1/properties", "api_available": False},
-    {"key": "buildings", "label": "Buildings", "endpoint": "/api/v1/buildings", "api_available": False},
-    {"key": "real_estate_projects", "label": "Projects", "endpoint": "/api/v1/projects", "api_available": False},
-    {"key": "buyer_requirements", "label": "Buyer Requirements", "endpoint": "/api/v1/buyer-requirements", "api_available": False},
-    {"key": "property_matches", "label": "Property Matches", "endpoint": "/api/v1/property-matches", "api_available": False},
-    {"key": "site_visits", "label": "Site Visits", "endpoint": "/api/v1/site-visits", "api_available": False},
-    {"key": "bookings", "label": "Bookings", "endpoint": "/api/v1/bookings", "api_available": False},
+    {"key": "properties", "label": "Properties", "endpoint": "/api/v1/properties", "api_available": True},
+    {"key": "buildings", "label": "Buildings", "endpoint": "/api/v1/buildings", "api_available": True},
+    {"key": "real_estate_projects", "label": "Projects", "endpoint": "/api/v1/projects", "api_available": True},
+    {"key": "buyer_requirements", "label": "Buyer Requirements", "endpoint": "/api/v1/buyer-requirements", "api_available": True},
+    {"key": "property_matches", "label": "Property Matches", "endpoint": "/api/v1/property-matches", "api_available": True},
+    {"key": "site_visits", "label": "Site Visits", "endpoint": "/api/v1/site-visits", "api_available": True},
+    {"key": "bookings", "label": "Bookings", "endpoint": "/api/v1/bookings", "api_available": True},
 ]
 
 
@@ -90,7 +93,7 @@ def get_industry_config(
     pack = db.query(IndustryPack).filter(
         IndustryPack.pack_key == industry_key,
         IndustryPack.is_active.is_(True),
-    ).first() if industry_key != "other" else None
+    ).first()
     tenant_config = db.query(TenantIndustryConfig).filter(
         TenantIndustryConfig.tenant_id == tenant.id
     ).first() if pack else None

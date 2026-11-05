@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.property import Property
 from app.core.dependencies import require_active_user
+from app.core.industry_modules import require_enabled_module
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.property_image import PropertyImage
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/properties",
     tags=["Property Images"],
+    dependencies=[Depends(require_enabled_module("properties"))],
 )
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
