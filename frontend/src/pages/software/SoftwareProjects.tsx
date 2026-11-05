@@ -5,6 +5,7 @@ import {
   createSoftwareProject,
   updateSoftwareProject,
   deleteSoftwareProject,
+  getSoftwareProjectTimeSummary,
 } from "../../services/softwareProjectService";
 import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareContracts } from "../../services/softwareContractService";
@@ -16,6 +17,7 @@ import type {
   SoftwareProjectUpdate,
   SoftwareProjectStatus,
   SoftwareProjectPriority,
+  ProjectTimeSummary,
 } from "../../types/softwareProject";
 import {
   SOFTWARE_PROJECT_STATUSES,
@@ -24,6 +26,7 @@ import {
 import type { SoftwareContract } from "../../types/softwareContract";
 import type { User } from "../../types/user";
 
+import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
 import "./SoftwareModules.css";
 
 const INR = new Intl.NumberFormat("en-IN", {
@@ -59,6 +62,18 @@ export default function SoftwareProjects() {
     return resolveCanonicalStatus(fromParam || fromState);
   });
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [viewMode, setViewMode] = useState<SoftwareViewMode>(
+    () => (localStorage.getItem("software_projects_view_mode") as SoftwareViewMode) || "grid"
+  );
+
+  const handleViewModeChange = (mode: SoftwareViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("software_projects_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Sync with URL query parameter changes (supports Back / Forward navigation)
   useEffect(() => {
@@ -89,6 +104,61 @@ export default function SoftwareProjects() {
   const [deletingItem, setDeletingItem] = useState<SoftwareProject | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Time Summary State for Viewing Modal
+  const [projectTimeSummary, setProjectTimeSummary] = useState<ProjectTimeSummary | null>(null);
+  const [timeSummaryLoading, setTimeSummaryLoading] = useState(false);
+  const [timeSummaryError, setTimeSummaryError] = useState<string | null>(null);
+
+  const fetchTimeSummary = useCallback(async (projectId: string) => {
+    setTimeSummaryLoading(true);
+    setTimeSummaryError(null);
+    try {
+      const res = await getSoftwareProjectTimeSummary(projectId);
+      if (res) {
+        setProjectTimeSummary({
+          total_tracked_minutes: res.total_tracked_minutes ?? 0,
+          total_tracked_hours: res.total_tracked_hours ?? 0,
+          approved_billable_minutes: res.approved_billable_minutes ?? 0,
+          approved_billable_hours: res.approved_billable_hours ?? 0,
+          non_billable_minutes: res.non_billable_minutes ?? 0,
+          non_billable_hours: res.non_billable_hours ?? 0,
+        });
+      }
+    } catch (err: any) {
+      console.warn("Could not load project time summary:", err);
+      setTimeSummaryError(extractBackendDetail(err) || "Failed to load time tracking summary");
+    } finally {
+      setTimeSummaryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewingItem) {
+      if (viewingItem.time_summary) {
+        setProjectTimeSummary(viewingItem.time_summary);
+      } else if (
+        viewingItem.total_tracked_minutes !== undefined ||
+        viewingItem.total_tracked_hours !== undefined
+      ) {
+        setProjectTimeSummary({
+          total_tracked_minutes: viewingItem.total_tracked_minutes ?? 0,
+          total_tracked_hours: viewingItem.total_tracked_hours ?? 0,
+          approved_billable_minutes: viewingItem.approved_billable_minutes ?? 0,
+          approved_billable_hours: viewingItem.approved_billable_hours ?? 0,
+          non_billable_minutes: viewingItem.non_billable_minutes ?? 0,
+          non_billable_hours: viewingItem.non_billable_hours ?? 0,
+        });
+      } else {
+        setProjectTimeSummary(null);
+      }
+      void fetchTimeSummary(viewingItem.id);
+    } else {
+      setProjectTimeSummary(null);
+      setTimeSummaryError(null);
+      setTimeSummaryLoading(false);
+    }
+  }, [viewingItem, fetchTimeSummary]);
 
   // Form State
   const [formData, setFormData] = useState<SoftwareProjectCreate & { status?: SoftwareProjectStatus }>({
@@ -231,6 +301,9 @@ export default function SoftwareProjects() {
         };
         const updated = await updateSoftwareProject(editingItem.id, payload);
         setProjects((prev) => prev.map((p) => (p.id === editingItem.id ? updated : p)));
+        if (updated.status === "Completed") {
+          window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { projectId: updated.id } }));
+        }
       } else {
         const payload: SoftwareProjectCreate = {
           software_contract_id: formData.software_contract_id,
@@ -244,10 +317,14 @@ export default function SoftwareProjects() {
         };
         const created = await createSoftwareProject(payload);
         setProjects((prev) => [created, ...prev]);
+        if (created.status === "Completed") {
+          window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { projectId: created.id } }));
+        }
       }
       setIsModalOpen(false);
     } catch (err: any) {
-      setFormError(err?.response?.data?.detail || err?.message || "Failed to save project");
+      const errorMsg = extractBackendDetail(err) || err?.response?.data?.detail || err?.message || "Failed to save project";
+      setFormError(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -278,13 +355,16 @@ export default function SoftwareProjects() {
           </h1>
           <p>Track engineering deliverables, software sprints, architecture milestones, and delivery budgets.</p>
         </div>
-        <button className="sw-btn-primary" onClick={handleOpenCreate}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          New Delivery Project
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <button className="sw-btn-primary" onClick={handleOpenCreate}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New Delivery Project
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -388,7 +468,7 @@ export default function SoftwareProjects() {
               </button>
             )}
           </div>
-        ) : (
+        ) : viewMode === "table" ? (
           <table className="sw-data-table">
             <thead>
               <tr>
@@ -472,6 +552,141 @@ export default function SoftwareProjects() {
               ))}
             </tbody>
           </table>
+        ) : (
+          <div className="sw-grid-cards" style={{ padding: "16px" }}>
+            {filteredList.map((proj) => {
+              const progress = Math.min(100, Math.max(0, proj.progress_percentage || 0));
+              return (
+                <div key={proj.id} className="sw-grid-card">
+                  <div className="sw-grid-card-header">
+                    <div className="sw-grid-card-title-group">
+                      <h3 className="sw-grid-card-title" title={proj.name}>
+                        {proj.name}
+                      </h3>
+                      <div className="sw-grid-card-subtitle">
+                        <span>{proj.project_number}</span>
+                      </div>
+                    </div>
+                    <span
+                      className={`sw-badge ${proj.status?.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {proj.status}
+                    </span>
+                  </div>
+
+                  <div className="sw-grid-card-body">
+                    <div className="sw-grid-fields-grid">
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Contract</span>
+                        <span className="sw-grid-field-val highlight">
+                          {contractMap.get(proj.software_contract_id) || "Standard Delivery Contract"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Project Manager</span>
+                        <span className="sw-grid-field-val">
+                          {proj.project_manager_id
+                            ? userMap.get(proj.project_manager_id) || "Lead PM"
+                            : "Unassigned"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Priority</span>
+                        <span className="sw-grid-field-val">
+                          <span className={`sw-badge ${proj.priority?.toLowerCase()}`}>
+                            {proj.priority}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Budget</span>
+                        <span className="sw-grid-field-val success" style={{ fontSize: "0.92rem" }}>
+                          {INR.format(proj.budget)}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Start Date</span>
+                        <span className="sw-grid-field-val">{proj.start_date || "—"}</span>
+                      </div>
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Target End Date</span>
+                        <span className="sw-grid-field-val">{proj.target_end_date || "—"}</span>
+                      </div>
+                    </div>
+
+                    {/* Actual Progress (Use real backend progress) */}
+                    <div className="sw-grid-progress-box">
+                      <div className="sw-grid-progress-header">
+                        <span>Actual Progress</span>
+                        <strong>{progress}%</strong>
+                      </div>
+                      <div className="sw-grid-progress-track">
+                        <div
+                          className={`sw-grid-progress-fill ${progress === 100 ? "completed" : ""}`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {proj.description && (
+                      <div
+                        style={{
+                          fontSize: "0.76rem",
+                          color: "#64748b",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                        title={proj.description}
+                      >
+                        {proj.description}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="sw-grid-card-footer">
+                    <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+                      ID: {proj.id.slice(0, 8)}
+                    </span>
+                    <div className="sw-row-actions">
+                      <button
+                        className="sw-btn-icon"
+                        title="View Details"
+                        onClick={() => setViewingItem(proj)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                      <button
+                        className="sw-btn-icon"
+                        title="Edit Project"
+                        onClick={() => handleOpenEdit(proj)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        className="sw-btn-icon danger"
+                        title="Delete Project"
+                        onClick={() => setDeletingItem(proj)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -605,40 +820,245 @@ export default function SoftwareProjects() {
       )}
 
       {/* View Details Modal */}
-      {viewingItem && (
-        <div className="sw-modal-overlay" onClick={() => setViewingItem(null)}>
-          <div className="sw-modal-card" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="sw-modal-header">
-              <h2>{viewingItem.project_number}: {viewingItem.name}</h2>
-              <button className="sw-btn-icon" onClick={() => setViewingItem(null)}>✕</button>
-            </div>
-            <div className="sw-modal-body">
-              <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
-                <span className={`sw-badge ${viewingItem.status?.toLowerCase().replace(/\s+/g, "-")}`}>
-                  Status: {viewingItem.status}
-                </span>
-                <span className={`sw-badge ${viewingItem.priority?.toLowerCase()}`}>
-                  Priority: {viewingItem.priority}
-                </span>
-                <span className="sw-badge active">Budget: {INR.format(viewingItem.budget)}</span>
-                <span className="sw-badge discovery">Progress: {viewingItem.progress_percentage || 0}%</span>
+      {viewingItem && (() => {
+        const delivery = viewingItem.delivery_summary || {
+          total_tasks: viewingItem.total_tasks ?? 0,
+          completed_tasks: viewingItem.completed_tasks ?? 0,
+          open_tasks: viewingItem.open_tasks ?? 0,
+          task_completion_percentage: viewingItem.task_completion_percentage ?? 0,
+          total_sprints: viewingItem.total_sprints ?? 0,
+          completed_sprints: viewingItem.completed_sprints ?? 0,
+          active_sprints: viewingItem.active_sprints ?? 0,
+          sprint_completion_percentage: viewingItem.sprint_completion_percentage ?? 0,
+          total_milestones: viewingItem.total_milestones ?? 0,
+          completed_milestones: viewingItem.completed_milestones ?? 0,
+          milestone_completion_percentage: viewingItem.milestone_completion_percentage ?? 0,
+        };
+
+        const overallProgress = Math.min(100, Math.max(0, viewingItem.progress_percentage ?? 0));
+        const isCompleted = viewingItem.status === "Completed" || overallProgress === 100;
+
+        const effectiveTimeSummary = projectTimeSummary || viewingItem.time_summary || {
+          total_tracked_minutes: viewingItem.total_tracked_minutes ?? 0,
+          total_tracked_hours: viewingItem.total_tracked_hours ?? 0,
+          approved_billable_minutes: viewingItem.approved_billable_minutes ?? 0,
+          approved_billable_hours: viewingItem.approved_billable_hours ?? 0,
+          non_billable_minutes: viewingItem.non_billable_minutes ?? 0,
+          non_billable_hours: viewingItem.non_billable_hours ?? 0,
+        };
+
+        const hasTimeEntries = (effectiveTimeSummary?.total_tracked_minutes ?? 0) > 0;
+
+        return (
+          <div className="sw-modal-overlay" onClick={() => setViewingItem(null)}>
+            <div className="sw-modal-card" style={{ maxWidth: "760px", width: "95%" }} onClick={(e) => e.stopPropagation()}>
+              <div className="sw-modal-header">
+                <h2>{viewingItem.project_number}: {viewingItem.name}</h2>
+                <button className="sw-btn-icon" onClick={() => setViewingItem(null)}>✕</button>
               </div>
-              <p><strong>Contract:</strong> {contractMap.get(viewingItem.software_contract_id) || "—"}</p>
-              <p><strong>Project Manager:</strong> {viewingItem.project_manager_id ? userMap.get(viewingItem.project_manager_id) || "PM" : "Unassigned"}</p>
-              <p><strong>Timeline:</strong> {viewingItem.start_date || "—"} to {viewingItem.target_end_date || "—"}</p>
-              {viewingItem.description && (
-                <div>
-                  <strong>Description:</strong>
-                  <p style={{ marginTop: "4px", lineHeight: "1.6" }}>{viewingItem.description}</p>
+              <div className="sw-modal-body">
+                {/* Status Badges */}
+                <div style={{ display: "flex", gap: "10px", marginBottom: "16px", flexWrap: "wrap" }}>
+                  <span className={`sw-badge ${viewingItem.status?.toLowerCase().replace(/\s+/g, "-")}`}>
+                    Status: {viewingItem.status}
+                  </span>
+                  <span className={`sw-badge ${viewingItem.priority?.toLowerCase()}`}>
+                    Priority: {viewingItem.priority}
+                  </span>
+                  <span className="sw-badge active">Budget: {INR.format(viewingItem.budget)}</span>
+                  <span className="sw-badge discovery">Progress: {overallProgress}%</span>
                 </div>
-              )}
-            </div>
-            <div className="sw-modal-footer">
-              <button className="sw-btn-secondary" onClick={() => setViewingItem(null)}>Close</button>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px", marginBottom: "12px", fontSize: "0.88rem" }}>
+                  <p style={{ margin: 0 }}><strong>Contract:</strong> {contractMap.get(viewingItem.software_contract_id) || "—"}</p>
+                  <p style={{ margin: 0 }}><strong>Project Manager:</strong> {viewingItem.project_manager_id ? userMap.get(viewingItem.project_manager_id) || "PM" : "Unassigned"}</p>
+                  <p style={{ margin: 0 }}><strong>Timeline:</strong> {viewingItem.start_date || "—"} to {viewingItem.target_end_date || "—"}</p>
+                  {viewingItem.actual_end_date && (
+                    <p style={{ margin: 0, color: "#10b981" }}>
+                      <strong>Actual End Date:</strong> {viewingItem.actual_end_date}
+                    </p>
+                  )}
+                </div>
+
+                {viewingItem.description && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <strong style={{ fontSize: "0.85rem" }}>Description:</strong>
+                    <p style={{ marginTop: "4px", lineHeight: "1.5", fontSize: "0.85rem", color: "#64748b" }}>{viewingItem.description}</p>
+                  </div>
+                )}
+
+                {/* 1. Project Delivery Progress Section */}
+                <div className="sw-project-section">
+                  <div className="sw-section-title-row">
+                    <h3>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                      Project Delivery Progress
+                    </h3>
+                  </div>
+
+                  <div className="sw-progress-overview-box">
+                    <div className="sw-progress-header-line">
+                      <span className="sw-progress-label">Overall Delivery Completion</span>
+                      <span className="sw-progress-big-pct">{overallProgress}%</span>
+                    </div>
+                    <div className="sw-progress-track">
+                      <div
+                        className={`sw-progress-fill ${isCompleted ? "completed" : ""}`}
+                        style={{ width: `${overallProgress}%` }}
+                      />
+                    </div>
+                    <div className="sw-progress-subtext">
+                      {viewingItem.status === "Planned" && "Project is currently Planned (0% baseline). Progress will accrue as milestones, sprints, and tasks complete."}
+                      {viewingItem.status === "Cancelled" && "Project is Cancelled."}
+                      {viewingItem.status === "Completed" && "Project is 100% completed and formally signed off."}
+                      {viewingItem.status !== "Planned" && viewingItem.status !== "Cancelled" && viewingItem.status !== "Completed" && (
+                        "Dynamic progress calculated across contract milestones, sprints, and linked delivery tasks (capped at 95% until final project sign-off)."
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="sw-delivery-kpi-grid">
+                    {/* Tasks KPI Card */}
+                    <div className="sw-delivery-kpi-card">
+                      <div className="sw-delivery-kpi-title">
+                        <span>Tasks</span>
+                        <span className="sw-delivery-kpi-badge">{delivery.task_completion_percentage}% done</span>
+                      </div>
+                      <div className="sw-delivery-kpi-stats">
+                        <div className="sw-stat-line">
+                          <span>Total Tasks:</span>
+                          <strong>{delivery.total_tasks}</strong>
+                        </div>
+                        <div className="sw-stat-line">
+                          <span>Completed:</span>
+                          <strong style={{ color: "#10b981" }}>{delivery.completed_tasks}</strong>
+                        </div>
+                        <div className="sw-stat-line">
+                          <span>Open / Pending:</span>
+                          <strong style={{ color: delivery.open_tasks > 0 ? "#f59e0b" : "#64748b" }}>{delivery.open_tasks}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sprints KPI Card */}
+                    <div className="sw-delivery-kpi-card">
+                      <div className="sw-delivery-kpi-title">
+                        <span>Sprints</span>
+                        <span className="sw-delivery-kpi-badge">{delivery.sprint_completion_percentage}% done</span>
+                      </div>
+                      <div className="sw-delivery-kpi-stats">
+                        <div className="sw-stat-line">
+                          <span>Total Sprints:</span>
+                          <strong>{delivery.total_sprints}</strong>
+                        </div>
+                        <div className="sw-stat-line">
+                          <span>Completed:</span>
+                          <strong style={{ color: "#10b981" }}>{delivery.completed_sprints}</strong>
+                        </div>
+                        <div className="sw-stat-line">
+                          <span>Active / Planned:</span>
+                          <strong style={{ color: delivery.active_sprints > 0 ? "#0ea5e9" : "#64748b" }}>{delivery.active_sprints}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Milestones KPI Card */}
+                    <div className="sw-delivery-kpi-card">
+                      <div className="sw-delivery-kpi-title">
+                        <span>Milestones</span>
+                        <span className="sw-delivery-kpi-badge">{delivery.milestone_completion_percentage}% value</span>
+                      </div>
+                      <div className="sw-delivery-kpi-stats">
+                        <div className="sw-stat-line">
+                          <span>Total Milestones:</span>
+                          <strong>{delivery.total_milestones}</strong>
+                        </div>
+                        <div className="sw-stat-line">
+                          <span>Completed / Paid:</span>
+                          <strong style={{ color: "#10b981" }}>{delivery.completed_milestones}</strong>
+                        </div>
+                        <div className="sw-stat-line">
+                          <span>Progress Rate:</span>
+                          <strong>{delivery.milestone_completion_percentage}%</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Project Time Tracking Summary Section */}
+                <div className="sw-project-section">
+                  <div className="sw-section-title-row">
+                    <h3>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      Project Time Tracking Summary
+                    </h3>
+                    {timeSummaryLoading && (
+                      <span style={{ fontSize: "0.75rem", color: "#0ea5e9" }}>Refreshing metrics...</span>
+                    )}
+                  </div>
+
+                  {timeSummaryError && !hasTimeEntries ? (
+                    <div className="sw-error-banner" style={{ marginBottom: "12px" }}>
+                      <span>{timeSummaryError}</span>
+                      <button
+                        type="button"
+                        className="sw-btn-secondary"
+                        style={{ marginLeft: "12px", padding: "4px 10px", fontSize: "0.75rem" }}
+                        onClick={() => void fetchTimeSummary(viewingItem.id)}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : !hasTimeEntries && !timeSummaryLoading ? (
+                    <div className="sw-time-empty-card">
+                      <p style={{ margin: 0, fontWeight: 600 }}>No time entries recorded for this project yet.</p>
+                      <p style={{ margin: "4px 0 0 0", fontSize: "0.75rem" }}>
+                        Time entries logged in the Software Time Tracking module or associated with this project's tasks & sprints will appear here automatically.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="sw-time-summary-grid">
+                      <div className="sw-time-card">
+                        <div className="sw-time-card-title">Total Logged Time</div>
+                        <div className="sw-time-card-value">{effectiveTimeSummary.total_tracked_hours} hrs</div>
+                        <div className="sw-time-card-sub">{effectiveTimeSummary.total_tracked_minutes} mins total</div>
+                      </div>
+
+                      <div className="sw-time-card">
+                        <div className="sw-time-card-title">Approved Billable</div>
+                        <div className="sw-time-card-value" style={{ color: "#10b981" }}>{effectiveTimeSummary.approved_billable_hours} hrs</div>
+                        <div className="sw-time-card-sub" style={{ color: "#10b981" }}>{effectiveTimeSummary.approved_billable_minutes} mins billable</div>
+                      </div>
+
+                      <div className="sw-time-card">
+                        <div className="sw-time-card-title">Non-Billable Internal</div>
+                        <div className="sw-time-card-value" style={{ color: "#f59e0b" }}>{effectiveTimeSummary.non_billable_hours} hrs</div>
+                        <div className="sw-time-card-sub" style={{ color: "#f59e0b" }}>{effectiveTimeSummary.non_billable_minutes} mins internal</div>
+                      </div>
+
+                      <div className="sw-time-card">
+                        <div className="sw-time-card-title">Recorded Activity</div>
+                        <div className="sw-time-card-value" style={{ color: "#0ea5e9" }}>{effectiveTimeSummary.total_tracked_minutes}</div>
+                        <div className="sw-time-card-sub">minutes tracked</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="sw-modal-footer">
+                <button className="sw-btn-secondary" onClick={() => setViewingItem(null)}>Close</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Delete Confirmation */}
       {deletingItem && (

@@ -34,6 +34,7 @@ import type {
 import type { SoftwareProject } from "../../types/softwareProject";
 import type { SoftwareContract } from "../../types/softwareContract";
 
+import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
 import "./SoftwareModules.css";
 
 function formatCurrency(
@@ -79,6 +80,18 @@ export default function SoftwareInvoices() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
+  const [viewMode, setViewMode] = useState<SoftwareViewMode>(
+    () => (localStorage.getItem("software_invoices_view_mode") as SoftwareViewMode) || "grid"
+  );
+
+  const handleViewModeChange = (mode: SoftwareViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("software_invoices_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -183,7 +196,7 @@ export default function SoftwareInvoices() {
   useEffect(() => {
     getBillingSummary(projectFilter || undefined)
       .then((res) => setBillingSummary(res))
-      .catch(() => {});
+      .catch(() => { });
   }, [projectFilter]);
 
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
@@ -197,8 +210,8 @@ export default function SoftwareInvoices() {
   );
   const accountMap = useMemo(() => new Map(accounts.map((a: any) => [a.id, a])), [accounts]);
   const leadMap = useMemo(() => new Map(leads.map((l: any) => [l.id, l])), [leads]);
-  const estimateMap = useMemo(() => new Map(estimates.map((e: any) => [e.id, e])), [estimates]
-  );
+  // estimateMap reserved for future estimate link view
+  void estimates;
 
   const formSelectedContract = useMemo(() => {
     return contracts.find((c) => c.id === formData.software_contract_id) || null;
@@ -544,7 +557,8 @@ export default function SoftwareInvoices() {
         text: `Invoice ${created.invoice_number} created successfully.`,
         type: "success",
       });
-      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => {});
+      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => { });
+      window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { invoiceId: created.id } }));
     } catch (err: any) {
       setFormError(err?.response?.data?.detail || err?.message || "Failed to create invoice");
     } finally {
@@ -572,7 +586,7 @@ export default function SoftwareInvoices() {
       const project = projects.find((p) => p.id === fullInvoice.project_id) || null;
       const contract = contracts.find((c) => c.id === fullInvoice.software_contract_id) || null;
       const estimate = contract?.software_estimate_id
-        ? estimateMap.get(contract.software_estimate_id) || null
+        ? estimates.find((e) => e.id === contract.software_estimate_id) || null
         : null;
 
       let clientName = "";
@@ -626,7 +640,8 @@ export default function SoftwareInvoices() {
         setViewingItem(updated);
       }
       setActionMessage({ text: `Invoice marked as ${status}.`, type: "success" });
-      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => {});
+      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => { });
+      window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { invoiceId: updated.id } }));
     } catch (err: any) {
       setActionMessage({
         text: err?.response?.data?.detail || err?.message || "Failed to update invoice status",
@@ -704,7 +719,7 @@ export default function SoftwareInvoices() {
         )} recorded successfully for ${refreshedInvoice.invoice_number}. Current status: ${refreshedInvoice.status}.`,
         type: "success",
       });
-      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => {});
+      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => { });
     } catch (err: any) {
       const detail =
         err?.response?.data?.detail ||
@@ -751,7 +766,8 @@ export default function SoftwareInvoices() {
         setViewingItem(refreshed);
       }
 
-      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => {});
+      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => { });
+      window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { invoiceId: refreshed.id } }));
 
       setReversingPayment(null);
       setActionMessage({
@@ -821,7 +837,8 @@ export default function SoftwareInvoices() {
         setViewingItem(refreshed);
       }
 
-      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => {});
+      getBillingSummary(projectFilter || undefined).then((res) => setBillingSummary(res)).catch(() => { });
+      window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { invoiceId: refreshed.id } }));
 
       setCreditNoteInvoice(null);
       setActionMessage({
@@ -854,22 +871,25 @@ export default function SoftwareInvoices() {
             credit notes, and revenue collection.
           </p>
         </div>
-        {perms.canCreateInvoices && (
-          <button className="sw-btn-primary" onClick={handleOpenCreate}>
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Create Invoice
-          </button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          {perms.canCreateInvoices && (
+            <button className="sw-btn-primary" onClick={handleOpenCreate}>
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Create Invoice
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Action Notification */}
@@ -887,11 +907,10 @@ export default function SoftwareInvoices() {
               actionMessage.type === "success"
                 ? "rgba(16, 185, 129, 0.15)"
                 : "rgba(239, 68, 68, 0.15)",
-            border: `1px solid ${
-              actionMessage.type === "success"
+            border: `1px solid ${actionMessage.type === "success"
                 ? "rgba(16, 185, 129, 0.3)"
                 : "rgba(239, 68, 68, 0.3)"
-            }`,
+              }`,
             color: actionMessage.type === "success" ? "#10b981" : "#ef4444",
           }}
         >
@@ -1114,7 +1133,7 @@ export default function SoftwareInvoices() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             No software invoices found matching your criteria.
           </div>
-        ) : (
+        ) : viewMode === "table" ? (
           <table className="sw-data-table">
             <thead>
               <tr>
@@ -1235,19 +1254,18 @@ export default function SoftwareInvoices() {
 
                     <td>
                       <span
-                        className={`sw-badge ${
-                          inv.status === "Paid"
+                        className={`sw-badge ${inv.status === "Paid"
                             ? "accepted"
                             : inv.status === "Sent"
-                            ? "proposal"
-                            : inv.status === "Partially Paid"
-                            ? "under-review"
-                            : inv.status === "Credited"
-                            ? "credited"
-                            : inv.status === "Void"
-                            ? "rejected"
-                            : "draft"
-                        }`}
+                              ? "proposal"
+                              : inv.status === "Partially Paid"
+                                ? "under-review"
+                                : inv.status === "Credited"
+                                  ? "credited"
+                                  : inv.status === "Void"
+                                    ? "rejected"
+                                    : "draft"
+                          }`}
                       >
                         {inv.status}
                       </span>
@@ -1388,6 +1406,256 @@ export default function SoftwareInvoices() {
               })}
             </tbody>
           </table>
+        ) : (
+          <div className="sw-grid-cards" style={{ padding: "16px" }}>
+            {filteredList.map((inv) => {
+              const isOverdue =
+                Boolean(inv.is_overdue) ||
+                (Number(inv.balance_due) > 0 &&
+                  Boolean(inv.due_date) &&
+                  inv.due_date! < new Date().toISOString().slice(0, 10));
+
+              const canMarkSent = inv.status === "Draft" && perms.canSendInvoices;
+              const canPay =
+                (inv.status === "Sent" || inv.status === "Partially Paid") &&
+                Number(inv.balance_due) > 0 &&
+                perms.canRecordPayment;
+              const canCredit =
+                (inv.status === "Sent" || inv.status === "Partially Paid") &&
+                Number(inv.balance_due) > 0 &&
+                perms.canCreateCreditNote;
+              const canVoid =
+                perms.canCancelInvoices &&
+                (inv.status === "Draft" ||
+                  (inv.status === "Sent" &&
+                    Number(inv.amount_paid || 0) <= 0 &&
+                    (!inv.credit_notes || inv.credit_notes.length === 0)));
+
+              const project = projects.find((p) => p.id === inv.project_id) || null;
+              const contract = contracts.find((c) => c.id === inv.software_contract_id) || null;
+
+              let clientDisplayName = "";
+              if (contract?.account_id && accountMap.has(contract.account_id)) {
+                clientDisplayName = accountMap.get(contract.account_id)?.name || "";
+              } else if (contract?.lead_id && leadMap.has(contract.lead_id)) {
+                const ld = leadMap.get(contract.lead_id);
+                clientDisplayName = ld?.name || `${ld?.first_name || ""} ${ld?.last_name || ""}`.trim();
+              } else if (project?.name) {
+                clientDisplayName = `${project.name} Client`;
+              }
+
+              return (
+                <div key={inv.id} className="sw-grid-card">
+                  <div className="sw-grid-card-header">
+                    <div className="sw-grid-card-title-group">
+                      <h3 className="sw-grid-card-title" title={inv.invoice_number}>
+                        {inv.invoice_number}
+                      </h3>
+                      <div className="sw-grid-card-subtitle">
+                        <span>📁 {projectMap.get(inv.project_id) || "Project"}</span>
+                      </div>
+                    </div>
+                    <span
+                      className={`sw-badge ${
+                        inv.status === "Paid"
+                          ? "accepted"
+                          : inv.status === "Sent"
+                          ? "proposal"
+                          : inv.status === "Partially Paid"
+                          ? "under-review"
+                          : inv.status === "Credited"
+                          ? "credited"
+                          : inv.status === "Void"
+                          ? "rejected"
+                          : "draft"
+                      }`}
+                    >
+                      {inv.status}
+                    </span>
+                  </div>
+
+                  <div className="sw-grid-card-body">
+                    <div className="sw-grid-fields-grid">
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Client</span>
+                        <span className="sw-grid-field-val highlight">
+                          {clientDisplayName || "Enterprise Client"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Linked Contract</span>
+                        <span className="sw-grid-field-val">
+                          {contract?.contract_number || (inv.software_contract_id ? inv.software_contract_id.slice(0, 8) : "Standard Contract")}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Issue Date</span>
+                        <span className="sw-grid-field-val">{inv.issue_date || "—"}</span>
+                      </div>
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Due Date</span>
+                        <span className="sw-grid-field-val" style={{ color: isOverdue ? "#ef4444" : "inherit" }}>
+                          {inv.due_date || "—"}
+                          {isOverdue && (
+                            <span
+                              className="sw-badge overdue"
+                              style={{ marginLeft: "6px", padding: "1px 6px", fontSize: "0.65rem" }}
+                            >
+                              Overdue {inv.days_overdue ? `(${inv.days_overdue}d)` : ""}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Invoice Total</span>
+                        <span className="sw-grid-field-val" style={{ fontSize: "0.92rem", fontWeight: 700 }}>
+                          {formatCurrency(inv.total_amount, inv.currency)}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Amount Paid</span>
+                        <span className="sw-grid-field-val success" style={{ fontSize: "0.92rem" }}>
+                          {formatCurrency(inv.amount_paid, inv.currency)}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Balance Due</span>
+                        <span
+                          className="sw-grid-field-val"
+                          style={{
+                            fontSize: "1.02rem",
+                            fontWeight: 800,
+                            color: Number(inv.balance_due) > 0 ? "#f59e0b" : "#10b981",
+                          }}
+                        >
+                          {formatCurrency(inv.balance_due, inv.currency)}
+                        </span>
+                        {Number(inv.credited_amount) > 0 && (
+                          <div style={{ fontSize: "0.72rem", color: "#a855f7", marginTop: "2px" }}>
+                            Credited: {formatCurrency(inv.credited_amount, inv.currency)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {inv.notes && (
+                      <div
+                        style={{
+                          fontSize: "0.76rem",
+                          color: "#64748b",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                        title={inv.notes}
+                      >
+                        "{inv.notes}"
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="sw-grid-card-footer">
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                      {canMarkSent && (
+                        <button
+                          className="sw-btn-secondary"
+                          style={{ padding: "3px 8px", fontSize: "0.72rem" }}
+                          title="Mark as Sent to Client"
+                          onClick={() => handleUpdateStatus(inv.id, "Sent")}
+                        >
+                          Send
+                        </button>
+                      )}
+                      {canPay && (
+                        <button
+                          className="sw-btn-primary"
+                          style={{ padding: "3px 8px", fontSize: "0.72rem", background: "#10b981" }}
+                          title="Record Payment Receipt"
+                          onClick={() => handleOpenPaymentModal(inv)}
+                        >
+                          Payment
+                        </button>
+                      )}
+                      {canCredit && (
+                        <button
+                          className="sw-btn-secondary"
+                          style={{ padding: "3px 8px", fontSize: "0.72rem", borderColor: "#a855f7", color: "#a855f7" }}
+                          title="Issue Credit Note"
+                          onClick={() => handleOpenCreditNoteModal(inv)}
+                        >
+                          Credit
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="sw-row-actions">
+                      <button
+                        className="sw-btn-icon"
+                        title="View Invoice Details"
+                        onClick={() => setViewingItem(inv)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+
+                      <button
+                        className="sw-btn-icon"
+                        title="Download Invoice PDF"
+                        disabled={downloadingInvoiceId === inv.id}
+                        onClick={() => handleDownloadPdf(inv)}
+                        style={{
+                          color: "#0284c7",
+                          cursor: downloadingInvoiceId === inv.id ? "not-allowed" : "pointer",
+                          opacity: downloadingInvoiceId === inv.id ? 0.6 : 1,
+                        }}
+                      >
+                        {downloadingInvoiceId === inv.id ? (
+                          <svg
+                            className="sw-spin"
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                        )}
+                      </button>
+
+                      {canVoid && (
+                        <button
+                          className="sw-btn-icon danger"
+                          title="Void Invoice"
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to void invoice ${inv.invoice_number}?`)) {
+                              handleUpdateStatus(inv.id, "Void");
+                            }
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -1858,11 +2126,10 @@ export default function SoftwareInvoices() {
                 }}
               >
                 <span
-                  className={`sw-badge ${
-                    viewingItem.status === "Credited"
+                  className={`sw-badge ${viewingItem.status === "Credited"
                       ? "credited"
                       : viewingItem.status?.toLowerCase().replace(/\s+/g, "-")
-                  }`}
+                    }`}
                 >
                   Status: {viewingItem.status}
                 </span>
@@ -1885,36 +2152,36 @@ export default function SoftwareInvoices() {
                 (Number(viewingItem.balance_due) > 0 &&
                   Boolean(viewingItem.due_date) &&
                   viewingItem.due_date! < new Date().toISOString().slice(0, 10))) && (
-                <div
-                  style={{
-                    padding: "10px 16px",
-                    borderRadius: "6px",
-                    background: "rgba(239, 68, 68, 0.15)",
-                    border: "1px solid rgba(239, 68, 68, 0.35)",
-                    color: "#ef4444",
-                    fontSize: "0.85rem",
-                    fontWeight: 600,
-                    marginBottom: "16px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
-                >
-                  <span>⚠️</span>
-                  <span>
-                    This invoice is past due ({viewingItem.due_date}). Overdue by{" "}
-                    {viewingItem.days_overdue ||
-                      Math.max(
-                        1,
-                        Math.floor(
-                          (Date.now() - new Date(viewingItem.due_date!).getTime()) /
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      background: "rgba(239, 68, 68, 0.15)",
+                      border: "1px solid rgba(239, 68, 68, 0.35)",
+                      color: "#ef4444",
+                      fontSize: "0.85rem",
+                      fontWeight: 600,
+                      marginBottom: "16px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <span>⚠️</span>
+                    <span>
+                      This invoice is past due ({viewingItem.due_date}). Overdue by{" "}
+                      {viewingItem.days_overdue ||
+                        Math.max(
+                          1,
+                          Math.floor(
+                            (Date.now() - new Date(viewingItem.due_date!).getTime()) /
                             (1000 * 60 * 60 * 24)
-                        )
-                      )}{" "}
-                    days.
-                  </span>
-                </div>
-              )}
+                          )
+                        )}{" "}
+                      days.
+                    </span>
+                  </div>
+                )}
 
               {/* Financial Balances Summary — 4 Core Cards */}
               <div
@@ -2099,123 +2366,123 @@ export default function SoftwareInvoices() {
                       margin: "24px 0 8px 0",
                     }}
                   >
-                <h4 style={{ margin: 0 }}>Payment History</h4>
-                {Number(viewingItem.balance_due) > 0 &&
-                  (viewingItem.status === "Sent" || viewingItem.status === "Partially Paid") &&
-                  perms.canRecordPayment && (
-                    <button
-                      className="sw-btn-primary"
-                      style={{
-                        padding: "4px 10px",
-                        fontSize: "0.75rem",
-                        background: "#10b981",
-                      }}
-                      onClick={() => handleOpenPaymentModal(viewingItem)}
-                    >
-                      + Record Payment
-                    </button>
-                  )}
-              </div>
-
-              <table className="sw-data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Method</th>
-                    <th>Reference</th>
-                    <th>Status</th>
-                    <th>Reversal Details / Remarks</th>
-                    <th style={{ textAlign: "right" }}>Amount</th>
-                    <th style={{ textAlign: "right" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(viewingItem.payments || []).map((pm: SoftwareInvoicePayment) => {
-                    const isReversed = pm.status === "Reversed";
-                    const canReverse =
-                      !isReversed &&
-                      viewingItem.status !== "Draft" &&
-                      viewingItem.status !== "Void" &&
-                      perms.canReversePayment;
-
-                    return (
-                      <tr key={pm.id} style={{ opacity: isReversed ? 0.7 : 1 }}>
-                        <td>{pm.payment_date}</td>
-                        <td>
-                          <span style={{ fontWeight: 600 }}>{pm.payment_method}</span>
-                        </td>
-                        <td>
-                          {pm.transaction_reference ? (
-                            <span
-                              style={{
-                                fontFamily: "monospace",
-                                fontWeight: 600,
-                                color: "#0ea5e9",
-                                background: "rgba(14, 165, 233, 0.1)",
-                                padding: "2px 8px",
-                                borderRadius: "4px",
-                                border: "1px solid rgba(14, 165, 233, 0.25)",
-                              }}
-                            >
-                              {pm.transaction_reference}
-                            </span>
-                          ) : (
-                            <span style={{ color: "#64748b" }}>—</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`sw-badge ${isReversed ? "reversed" : "active"}`}>
-                            {pm.status || "Received"}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
-                          {isReversed ? (
-                            <span style={{ color: "#ef4444" }}>
-                              Reversed: {pm.reversal_reason || "Cancelled receipt"}{" "}
-                              {pm.reversed_at ? `(${pm.reversed_at.slice(0, 10)})` : ""}
-                            </span>
-                          ) : (
-                            pm.notes || "—"
-                          )}
-                        </td>
-                        <td
+                    <h4 style={{ margin: 0 }}>Payment History</h4>
+                    {Number(viewingItem.balance_due) > 0 &&
+                      (viewingItem.status === "Sent" || viewingItem.status === "Partially Paid") &&
+                      perms.canRecordPayment && (
+                        <button
+                          className="sw-btn-primary"
                           style={{
-                            textAlign: "right",
-                            fontWeight: 700,
-                            color: isReversed ? "#94a3b8" : "#10b981",
-                            textDecoration: isReversed ? "line-through" : "none",
+                            padding: "4px 10px",
+                            fontSize: "0.75rem",
+                            background: "#10b981",
                           }}
+                          onClick={() => handleOpenPaymentModal(viewingItem)}
                         >
-                          {formatCurrency(pm.amount, viewingItem.currency)}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          {canReverse && (
-                            <button
-                              className="sw-btn-secondary"
-                              style={{
-                                padding: "3px 8px",
-                                fontSize: "0.7rem",
-                                borderColor: "#ef4444",
-                                color: "#ef4444",
-                              }}
-                              title="Reverse Payment"
-                              onClick={() => handleOpenReversePayment(viewingItem, pm)}
-                            >
-                              Reverse
-                            </button>
-                          )}
-                        </td>
+                          + Record Payment
+                        </button>
+                      )}
+                  </div>
+
+                  <table className="sw-data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Method</th>
+                        <th>Reference</th>
+                        <th>Status</th>
+                        <th>Reversal Details / Remarks</th>
+                        <th style={{ textAlign: "right" }}>Amount</th>
+                        <th style={{ textAlign: "right" }}>Action</th>
                       </tr>
-                    );
-                  })}
-                  {(!viewingItem.payments || viewingItem.payments.length === 0) && (
-                    <tr>
-                      <td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: "18px" }}>
-                        No payment receipts recorded yet for this invoice.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
+                    </thead>
+                    <tbody>
+                      {(viewingItem.payments || []).map((pm: SoftwareInvoicePayment) => {
+                        const isReversed = pm.status === "Reversed";
+                        const canReverse =
+                          !isReversed &&
+                          viewingItem.status !== "Draft" &&
+                          viewingItem.status !== "Void" &&
+                          perms.canReversePayment;
+
+                        return (
+                          <tr key={pm.id} style={{ opacity: isReversed ? 0.7 : 1 }}>
+                            <td>{pm.payment_date}</td>
+                            <td>
+                              <span style={{ fontWeight: 600 }}>{pm.payment_method}</span>
+                            </td>
+                            <td>
+                              {pm.transaction_reference ? (
+                                <span
+                                  style={{
+                                    fontFamily: "monospace",
+                                    fontWeight: 600,
+                                    color: "#0ea5e9",
+                                    background: "rgba(14, 165, 233, 0.1)",
+                                    padding: "2px 8px",
+                                    borderRadius: "4px",
+                                    border: "1px solid rgba(14, 165, 233, 0.25)",
+                                  }}
+                                >
+                                  {pm.transaction_reference}
+                                </span>
+                              ) : (
+                                <span style={{ color: "#64748b" }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`sw-badge ${isReversed ? "reversed" : "active"}`}>
+                                {pm.status || "Received"}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
+                              {isReversed ? (
+                                <span style={{ color: "#ef4444" }}>
+                                  Reversed: {pm.reversal_reason || "Cancelled receipt"}{" "}
+                                  {pm.reversed_at ? `(${pm.reversed_at.slice(0, 10)})` : ""}
+                                </span>
+                              ) : (
+                                pm.notes || "—"
+                              )}
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "right",
+                                fontWeight: 700,
+                                color: isReversed ? "#94a3b8" : "#10b981",
+                                textDecoration: isReversed ? "line-through" : "none",
+                              }}
+                            >
+                              {formatCurrency(pm.amount, viewingItem.currency)}
+                            </td>
+                            <td style={{ textAlign: "right" }}>
+                              {canReverse && (
+                                <button
+                                  className="sw-btn-secondary"
+                                  style={{
+                                    padding: "3px 8px",
+                                    fontSize: "0.7rem",
+                                    borderColor: "#ef4444",
+                                    color: "#ef4444",
+                                  }}
+                                  title="Reverse Payment"
+                                  onClick={() => handleOpenReversePayment(viewingItem, pm)}
+                                >
+                                  Reverse
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {(!viewingItem.payments || viewingItem.payments.length === 0) && (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: "18px" }}>
+                            No payment receipts recorded yet for this invoice.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
                   </table>
                 </>
               )}

@@ -10,11 +10,23 @@ import type {
 
 const BASE_URL = "/api/v1/customer-portal/tickets";
 
-export const getPortalTickets = async (params?: {
+export interface PortalTicketQueryParams {
+  status?: string;
+  priority?: string;
+  category?: string;
+  search?: string;
   limit?: number;
   offset?: number;
-}): Promise<PortalTicketListResponse> => {
+}
+
+export const getPortalTickets = async (
+  params?: PortalTicketQueryParams
+): Promise<PortalTicketListResponse> => {
   const query = new URLSearchParams();
+  if (params?.status) query.append("status", params.status);
+  if (params?.priority) query.append("priority", params.priority);
+  if (params?.category) query.append("category", params.category);
+  if (params?.search) query.append("search", params.search);
   if (params?.limit !== undefined) query.append("limit", String(params.limit));
   if (params?.offset !== undefined) query.append("offset", String(params.offset));
 
@@ -60,3 +72,24 @@ export const addPortalTicketComment = async (
   return response.data;
 };
 
+export const closePortalTicket = async (
+  ticketId: string,
+  comment?: string | null
+): Promise<PortalTicket> => {
+  const response = await portalApiClient.post<PortalTicket>(
+    `${BASE_URL}/${ticketId}/close`,
+    comment ? { comment } : {}
+  );
+  return response.data;
+};
+
+export const reopenPortalTicket = async (
+  ticketId: string,
+  comment: string
+): Promise<PortalTicket> => {
+  const response = await portalApiClient.post<PortalTicket>(
+    `${BASE_URL}/${ticketId}/reopen`,
+    { comment }
+  );
+  return response.data;
+};

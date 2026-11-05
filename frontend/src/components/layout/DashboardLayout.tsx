@@ -113,7 +113,6 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     icon: "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z",
     routes: [
       "/support-tickets",
-      "/customer-portal-users",
     ],
   },
   {
@@ -131,6 +130,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
     routes: [
       "/users",
+      "/customer-portal-users",
       "/roles",
       "/permissions",
       "/settings",
@@ -744,73 +744,51 @@ export default function DashboardLayout({
     role.includes("AUDITOR");
 
   const hasPermission = (permission: string): boolean => {
-
-    const userStr = sessionStorage.getItem("user");
-
+    const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
     if (!userStr) {
-
       return false;
-
     }
-
     try {
-
       const storedUser = JSON.parse(userStr);
-
-      let permissions: any[] = [];
-
-      if (Array.isArray(storedUser.permissions)) {
-
-        permissions = storedUser.permissions;
-
-      } else if (
-
-        storedUser.role &&
-
-        Array.isArray(storedUser.role.permissions)
-
+      const rawRole = typeof storedUser.role === "string" ? storedUser.role : storedUser?.role?.name || storedUser?.role_name || "";
+      const role = String(rawRole).trim().toUpperCase();
+      if (
+        storedUser.is_superuser === true ||
+        storedUser.is_admin === true ||
+        role === "ADMIN" ||
+        role === "SUPERADMIN" ||
+        role === "TENANT_ADMIN" ||
+        role === "TENANT ADMIN" ||
+        role === "TENANT_OWNER" ||
+        role === "TENANT OWNER" ||
+        role === "OWNER" ||
+        role.includes("OWNER") ||
+        role.includes("ADMIN")
       ) {
-
-        permissions = storedUser.role.permissions;
-
-      } else if (Array.isArray(storedUser.role_permissions)) {
-
-        permissions = storedUser.role_permissions;
-
+        return true;
       }
-
+      let permissions: any[] = [];
+      if (Array.isArray(storedUser.permissions)) {
+        permissions = storedUser.permissions;
+      } else if (storedUser.role && Array.isArray(storedUser.role.permissions)) {
+        permissions = storedUser.role.permissions;
+      } else if (Array.isArray(storedUser.role_permissions)) {
+        permissions = storedUser.role_permissions;
+      }
       return permissions.some((item) => {
-
-        if (typeof item === "string") {
-
-          return item.toLowerCase() === permission.toLowerCase();
-
-        }
-
-        if (
-
-          item &&
-
-          typeof item === "object" &&
-
-          typeof item.name === "string"
-
-        ) {
-
-          return item.name.toLowerCase() === permission.toLowerCase();
-
-        }
-
-        return false;
-
+        const pName = typeof item === "string" ? item : item?.name || "";
+        const lower = pName.toLowerCase().trim();
+        const target = permission.toLowerCase().trim();
+        return (
+          lower === target ||
+          lower === "all" ||
+          lower === "*" ||
+          lower.startsWith(target.split(".")[0] + ".*")
+        );
       });
-
     } catch {
-
       return false;
-
     }
-
   };
 
   const getNavItems = (): NavItem[] => {
@@ -1135,6 +1113,9 @@ export default function DashboardLayout({
       if (hasPermission("user.view")) {
         customNav.push({ label: "Users", path: `${basePath}/users`, icon: userIcon });
       }
+      if (hasPermission("customer_portal.invite")) {
+        customNav.push({ label: "Customer Portal Users", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon });
+      }
 
       if (hasPermission("role.view")) {
         customNav.push({ label: "Roles", path: `${basePath}/roles`, icon: roleIcon });
@@ -1158,9 +1139,6 @@ export default function DashboardLayout({
 
       if (hasPermission("support_ticket.view") || isSupport || isManager) {
         customNav.push({ label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon });
-      }
-      if (hasPermission("customer_portal.invite") || isSupport || isManager) {
-        customNav.push({ label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon });
       }
 
       if (isSupport && hasPermission("settings")) {
@@ -1187,9 +1165,17 @@ export default function DashboardLayout({
         { label: "Delivery Reports", path: `${basePath}/software-delivery-reports`, icon: softwareReportIcon },
         { label: "Invoices & Billing", path: `${basePath}/software-invoices`, icon: softwareInvoiceIcon },
         { label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon },
-        { label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon },
         { label: "Reports & Analytics", path: `${basePath}/reports`, icon: reportIcon },
         { label: "Users", path: `${basePath}/users`, icon: userIcon },
+        ...(hasPermission("customer_portal.invite")
+          ? [
+              {
+                label: "Customer Portal Users",
+                path: `${basePath}/customer-portal-users`,
+                icon: customerPortalIcon,
+              },
+            ]
+          : []),
         { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
         {
           label: "Permissions",
@@ -1238,18 +1224,25 @@ export default function DashboardLayout({
         { label: "Delivery Reports", path: `${basePath}/software-delivery-reports`, icon: softwareReportIcon },
         { label: "Invoices & Billing", path: `${basePath}/software-invoices`, icon: softwareInvoiceIcon },
         { label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon },
-        { label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon },
       );
     }
 
     defaultNav.push(
       { label: "Support Tickets", path: `${basePath}/support-tickets`, icon: supportTicketIcon },
-      { label: "Customer Portal", path: `${basePath}/customer-portal-users`, icon: customerPortalIcon },
       { label: "Documents", path: `${basePath}/documents`, icon: documentIcon },
       { label: "Activities", path: `${basePath}/activities`, icon: activityIcon },
       { label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon },
       { label: "Reports", path: `${basePath}/reports`, icon: reportIcon },
       { label: "Users", path: `${basePath}/users`, icon: userIcon },
+      ...(hasPermission("customer_portal.invite")
+        ? [
+            {
+              label: "Customer Portal Users",
+              path: `${basePath}/customer-portal-users`,
+              icon: customerPortalIcon,
+            },
+          ]
+        : []),
       { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
       {
         label: "Permissions",
@@ -1287,6 +1280,14 @@ export default function DashboardLayout({
   const isActiveNavItem = (path: string): boolean => {
     if (path === "/") {
       return location.pathname === "/";
+    }
+    if (path.endsWith("/customer-portal-users")) {
+      return (
+        location.pathname.endsWith("/customer-portal-users") ||
+        location.pathname.endsWith("/customer-portal/users") ||
+        location.pathname.includes("/customer-portal-users/") ||
+        location.pathname.includes("/customer-portal/users/")
+      );
     }
     return (
       location.pathname === path ||
@@ -1331,7 +1332,6 @@ export default function DashboardLayout({
           icon: "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z",
           routes: [
             "/support-tickets",
-            "/customer-portal-users",
           ],
         },
         {
@@ -1340,6 +1340,7 @@ export default function DashboardLayout({
           icon: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
           routes: [
             "/users",
+            "/customer-portal-users",
             "/roles",
             "/permissions",
             "/settings",
@@ -1390,7 +1391,12 @@ export default function DashboardLayout({
     };
     menuGroups.forEach((group) => {
       const hasActive = group.routes.some(
-        (r) => location.pathname.endsWith(r) || location.pathname.includes(`${r}/`)
+        (r) =>
+          location.pathname.endsWith(r) ||
+          location.pathname.includes(`${r}/`) ||
+          (r === "/customer-portal-users" &&
+            (location.pathname.endsWith("/customer-portal/users") ||
+              location.pathname.includes("/customer-portal/users/")))
       );
       if (hasActive) {
         initial[group.id] = true;
@@ -1408,7 +1414,14 @@ export default function DashboardLayout({
       menuGroups.forEach((group) => {
         const hasActive = group.routes.some((routeSuffix) => {
           const item = navItems.find((n) => n.path.endsWith(routeSuffix));
-          return item && (location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+          return (
+            item &&
+            (location.pathname === item.path ||
+              location.pathname.startsWith(`${item.path}/`) ||
+              (routeSuffix === "/customer-portal-users" &&
+                (location.pathname.endsWith("/customer-portal/users") ||
+                  location.pathname.includes("/customer-portal/users/"))))
+          );
         });
         if (hasActive) {
           setOpenGroups((prev) => ({ ...prev, [group.id]: true }));
@@ -1764,11 +1777,6 @@ return (
               tenant={tenant}
               currentIndustry={currentIndustry}
             />
-            {location.pathname.endsWith("/dashboard") && (
-              <span className="breadcrumb-current-page">
-                Dashboard
-              </span>
-            )}
 
             <GlobalSearch
               placeholder={

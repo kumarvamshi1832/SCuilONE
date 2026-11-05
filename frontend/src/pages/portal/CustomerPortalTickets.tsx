@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   PlusIcon,
@@ -10,14 +10,18 @@ import {
   XIcon,
   SendIcon,
   TicketIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalTickets,
   createPortalTicket,
 } from "../../services/customerPortalTicketService";
+import { getPortalProjects } from "../../services/customerPortalCommercialService";
 import type {
   PortalTicket,
   PortalTicketCreate,
+  PortalProject,
 } from "../../types/customerPortal";
 import "./CustomerPortalTickets.css";
 
@@ -44,14 +48,24 @@ const STATUSES = [
 export default function CustomerPortalTickets() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState<PortalTicket[]>([]);
+  const [totalTickets, setTotalTickets] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Filters
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+
+  // Server-side filters
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+
+  // Projects for association
+  const [availableProjects, setAvailableProjects] = useState<PortalProject[]>([]);
 
   // Create Modal
   const [isCreateOpen, setIsCreateOpen] = useState(() => searchParams.get("new") === "true");
@@ -61,6 +75,7 @@ export default function CustomerPortalTickets() {
     description: "",
     category: "Technical Support",
     priority: "Medium",
+    software_project_id: null,
   });
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -72,19 +87,35 @@ export default function CustomerPortalTickets() {
     setLoading(true);
     setError(null);
     try {
-      const response = await getPortalTickets({ limit: 100 });
-      setTickets(response.items);
+      const offset = (page - 1) * pageSize;
+      const response = await getPortalTickets({
+        status: statusFilter || undefined,
+        category: categoryFilter || undefined,
+        priority: priorityFilter || undefined,
+        search: search || undefined,
+        limit: pageSize,
+        offset,
+      });
+      setTickets(response.items || []);
+      setTotalTickets(response.total || 0);
     } catch (err: any) {
       console.error("Failed to load portal tickets:", err);
       setError(err?.response?.data?.detail || "Failed to load support tickets for your account.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, statusFilter, categoryFilter, priorityFilter, search]);
 
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Load eligible projects for ticket association
+  useEffect(() => {
+    getPortalProjects()
+      .then((data) => setAvailableProjects(data || []))
+      .catch((err) => console.warn("Could not load portal projects:", err));
+  }, []);
 
   // Synchronize modal state with searchParams ?new=true
   useEffect(() => {
@@ -101,21 +132,22 @@ export default function CustomerPortalTickets() {
     }
   };
 
-  // Filtered Tickets
-  const filteredTickets = useMemo(() => {
-    return tickets.filter((t) => {
-      if (statusFilter && t.status !== statusFilter) return false;
-      if (categoryFilter && t.category !== categoryFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        const matchNumber = t.ticket_number?.toLowerCase().includes(q);
-        const matchSubject = t.subject?.toLowerCase().includes(q);
-        const matchDesc = t.description?.toLowerCase().includes(q);
-        if (!matchNumber && !matchSubject && !matchDesc) return false;
-      }
-      return true;
-    });
-  }, [tickets, statusFilter, categoryFilter, search]);
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearch(searchInput.trim());
+    setPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setSearchInput("");
+    setSearch("");
+    setStatusFilter("");
+    setCategoryFilter("");
+    setPriorityFilter("");
+    setPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalTickets / pageSize));
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,19 +163,21 @@ export default function CustomerPortalTickets() {
         description: createForm.description.trim(),
         category: createForm.category,
         priority: createForm.priority,
+        software_project_id: createForm.software_project_id || null,
       });
-
-      showToast(`Ticket ${newTicket.ticket_number} submitted successfully!`, "success");
+      showToast(`Ticket #${newTicket.ticket_number} created successfully!`, "success");
       setCreateForm({
         subject: "",
         description: "",
         category: "Technical Support",
         priority: "Medium",
+        software_project_id: null,
       });
       handleCloseCreateModal();
       fetchTickets();
     } catch (err: any) {
-      showToast(err?.response?.data?.detail || "Failed to submit ticket", "error");
+      console.error("Failed to create ticket:", err);
+      showToast(err?.response?.data?.detail || "Failed to submit ticket.", "error");
     } finally {
       setCreateSubmitting(false);
     }
@@ -173,7 +207,7 @@ export default function CustomerPortalTickets() {
 
   return (
     <div className="cp-tickets-page">
-      {/* Toast */}
+      {/* Toast Alert */}
       {toast && (
         <div className={`support-alert ${toast.type}`}>
           {toast.type === "success" ? <CheckCircleIcon size={18} /> : <AlertCircleIcon size={18} />}
@@ -181,102 +215,143 @@ export default function CustomerPortalTickets() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="cp-page-header">
+      {/* Page Header */}
+      <div className="cp-tickets-header">
         <div>
-          <h1>
-            <TicketIcon size={24} color="#2563eb" />
-            <span>Support Tickets</span>
-          </h1>
-          <p>View and manage all tickets associated with your company account</p>
+          <h1>Support Tickets</h1>
+          <p>
+            Track technical issues, communicate directly with our engineering team, and view ticket resolutions.
+          </p>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button className="btn-secondary" onClick={fetchTickets} disabled={loading}>
-            <RefreshIcon size={16} className={loading ? "animate-spin" : ""} />
-            <span>Refresh</span>
-          </button>
-          <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>
-            <PlusIcon size={16} />
-            <span>Submit Ticket</span>
-          </button>
-        </div>
+        <button
+          className="btn-primary"
+          onClick={() => setIsCreateOpen(true)}
+          title="Submit a new support ticket"
+        >
+          <PlusIcon size={16} />
+          <span>New Support Ticket</span>
+        </button>
       </div>
 
-      {/* Filter Bar */}
-      <div className="support-filter-bar">
-        <div className="support-search-box">
-          <SearchIcon size={16} className="support-search-icon" />
-          <input
-            type="text"
-            placeholder="Search tickets by number, subject, or description..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <select
-          className="support-select"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="">All Statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          className="support-select"
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-        >
-          <option value="">All Categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        {(search || statusFilter || categoryFilter) && (
+      {/* Filter Toolbar */}
+      <div className="cp-tickets-toolbar">
+        <form onSubmit={handleSearchSubmit} className="cp-search-form" style={{ display: "flex", gap: 8, flex: 1, minWidth: 220 }}>
+          <div className="cp-search-box" style={{ flex: 1 }}>
+            <SearchIcon size={16} className="cp-search-icon" />
+            <input
+              type="text"
+              placeholder="Search by ticket #, subject or keyword..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn-secondary" style={{ padding: "8px 14px" }}>
+            Search
+          </button>
+        </form>
+
+        <div className="cp-filters-group">
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="cp-select"
+            aria-label="Filter by Status"
+          >
+            <option value="">All Statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
+            className="cp-select"
+            aria-label="Filter by Category"
+          >
+            <option value="">All Categories</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={priorityFilter}
+            onChange={(e) => {
+              setPriorityFilter(e.target.value);
+              setPage(1);
+            }}
+            className="cp-select"
+            aria-label="Filter by Priority"
+          >
+            <option value="">All Priorities</option>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+
+          {(search || statusFilter || categoryFilter || priorityFilter) && (
+            <button
+              className="btn-secondary"
+              onClick={handleClearFilters}
+              title="Reset all filters"
+            >
+              Clear
+            </button>
+          )}
+
           <button
             className="btn-secondary"
-            onClick={() => {
-              setSearch("");
-              setStatusFilter("");
-              setCategoryFilter("");
-            }}
+            onClick={fetchTickets}
+            title="Refresh tickets list"
+            aria-label="Refresh tickets"
           >
-            Clear Filters
+            <RefreshIcon size={16} />
           </button>
-        )}
+        </div>
       </div>
 
-      {/* Tickets Table */}
-      <div className="support-table-container">
-        {loading ? (
-          <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-            <RefreshIcon size={24} className="animate-spin" style={{ margin: "0 auto 12px" }} />
-            <div>Loading support tickets...</div>
+      {/* Tickets List */}
+      <div className="cp-tickets-card">
+        {error ? (
+          <div className="support-alert error">
+            <AlertCircleIcon size={18} />
+            <span>{error}</span>
           </div>
-        ) : error ? (
-          <div style={{ padding: "32px", textAlign: "center" }}>
-            <div className="support-alert error" style={{ maxWidth: 500, margin: "0 auto 16px" }}>
-              <AlertCircleIcon size={18} />
-              <span>{error}</span>
-            </div>
-            <button className="btn-secondary" onClick={fetchTickets}>
-              Retry Loading
+        ) : loading ? (
+          <div style={{ textAlign: "center", padding: "48px 20px", color: "#64748b" }}>
+            <RefreshIcon size={24} className="animate-spin" style={{ margin: "0 auto 10px" }} />
+            <div>Loading tickets...</div>
+          </div>
+        ) : tickets.length === 0 ? (
+          <div className="cp-empty-state">
+            <TicketIcon size={36} style={{ color: "#94a3b8", margin: "0 auto 12px" }} />
+            <h3>No tickets found</h3>
+            <p>
+              {search || statusFilter || categoryFilter || priorityFilter
+                ? "No support tickets match the selected filters."
+                : "You don't have any support tickets yet. Click below to submit your first ticket."}
+            </p>
+            <button className="btn-primary" onClick={() => setIsCreateOpen(true)} style={{ marginTop: 12 }}>
+              <PlusIcon size={16} />
+              <span>Submit Ticket</span>
             </button>
           </div>
-        ) : filteredTickets.length === 0 ? (
-          <div className="empty-state">
-            <TicketIcon size={48} style={{ opacity: 0.3, margin: "0 auto 12px" }} />
-            <h3>No Tickets Found</h3>
-            <p>
-              {search || statusFilter || categoryFilter
-                ? "No support tickets match your filter criteria."
-                : "Your company has no support tickets yet. Click 'Submit Ticket' to open a new request."}
-            </p>
-          </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="support-table">
+          <div className="cp-table-responsive">
+            <table className="cp-tickets-table">
               <thead>
                 <tr>
                   <th>Ticket #</th>
@@ -284,43 +359,49 @@ export default function CustomerPortalTickets() {
                   <th>Category</th>
                   <th>Priority</th>
                   <th>Status</th>
-                  <th>Submitted By</th>
                   <th>Created</th>
-                  <th>Last Update</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
+                  <th>Updated</th>
+                  <th style={{ textAlign: "right" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredTickets.map((ticket) => (
-                  <tr key={ticket.id}>
+                {tickets.map((t) => (
+                  <tr key={t.id}>
                     <td>
-                      <Link to={`/portal/tickets/${ticket.id}`} className="ticket-number-link">
-                        {ticket.ticket_number}
+                      <Link to={`/portal/tickets/${t.id}`} className="cp-ticket-link">
+                        {t.ticket_number}
                       </Link>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{ticket.subject}</div>
+                      <div className="cp-ticket-subject" title={t.subject}>
+                        <Link to={`/portal/tickets/${t.id}`} style={{ color: "inherit", textDecoration: "none" }}>
+                          {t.subject}
+                        </Link>
+                      </div>
+                      <div className="cp-ticket-snippet">
+                        {t.description?.slice(0, 75)}
+                        {t.description?.length > 75 ? "..." : ""}
+                      </div>
                     </td>
                     <td>
-                      <span className="badge-category">{ticket.category}</span>
+                      <span className="badge-category">{t.category}</span>
                     </td>
-                    <td>{getPriorityBadge(ticket.priority)}</td>
-                    <td>{getStatusBadge(ticket.status)}</td>
-                    <td style={{ fontSize: "0.8125rem" }}>{ticket.requester_name}</td>
+                    <td>{getPriorityBadge(t.priority)}</td>
+                    <td>{getStatusBadge(t.status)}</td>
                     <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
-                      {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString() : "—"}
+                      {new Date(t.created_at).toLocaleDateString()}
                     </td>
                     <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
-                      {ticket.updated_at ? new Date(ticket.updated_at).toLocaleDateString() : "—"}
+                      {new Date(t.updated_at).toLocaleDateString()}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <Link
-                        to={`/portal/tickets/${ticket.id}`}
+                        to={`/portal/tickets/${t.id}`}
                         className="btn-secondary"
-                        style={{ padding: "6px 12px", textDecoration: "none" }}
+                        style={{ padding: "6px 12px", fontSize: "0.8125rem", textDecoration: "none" }}
                       >
                         <span>View</span>
-                        <ExternalLinkIcon size={13} />
+                        <ExternalLinkIcon size={14} />
                       </Link>
                     </td>
                   </tr>
@@ -329,18 +410,57 @@ export default function CustomerPortalTickets() {
             </table>
           </div>
         )}
-      </div>
 
-      {/* SUBMIT TICKET MODAL */}
-      {isCreateOpen && (
-        <div className="modal-overlay" onClick={handleCloseCreateModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Submit Support Ticket</h2>
-              <button className="modal-close-btn" onClick={handleCloseCreateModal}>
-                <XIcon size={20} />
+        {/* Server Pagination */}
+        {!loading && tickets.length > 0 && (
+          <div className="cp-pagination-bar">
+            <div style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+              Showing {Math.min((page - 1) * pageSize + 1, totalTickets)} to{" "}
+              {Math.min(page * pageSize, totalTickets)} of {totalTickets} tickets
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                className="btn-secondary"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+              >
+                <ArrowLeftIcon size={14} />
+                <span>Prev</span>
+              </button>
+              <span style={{ fontSize: "0.8125rem", fontWeight: 600, padding: "0 8px" }}>
+                {page} / {totalPages}
+              </span>
+              <button
+                className="btn-secondary"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
+              >
+                <span>Next</span>
+                <ArrowRightIcon size={14} />
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* New Ticket Modal */}
+      {isCreateOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h2>Submit Support Ticket</h2>
+              <button
+                className="modal-close-btn"
+                onClick={handleCloseCreateModal}
+                disabled={createSubmitting}
+                aria-label="Close modal"
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+
             <form onSubmit={handleCreateSubmit}>
               <div className="modal-body">
                 <div className="form-group">
@@ -348,56 +468,90 @@ export default function CustomerPortalTickets() {
                   <input
                     type="text"
                     required
-                    placeholder="Brief summary of your question or issue"
+                    placeholder="Brief summary of your issue or request"
                     value={createForm.subject}
                     onChange={(e) =>
-                      setCreateForm({ ...createForm, subject: e.target.value })
+                      setCreateForm((prev) => ({ ...prev, subject: e.target.value }))
                     }
                   />
                 </div>
 
-                <div className="form-grid">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div className="form-group">
                     <label>Category *</label>
                     <select
                       value={createForm.category}
                       onChange={(e) =>
-                        setCreateForm({ ...createForm, category: e.target.value })
+                        setCreateForm((prev) => ({ ...prev, category: e.target.value }))
                       }
                     >
                       {CATEGORIES.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
                       ))}
                     </select>
                   </div>
+
                   <div className="form-group">
-                    <label>Urgency / Priority *</label>
+                    <label>Priority</label>
                     <select
                       value={createForm.priority}
                       onChange={(e) =>
-                        setCreateForm({ ...createForm, priority: e.target.value })
+                        setCreateForm((prev) => ({ ...prev, priority: e.target.value }))
                       }
                     >
                       {PRIORITIES.map((p) => (
-                        <option key={p} value={p}>{p}</option>
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
                       ))}
                     </select>
                   </div>
                 </div>
 
+                {/* Optional Project Association */}
+                {availableProjects.length > 0 && (
+                  <div className="form-group">
+                    <label>
+                      Related Software Project <span style={{ opacity: 0.6 }}>(Optional)</span>
+                    </label>
+                    <select
+                      value={createForm.software_project_id || ""}
+                      onChange={(e) =>
+                        setCreateForm((prev) => ({
+                          ...prev,
+                          software_project_id: e.target.value || null,
+                        }))
+                      }
+                    >
+                      <option value="">-- No Specific Project --</option>
+                      {availableProjects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.project_number} - {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <small style={{ color: "#64748b", fontSize: "0.75rem", display: "block", marginTop: 4 }}>
+                      Associate this support case with your contracted delivery project.
+                    </small>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label>Detailed Description *</label>
                   <textarea
-                    rows={5}
+                    rows={6}
                     required
-                    placeholder="Describe the issue in detail, including steps to reproduce or specific questions..."
+                    placeholder="Please describe the issue in detail, including steps to reproduce, error messages, and business impact..."
                     value={createForm.description}
                     onChange={(e) =>
-                      setCreateForm({ ...createForm, description: e.target.value })
+                      setCreateForm((prev) => ({ ...prev, description: e.target.value }))
                     }
                   />
                 </div>
               </div>
+
               <div className="modal-footer">
                 <button
                   type="button"
@@ -413,7 +567,7 @@ export default function CustomerPortalTickets() {
                   disabled={createSubmitting}
                 >
                   <SendIcon size={15} />
-                  <span>{createSubmitting ? "Submitting..." : "Submit Ticket"}</span>
+                  <span>{createSubmitting ? "Submitting Ticket..." : "Submit Ticket"}</span>
                 </button>
               </div>
             </form>
@@ -423,4 +577,3 @@ export default function CustomerPortalTickets() {
     </div>
   );
 }
-

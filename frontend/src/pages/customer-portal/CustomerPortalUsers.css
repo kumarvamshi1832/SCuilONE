@@ -1,9 +1,14 @@
-/* Customer Portal Users Admin Styles */
+/* ==========================================================================
+   Customer Portal Users Admin Styles
+   Strict Layout Alignment, Real-Time Dynamic KPIs & Responsive Toolbar
+   ========================================================================== */
+
 .portal-admin-container {
   padding: 24px;
   max-width: 1600px;
   margin: 0 auto;
   color: var(--text-color, #1e293b);
+  box-sizing: border-box;
 }
 
 .dashboard-wrapper.dark .portal-admin-container {
@@ -44,7 +49,15 @@
   color: #94a3b8;
 }
 
-/* KPI Cards */
+.support-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ==========================================================================
+   KPI Stats Cards
+   ========================================================================== */
 .portal-kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -61,6 +74,7 @@
   align-items: center;
   gap: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
 }
 
 .dashboard-wrapper.dark .portal-kpi-card {
@@ -110,12 +124,128 @@
   color: #f8fafc;
 }
 
-/* Status Badges */
+/* ==========================================================================
+   Search & Filters Toolbar (Zero-Overlap Flexbox Layout)
+   ========================================================================== */
+.portal-users-toolbar,
+.support-filter-bar {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.dashboard-wrapper.dark .portal-users-toolbar,
+.dashboard-wrapper.dark .support-filter-bar {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.portal-search-wrapper,
+.support-search-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.portal-search-wrapper input,
+.support-search-box input {
+  width: 100%;
+  height: 42px;
+  padding: 8px 14px 8px 38px;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: #f8fafc;
+  color: var(--text-color, #0f172a);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-wrapper.dark .portal-search-wrapper input,
+.dashboard-wrapper.dark .support-search-box input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.portal-search-wrapper input:focus,
+.support-search-box input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.portal-search-icon,
+.support-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portal-status-select,
+.support-select {
+  flex: 0 0 190px;
+  width: 190px;
+  height: 42px;
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: #f8fafc;
+  color: var(--text-color, #0f172a);
+  cursor: pointer;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-wrapper.dark .portal-status-select,
+.dashboard-wrapper.dark .support-select {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.portal-status-select:focus,
+.support-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.portal-clear-btn {
+  flex-shrink: 0;
+  height: 42px;
+  padding: 0 16px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Status Badges
+   ========================================================================== */
 .portal-status-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
@@ -136,12 +266,226 @@
   color: #b91c1c;
 }
 
-/* User Table */
+.dashboard-wrapper.dark .portal-status-active {
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+}
+
+.dashboard-wrapper.dark .portal-status-invited {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
+
+.dashboard-wrapper.dark .portal-status-suspended {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+}
+
+/* ==========================================================================
+   Access Control Action Buttons
+   ========================================================================== */
+.btn-action-suspend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-action-suspend:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.dashboard-wrapper.dark .btn-action-suspend {
+  background: rgba(220, 38, 38, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.dashboard-wrapper.dark .btn-action-suspend:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.btn-action-reactivate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-action-reactivate:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.dashboard-wrapper.dark .btn-action-reactivate {
+  background: rgba(22, 163, 74, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+.dashboard-wrapper.dark .btn-action-reactivate:hover:not(:disabled) {
+  background: rgba(22, 163, 74, 0.25);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.btn-action-resend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-action-resend:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.dashboard-wrapper.dark .btn-action-resend {
+  background: rgba(37, 99, 235, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+}
+
+.dashboard-wrapper.dark .btn-action-resend:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.25);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+}
+
+.btn-action-revoke {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-action-revoke:hover:not(:disabled) {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #b45309;
+}
+
+.dashboard-wrapper.dark .btn-action-revoke {
+  background: rgba(217, 119, 6, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.dashboard-wrapper.dark .btn-action-revoke:hover:not(:disabled) {
+  background: rgba(217, 119, 6, 0.25);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fde68a;
+}
+
+.portal-pending-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 6px 10px;
+}
+
+/* Buttons */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-bg, #ffffff);
+  color: var(--text-color, #334155);
+  border: 1px solid var(--border-color, #cbd5e1);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.dashboard-wrapper.dark .btn-secondary {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+.dashboard-wrapper.dark .btn-secondary:hover:not(:disabled) {
+  background: #334155;
+}
+
+/* ==========================================================================
+   User Table
+   ========================================================================== */
 .portal-table-container {
   background: var(--card-bg, #ffffff);
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
@@ -191,3 +535,232 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* Empty State */
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: #64748b;
+}
+
+.empty-state h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--text-color, #1e293b);
+}
+
+.dashboard-wrapper.dark .empty-state h3 {
+  color: #f1f5f9;
+}
+
+.empty-state p {
+  font-size: 0.875rem;
+  margin: 0;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   Alert / Toast Notification
+   ========================================================================== */
+.support-alert {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.support-alert.success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.support-alert.error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.support-alert.info {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #3b82f6;
+}
+
+/* ==========================================================================
+   Modals
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 16px;
+}
+
+.modal-content {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-wrapper.dark .modal-content {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-wrapper.dark .modal-header {
+  border-bottom-color: #334155;
+}
+
+.modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.modal-close-btn:hover {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.dashboard-wrapper.dark .modal-close-btn:hover {
+  color: #f8fafc;
+  background: #334155;
+}
+
+.modal-body {
+  padding: 20px 24px;
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dashboard-wrapper.dark .modal-footer {
+  border-top-color: #334155;
+}
+
+.form-group {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-color, #334155);
+}
+
+.dashboard-wrapper.dark .form-group label {
+  color: #cbd5e1;
+}
+
+.form-group select,
+.form-group input {
+  width: 100%;
+  height: 42px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: #f8fafc;
+  color: var(--text-color, #0f172a);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-wrapper.dark .form-group select,
+.dashboard-wrapper.dark .form-group input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.form-group select:focus,
+.form-group input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   ========================================================================== */
+@media (max-width: 768px) {
+  .portal-users-toolbar,
+  .support-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .portal-search-wrapper,
+  .support-search-box {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .portal-status-select,
+  .support-select {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .portal-clear-btn {
+    width: 100%;
+  }
+}

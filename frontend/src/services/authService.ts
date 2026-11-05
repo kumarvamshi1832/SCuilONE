@@ -290,7 +290,10 @@ function handleApiError(error: unknown): never {
       } else if (status === 404) {
         message = message || "Resource not found.";
       } else if (status >= 500) {
-        message = "Server error. Please try again later.";
+        message =
+          typeof data?.detail === "string" && data.detail.trim().length > 0 && !data.detail.includes("Traceback")
+            ? data.detail
+            : "Server error (500). Please try again later or contact your administrator.";
       }
 
       throw { message, status, detail: data };

@@ -25,6 +25,7 @@ import { SOFTWARE_CONTRACT_STATUSES } from "../../types/softwareContract";
 import type { SoftwareEstimate } from "../../types/softwareEstimate";
 import type { User } from "../../types/user";
 
+import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
 import "./SoftwareModules.css";
 
 function formatCurrency(amount: number | string | undefined | null, currencyCode: string = "INR"): string {
@@ -56,6 +57,18 @@ export default function SoftwareContracts() {
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [viewMode, setViewMode] = useState<SoftwareViewMode>(
+    () => (localStorage.getItem("software_contracts_view_mode") as SoftwareViewMode) || "grid"
+  );
+
+  const handleViewModeChange = (mode: SoftwareViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("software_contracts_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -637,22 +650,25 @@ export default function SoftwareContracts() {
             milestones.
           </p>
         </div>
-        {perms.canCreateContracts && (
-          <button className="sw-btn-primary" onClick={handleOpenCreate}>
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Create Contract
-          </button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          {perms.canCreateContracts && (
+            <button className="sw-btn-primary" onClick={handleOpenCreate}>
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Create Contract
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Action Notification */}
@@ -768,7 +784,7 @@ export default function SoftwareContracts() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             No software contracts found matching your criteria.
           </div>
-        ) : (
+        ) : viewMode === "table" ? (
           <table className="sw-data-table">
             <thead>
               <tr>
@@ -894,6 +910,176 @@ export default function SoftwareContracts() {
               ))}
             </tbody>
           </table>
+        ) : (
+          <div className="sw-grid-cards" style={{ padding: "16px" }}>
+            {filteredList.map((item) => {
+              const milestones = item.payment_milestones || [];
+              const invoicedMilestones = milestones.filter(
+                (m) => m.status === "Invoiced" || m.status === "Paid"
+              );
+              const milestonePct =
+                milestones.length > 0
+                  ? Math.round((invoicedMilestones.length / milestones.length) * 100)
+                  : 0;
+
+              return (
+                <div key={item.id} className="sw-grid-card">
+                  <div className="sw-grid-card-header">
+                    <div className="sw-grid-card-title-group">
+                      <h3 className="sw-grid-card-title" title={item.title}>
+                        {item.title}
+                      </h3>
+                      <div className="sw-grid-card-subtitle">
+                        <span>{item.contract_number}</span>
+                      </div>
+                    </div>
+                    <span
+                      className={`sw-badge ${item.status?.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+
+                  <div className="sw-grid-card-body">
+                    <div className="sw-grid-fields-grid">
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Linked Estimate</span>
+                        <span className="sw-grid-field-val highlight">
+                          {estMap.get(item.software_estimate_id) ||
+                            item.software_estimate_id.slice(0, 8)}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Client / Account</span>
+                        <span className="sw-grid-field-val">
+                          {item.account_id ? `Account: ${item.account_id.slice(0, 8)}...` : item.lead_id ? `Lead: ${item.lead_id.slice(0, 8)}...` : "Enterprise Client"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Billing Type</span>
+                        <span className="sw-grid-field-val">
+                          {item.billing_type || "Fixed Price"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Hourly Rate / Scope</span>
+                        <span className="sw-grid-field-val">
+                          {item.billing_type === "Time & Material" && item.hourly_rate != null ? (
+                            <span style={{ color: "#0ea5e9" }}>
+                              {formatCurrency(item.hourly_rate, item.currency)}/hr
+                            </span>
+                          ) : (
+                            <span>Fixed Scope</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Contract Value</span>
+                        <span className="sw-grid-field-val success" style={{ fontSize: "0.95rem" }}>
+                          {formatCurrency(item.contract_value, item.currency)}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Assigned To</span>
+                        <span className="sw-grid-field-val">
+                          {item.assigned_to
+                            ? userMap.get(item.assigned_to) || "Lead Delivery"
+                            : "Unassigned"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Start Date</span>
+                        <span className="sw-grid-field-val">{item.start_date || "—"}</span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">End Date</span>
+                        <span className="sw-grid-field-val">{item.end_date || "—"}</span>
+                      </div>
+                    </div>
+
+                    {/* Payment Milestone Progress */}
+                    <div className="sw-grid-progress-box">
+                      <div className="sw-grid-progress-header">
+                        <span>Milestone Progress</span>
+                        <strong>
+                          {invoicedMilestones.length}/{milestones.length} Invoiced ({milestonePct}%)
+                        </strong>
+                      </div>
+                      <div className="sw-grid-progress-track">
+                        <div
+                          className={`sw-grid-progress-fill ${milestonePct === 100 ? "completed" : ""}`}
+                          style={{ width: `${milestonePct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sw-grid-card-footer">
+                    <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+                      {milestones.length} Payment Milestones
+                    </span>
+                    <div className="sw-row-actions">
+                      <button
+                        className="sw-btn-icon"
+                        title="View Details & Payment Milestones"
+                        onClick={() => setViewingItem(item)}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="16"
+                          height="16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                      {perms.canUpdateContracts && (
+                        <button
+                          className="sw-btn-icon"
+                          title="Edit Contract"
+                          onClick={() => handleOpenEdit(item)}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                      )}
+                      {perms.canDeleteContracts && (
+                        <button
+                          className="sw-btn-icon danger"
+                          title="Delete Contract"
+                          onClick={() => setDeletingItem(item)}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

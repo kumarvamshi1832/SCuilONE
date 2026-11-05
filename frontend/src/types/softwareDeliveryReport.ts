@@ -1,10 +1,14 @@
 export interface BaseTimeTotals {
+  total_tracked_minutes?: number;
+  total_tracked_hours?: number;
+  approved_billable_minutes?: number;
+  approved_billable_hours?: number;
+  non_billable_minutes: number;
+  non_billable_hours: number;
   total_minutes: number;
   total_hours: number;
   billable_minutes: number;
   billable_hours: number;
-  non_billable_minutes: number;
-  non_billable_hours: number;
   entry_count: number;
   total_logged_hours?: number;
 }
@@ -55,9 +59,6 @@ export interface TeamTimeSummary {
 
 export interface BillingTimeSummary extends BaseTimeTotals {
   project_id: string | null;
-  approved_hours?: number;
-  unreviewed_hours?: number;
-  rejected_hours?: number;
 }
 
 export interface DeliveryReportFilterParams {

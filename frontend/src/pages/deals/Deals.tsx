@@ -104,6 +104,19 @@ export default function Deals() {
     fetchData();
   }, [fetchData]);
 
+  // Synchronize deals on cross-module CRM updates (e.g. Estimate acceptance, Invoice payments, Project completion)
+  useEffect(() => {
+    const handleDealRefresh = () => {
+      fetchData();
+    };
+    window.addEventListener("crm-deal-refresh", handleDealRefresh);
+    window.addEventListener("deal-updated", handleDealRefresh);
+    return () => {
+      window.removeEventListener("crm-deal-refresh", handleDealRefresh);
+      window.removeEventListener("deal-updated", handleDealRefresh);
+    };
+  }, [fetchData]);
+
   // Recalculate dropdown position from trigger button
   // Toggle actions dropdown for a deal row
   /* ─── Helpers ─── */

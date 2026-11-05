@@ -27,6 +27,26 @@ export const inviteCustomerContact = async (
   return response.data;
 };
 
+export const resendCustomerPortalInvitation = async (
+  portalUserId: string
+): Promise<PortalInviteResponse> => {
+  const response = await apiClient.post<PortalInviteResponse>(
+    `${BASE_URL}/invitations/${portalUserId}/resend`
+  );
+  return response.data;
+};
+
+export const revokeCustomerPortalInvitation = async (
+  portalUserId: string
+): Promise<{ message: string; portal_user_id: string; status: string }> => {
+  const response = await apiClient.delete<{
+    message: string;
+    portal_user_id: string;
+    status: string;
+  }>(`${BASE_URL}/invitations/${portalUserId}`);
+  return response.data;
+};
+
 export const updateCustomerPortalUserStatus = async (
   portalUserId: string,
   status: "Active" | "Suspended"
@@ -36,4 +56,3 @@ export const updateCustomerPortalUserStatus = async (
   );
   return response.data;
 };
-

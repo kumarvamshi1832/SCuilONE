@@ -1489,3 +1489,104 @@ html, body, #root {
     font-size: 9px;
   }
 }
+
+
+/* ==========================================================================
+   SCuilONE CRM - Automatic Email Prefill & Change Account Styles
+   ========================================================================== */
+
+.input-label-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.change-account-action-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #38BDF8;
+  cursor: pointer;
+  transition: color 0.15s ease, opacity 0.15s ease;
+  text-decoration: none;
+}
+
+.change-account-action-btn:hover {
+  color: #7DD3FC;
+  text-decoration: underline;
+}
+
+.change-account-action-btn:focus-visible {
+  outline: 2px solid #38BDF8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.change-account-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-page-root.light .change-account-action-btn {
+  color: #0284C7;
+}
+
+.login-page-root.light .change-account-action-btn:hover {
+  color: #0369A1;
+}
+
+.login-page-root.light .change-account-action-btn:focus-visible {
+  outline-color: #0284C7;
+}
+
+/* Subtle read-only appearance for remembered email */
+.input-box-container.is-readonly-prefilled {
+  background: rgba(13, 22, 41, 0.65);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.login-page-root.light .input-box-container.is-readonly-prefilled {
+  background: rgba(241, 245, 249, 0.9);
+  border-color: #CBD5E1;
+}
+
+.styled-input-control.input-readonly-prefilled {
+  cursor: default;
+  color: var(--input-text);
+  font-weight: 500;
+  user-select: all;
+}
+
+.remembered-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 9999px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  white-space: nowrap;
+  flex-shrink: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.remembered-badge-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.login-page-root.light .remembered-badge-pill {
+  background: rgba(2, 132, 199, 0.09);
+  color: #0284C7;
+  border-color: rgba(2, 132, 199, 0.22);
+}

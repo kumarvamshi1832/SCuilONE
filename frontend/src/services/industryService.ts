@@ -19,10 +19,18 @@ export async function getTenantIndustryConfig(): Promise<TenantIndustryConfigRes
 /**
  * Retrieve the available active industry packs configured in the system.
  * Backend route: GET /api/v1/industry/packs
+ * Handles both direct array responses and `{ items: [...] }` paginated wrappers safely.
  */
 export async function getIndustryPacks(): Promise<IndustryPackSummary[]> {
-  const response = await apiClient.get<IndustryPackSummary[]>(`${BASE_URL}/packs`);
-  return response.data;
+  const response = await apiClient.get<any>(`${BASE_URL}/packs`);
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (data && Array.isArray(data.items)) {
+    return data.items;
+  }
+  return [];
 }
 
 /**
@@ -32,11 +40,10 @@ export async function getIndustryPacks(): Promise<IndustryPackSummary[]> {
  */
 export async function updateTenantIndustryConfig(
   payload: IndustryConfigUpdate
-): Promise<TenantIndustryConfigResponse> {
-  const response = await apiClient.patch<TenantIndustryConfigResponse>(
+): Promise<any> {
+  const response = await apiClient.patch<any>(
     `${BASE_URL}/config`,
     payload
   );
   return response.data;
 }
-

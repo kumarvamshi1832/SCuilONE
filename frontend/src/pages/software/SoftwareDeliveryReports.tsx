@@ -33,6 +33,7 @@ import {
   Cell,
 } from "recharts";
 
+import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
 import "./SoftwareModules.css";
 
 const COLORS = ["#0ea5e9", "#10b981", "#f59e0b", "#818cf8", "#ec4899", "#14b8a6"];
@@ -57,6 +58,18 @@ export default function SoftwareDeliveryReports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "tasks" | "sprints" | "team">("overview");
+  const [viewMode, setViewMode] = useState<SoftwareViewMode>(
+    () => (localStorage.getItem("software_delivery_reports_view_mode") as SoftwareViewMode) || "grid"
+  );
+
+  const handleViewModeChange = (mode: SoftwareViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("software_delivery_reports_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Initial load of projects and reference lists
   const loadInitialData = useCallback(async () => {
@@ -139,18 +152,18 @@ export default function SoftwareDeliveryReports() {
   // Chart data formatting
   const billingPieData = useMemo(() => {
     if (!billingSummary) return [];
-    const approved = billingSummary.approved_hours || 0;
-    const unreviewed = billingSummary.unreviewed_hours || 0;
-    const nonBillable = billingSummary.non_billable_hours || 0;
-    const rejected = billingSummary.rejected_hours || 0;
+    const approved = billingSummary.approved_billable_hours ?? 0;
+    const totalBillable = billingSummary.billable_hours ?? 0;
+    const inReview = Math.max(0, Number((totalBillable - approved).toFixed(2)));
+    const nonBillable = billingSummary.non_billable_hours ?? 0;
 
     return [
       { name: "Approved Billable", value: approved, color: "#10b981" },
-      { name: "Unreviewed Billable", value: unreviewed, color: "#0ea5e9" },
+      { name: "In Review Billable", value: inReview, color: "#0ea5e9" },
       { name: "Non-Billable Internal", value: nonBillable, color: "#f59e0b" },
-      { name: "Rejected", value: rejected, color: "#ef4444" },
     ].filter((item) => item.value > 0);
   }, [billingSummary]);
+
 
   const teamList = useMemo(() => {
     if (!teamSummary) return [];
@@ -176,14 +189,17 @@ export default function SoftwareDeliveryReports() {
           </h1>
           <p>Time analytics, task breakdowns, sprint velocity summaries, and billable resource allocation.</p>
         </div>
-        <button className="sw-btn-secondary" onClick={loadReports} disabled={loading}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="23 4 23 10 17 10" />
-            <polyline points="1 20 1 14 7 14" />
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </svg>
-          Refresh Reports
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <button className="sw-btn-secondary" onClick={loadReports} disabled={loading}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+            Refresh Reports
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -376,16 +392,28 @@ export default function SoftwareDeliveryReports() {
               <table className="sw-data-table" style={{ marginTop: "10px" }}>
                 <tbody>
                   <tr>
-                    <td>Total Logged Hours</td>
-                    <td style={{ fontWeight: 700, color: "#0ea5e9" }}>{billingSummary.total_hours.toFixed(1)} hrs</td>
+                    <td>Total Logged Time</td>
+                    <td style={{ fontWeight: 700, color: "#0ea5e9" }}>
+                      {(billingSummary.total_tracked_hours ?? billingSummary.total_hours ?? 0).toFixed(1)} hrs ({billingSummary.total_tracked_minutes ?? billingSummary.total_minutes ?? 0} mins)
+                    </td>
                   </tr>
                   <tr>
-                    <td>Billable Hours</td>
-                    <td style={{ fontWeight: 700, color: "#10b981" }}>{billingSummary.billable_hours.toFixed(1)} hrs</td>
+                    <td>Approved Billable Hours</td>
+                    <td style={{ fontWeight: 700, color: "#10b981" }}>
+                      {(billingSummary.approved_billable_hours ?? 0).toFixed(1)} hrs ({billingSummary.approved_billable_minutes ?? 0} mins)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Total Billable Hours</td>
+                    <td style={{ fontWeight: 700, color: "#38bdf8" }}>
+                      {(billingSummary.billable_hours ?? 0).toFixed(1)} hrs ({billingSummary.billable_minutes ?? 0} mins)
+                    </td>
                   </tr>
                   <tr>
                     <td>Internal Non-Billable</td>
-                    <td style={{ fontWeight: 700, color: "#f59e0b" }}>{billingSummary.non_billable_hours.toFixed(1)} hrs</td>
+                    <td style={{ fontWeight: 700, color: "#f59e0b" }}>
+                      {(billingSummary.non_billable_hours ?? 0).toFixed(1)} hrs ({billingSummary.non_billable_minutes ?? 0} mins)
+                    </td>
                   </tr>
                   <tr>
                     <td>Total Project Entries</td>
@@ -409,7 +437,7 @@ export default function SoftwareDeliveryReports() {
             <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
               No tasks with logged time found for this project.
             </div>
-          ) : (
+          ) : viewMode === "table" ? (
             <table className="sw-data-table">
               <thead>
                 <tr>
@@ -441,6 +469,53 @@ export default function SoftwareDeliveryReports() {
                 ))}
               </tbody>
             </table>
+          ) : (
+            <div className="sw-grid-cards" style={{ padding: "16px" }}>
+              {taskReport.tasks.map((task) => (
+                <div key={task.activity_id} className="sw-grid-card">
+                  <div className="sw-grid-card-header">
+                    <div className="sw-grid-card-title-group">
+                      <h3 className="sw-grid-card-title" title={task.task_title || task.title || "Task"}>
+                        {task.task_title || task.title || "Task"}
+                      </h3>
+                      <div className="sw-grid-card-subtitle">
+                        <span>ID: {task.activity_id.slice(0, 8)}...</span>
+                      </div>
+                    </div>
+                    <span className="sw-badge discovery">{task.status || "In Progress"}</span>
+                  </div>
+
+                  <div className="sw-grid-card-body">
+                    <div className="sw-grid-fields-grid">
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Total Logged Time</span>
+                        <span className="sw-grid-field-val highlight" style={{ fontSize: "0.95rem" }}>
+                          {(task.total_hours || task.total_logged_hours || 0).toFixed(1)} hrs
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Billable Time</span>
+                        <span className="sw-grid-field-val success" style={{ fontSize: "0.95rem" }}>
+                          {(task.billable_minutes / 60).toFixed(1)} hrs
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Entries Logged</span>
+                        <span className="sw-grid-field-val">{task.entry_count} sessions</span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Billable Ratio</span>
+                        <span className="sw-grid-field-val">
+                          {(task.total_hours || task.total_logged_hours || 0) > 0
+                            ? `${Math.round(((task.billable_minutes / 60) / (task.total_hours || task.total_logged_hours || 1)) * 100)}%`
+                            : "0%"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -472,7 +547,7 @@ export default function SoftwareDeliveryReports() {
               <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
                 No team time records recorded for this filter.
               </div>
-            ) : (
+            ) : viewMode === "table" ? (
               <table className="sw-data-table">
                 <thead>
                   <tr>
@@ -507,6 +582,72 @@ export default function SoftwareDeliveryReports() {
                   })}
                 </tbody>
               </table>
+            ) : (
+              <div className="sw-grid-cards" style={{ padding: "16px" }}>
+                {teamList.map((member) => {
+                  const totalHours = teamList.reduce((acc, curr) => acc + (curr.total_hours || 0), 0) || 1;
+                  const memberHours = member.total_hours || member.total_logged_hours || 0;
+                  const share = ((memberHours / totalHours) * 100).toFixed(1);
+                  return (
+                    <div key={member.user_id} className="sw-grid-card">
+                      <div className="sw-grid-card-header">
+                        <div className="sw-grid-card-title-group">
+                          <h3 className="sw-grid-card-title">
+                            {member.full_name || member.user_name || member.user_id}
+                          </h3>
+                          <div className="sw-grid-card-subtitle">
+                            <span>Team Contributor</span>
+                          </div>
+                        </div>
+                        <span className="sw-badge accepted">{share}% Share</span>
+                      </div>
+
+                      <div className="sw-grid-card-body">
+                        <div className="sw-grid-fields-grid">
+                          <div className="sw-grid-field">
+                            <span className="sw-grid-field-label">Total Hours</span>
+                            <span className="sw-grid-field-val highlight" style={{ fontSize: "0.95rem" }}>
+                              {memberHours.toFixed(1)} hrs
+                            </span>
+                          </div>
+                          <div className="sw-grid-field">
+                            <span className="sw-grid-field-label">Billable Hours</span>
+                            <span className="sw-grid-field-val success" style={{ fontSize: "0.95rem" }}>
+                              {(member.billable_minutes / 60).toFixed(1)} hrs
+                            </span>
+                          </div>
+                          <div className="sw-grid-field">
+                            <span className="sw-grid-field-label">Sessions Logged</span>
+                            <span className="sw-grid-field-val">{member.entry_count} entries</span>
+                          </div>
+                          <div className="sw-grid-field">
+                            <span className="sw-grid-field-label">Billable Ratio</span>
+                            <span className="sw-grid-field-val">
+                              {memberHours > 0
+                                ? `${Math.round(((member.billable_minutes / 60) / memberHours) * 100)}%`
+                                : "0%"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Team Share Progress Bar */}
+                        <div className="sw-grid-progress-box">
+                          <div className="sw-grid-progress-header">
+                            <span>Project Time Contribution</span>
+                            <strong>{share}%</strong>
+                          </div>
+                          <div className="sw-grid-progress-track">
+                            <div
+                              className="sw-grid-progress-fill"
+                              style={{ width: `${Math.min(100, Math.max(0, parseFloat(share)))}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

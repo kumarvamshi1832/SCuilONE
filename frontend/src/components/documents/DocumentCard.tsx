@@ -9,6 +9,7 @@ interface DocumentCardProps {
   onPreview: (doc: DocumentItem) => void;
   onDownload: (doc: DocumentItem) => void;
   onDelete: (doc: DocumentItem) => void;
+  onToggleShare?: (doc: DocumentItem) => void;
 }
 
 export const formatFileSize = (bytes: number): string => {
@@ -121,6 +122,7 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
   onPreview,
   onDownload,
   onDelete,
+  onToggleShare,
 }) => {
   const safeFilename = doc?.filename || (doc as any)?.original_filename || (doc as any)?.name || "document.pdf";
   const fileMeta = getFileIcon(safeFilename, doc?.content_type);
@@ -149,6 +151,43 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
               Confidential
+            </span>
+          )}
+          {doc?.shared_with_customer ? (
+            <span
+              className="doc-shared-badge"
+              title="Shared with Customer Portal"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 7px",
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 600,
+                background: "rgba(16, 185, 129, 0.15)",
+                color: "#10b981",
+              }}
+            >
+              ● Portal
+            </span>
+          ) : (
+            <span
+              className="doc-internal-badge"
+              title="Internal CRM only"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 6px",
+                borderRadius: 4,
+                fontSize: 10,
+                fontWeight: 500,
+                background: "rgba(100, 116, 139, 0.12)",
+                color: "var(--text-muted, #94a3b8)",
+              }}
+            >
+              Internal
             </span>
           )}
         </div>
@@ -204,6 +243,37 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
               <circle cx="12" cy="12" r="3" />
             </svg>
           </button>
+
+          {onToggleShare && (
+            <button
+              type="button"
+              className={`doc-action-btn share-btn ${doc.shared_with_customer ? "active-shared" : ""}`}
+              title={
+                doc.is_confidential
+                  ? "Confidential documents cannot be shared with customer portal"
+                  : !doc.account_id && !doc.contact_id
+                  ? "Only documents linked to an Account or Contact can be shared with customer portal"
+                  : doc.shared_with_customer
+                  ? "Unshare from Customer Portal"
+                  : "Share with Customer Portal"
+              }
+              disabled={doc.is_confidential || (!doc.account_id && !doc.contact_id)}
+              onClick={() => onToggleShare(doc)}
+              style={{
+                opacity: doc.is_confidential || (!doc.account_id && !doc.contact_id) ? 0.4 : 1,
+                cursor: doc.is_confidential || (!doc.account_id && !doc.contact_id) ? "not-allowed" : "pointer",
+                color: doc.shared_with_customer ? "#10b981" : "inherit",
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            </button>
+          )}
 
           <button
             type="button"

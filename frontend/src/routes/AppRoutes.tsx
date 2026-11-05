@@ -74,10 +74,18 @@ import CustomerPortalUsers from "../pages/customer-portal/CustomerPortalUsers";
 import CustomerPortalProtectedRoute from "../components/portal/CustomerPortalProtectedRoute";
 import CustomerPortalLayout from "../components/portal/CustomerPortalLayout";
 import CustomerPortalLogin from "../pages/portal/CustomerPortalLogin";
+import CustomerPortalForgotPassword from "../pages/portal/CustomerPortalForgotPassword";
+import CustomerPortalResetPassword from "../pages/portal/CustomerPortalResetPassword";
 import CustomerPortalActivate from "../pages/portal/CustomerPortalActivate";
 import CustomerPortalDashboard from "../pages/portal/CustomerPortalDashboard";
+import CustomerPortalEstimates from "../pages/portal/CustomerPortalEstimates";
+import CustomerPortalContracts from "../pages/portal/CustomerPortalContracts";
+import CustomerPortalProjects from "../pages/portal/CustomerPortalProjects";
+import CustomerPortalInvoices from "../pages/portal/CustomerPortalInvoices";
+import CustomerPortalDocuments from "../pages/portal/CustomerPortalDocuments";
 import CustomerPortalTickets from "../pages/portal/CustomerPortalTickets";
 import CustomerPortalTicketDetails from "../pages/portal/CustomerPortalTicketDetails";
+import CustomerPortalRealEstate from "../pages/portal/CustomerPortalRealEstate";
 import CustomerPortalProfile from "../pages/portal/CustomerPortalProfile";
 
 function DashboardResolver() {
@@ -277,15 +285,66 @@ export default function AppRoutes() {
 
         {/* Customer Portal Public Auth Routes */}
         <Route path="/portal/login" element={<CustomerPortalLogin />} />
+        <Route path="/customer_portal/login" element={<CustomerPortalLogin />} />
+        <Route path="/customer-portal/login" element={<CustomerPortalLogin />} />
+
+        <Route path="/portal/forgot-password" element={<CustomerPortalForgotPassword />} />
+        <Route path="/customer_portal/forgot-password" element={<CustomerPortalForgotPassword />} />
+        <Route path="/customer-portal/forgot-password" element={<CustomerPortalForgotPassword />} />
+
+        <Route path="/portal/reset-password" element={<CustomerPortalResetPassword />} />
+        <Route path="/customer_portal/reset-password" element={<CustomerPortalResetPassword />} />
+        <Route path="/customer-portal/reset-password" element={<CustomerPortalResetPassword />} />
+
         <Route path="/portal/activate" element={<CustomerPortalActivate />} />
+        <Route path="/customer_portal/activate" element={<CustomerPortalActivate />} />
+        <Route path="/customer-portal/activate" element={<CustomerPortalActivate />} />
 
         {/* Customer Portal Authenticated Routes (Isolated from internal CRM) */}
         <Route path="/portal" element={<CustomerPortalProtectedRoute />}>
           <Route element={<CustomerPortalLayout />}>
             <Route index element={<Navigate to="/portal/dashboard" replace />} />
             <Route path="dashboard" element={<CustomerPortalDashboard />} />
+            <Route path="estimates" element={<CustomerPortalEstimates />} />
+            <Route path="contracts" element={<CustomerPortalContracts />} />
+            <Route path="projects" element={<CustomerPortalProjects />} />
+            <Route path="invoices" element={<CustomerPortalInvoices />} />
+            <Route path="documents" element={<CustomerPortalDocuments />} />
             <Route path="tickets" element={<CustomerPortalTickets />} />
             <Route path="tickets/:ticketId" element={<CustomerPortalTicketDetails />} />
+            <Route path="real-estate" element={<CustomerPortalRealEstate />} />
+            <Route path="profile" element={<CustomerPortalProfile />} />
+          </Route>
+        </Route>
+
+        {/* Customer Portal Route Aliases */}
+        <Route path="/customer-portal" element={<CustomerPortalProtectedRoute />}>
+          <Route element={<CustomerPortalLayout />}>
+            <Route index element={<Navigate to="/portal/dashboard" replace />} />
+            <Route path="dashboard" element={<CustomerPortalDashboard />} />
+            <Route path="estimates" element={<CustomerPortalEstimates />} />
+            <Route path="contracts" element={<CustomerPortalContracts />} />
+            <Route path="projects" element={<CustomerPortalProjects />} />
+            <Route path="invoices" element={<CustomerPortalInvoices />} />
+            <Route path="documents" element={<CustomerPortalDocuments />} />
+            <Route path="tickets" element={<CustomerPortalTickets />} />
+            <Route path="tickets/:ticketId" element={<CustomerPortalTicketDetails />} />
+            <Route path="real-estate" element={<CustomerPortalRealEstate />} />
+            <Route path="profile" element={<CustomerPortalProfile />} />
+          </Route>
+        </Route>
+        <Route path="/customer_portal" element={<CustomerPortalProtectedRoute />}>
+          <Route element={<CustomerPortalLayout />}>
+            <Route index element={<Navigate to="/portal/dashboard" replace />} />
+            <Route path="dashboard" element={<CustomerPortalDashboard />} />
+            <Route path="estimates" element={<CustomerPortalEstimates />} />
+            <Route path="contracts" element={<CustomerPortalContracts />} />
+            <Route path="projects" element={<CustomerPortalProjects />} />
+            <Route path="invoices" element={<CustomerPortalInvoices />} />
+            <Route path="documents" element={<CustomerPortalDocuments />} />
+            <Route path="tickets" element={<CustomerPortalTickets />} />
+            <Route path="tickets/:ticketId" element={<CustomerPortalTicketDetails />} />
+            <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
           </Route>
         </Route>

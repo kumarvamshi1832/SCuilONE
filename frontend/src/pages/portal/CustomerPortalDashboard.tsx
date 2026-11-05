@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   LifeBuoyIcon,
@@ -6,17 +6,24 @@ import {
   ClockIcon,
   CheckCircleIcon,
   AlertCircleIcon,
-  ArrowRightIcon,
-  ExternalLinkIcon,
   RefreshIcon,
+  FileTextIcon,
+  ShieldIcon,
+  BuildingIcon,
 } from "../../components/common/SupportPortalIcons";
-import { getPortalTickets } from "../../services/customerPortalTicketService";
-import { getPortalProfile, getPortalCustomer } from "../../services/customerPortalAuthService";
-import type { PortalTicket, PortalProfileResponse } from "../../types/customerPortal";
+import {
+  getPortalDashboard,
+  getPortalProfile,
+  getPortalCustomer,
+} from "../../services/customerPortalAuthService";
+import type {
+  PortalDashboardResponse,
+  PortalProfileResponse,
+} from "../../types/customerPortal";
 import "./CustomerPortalDashboard.css";
 
 export default function CustomerPortalDashboard() {
-  const [tickets, setTickets] = useState<PortalTicket[]>([]);
+  const [dashboard, setDashboard] = useState<PortalDashboardResponse | null>(null);
   const [profile, setProfile] = useState<PortalProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,15 +34,18 @@ export default function CustomerPortalDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [ticketsRes, profileRes] = await Promise.all([
-        getPortalTickets({ limit: 100 }),
+      const [dashRes, profileRes] = await Promise.all([
+        getPortalDashboard(),
         getPortalProfile().catch(() => null),
       ]);
-      setTickets(ticketsRes.items);
+      setDashboard(dashRes);
       if (profileRes) setProfile(profileRes);
     } catch (err: any) {
       console.error("Failed to load portal dashboard:", err);
-      setError(err?.response?.data?.detail || "Unable to load tickets for your account.");
+      setError(
+        err?.response?.data?.detail ||
+          "Unable to load unified dashboard metrics for your account."
+      );
     } finally {
       setLoading(false);
     }
@@ -43,51 +53,27 @@ export default function CustomerPortalDashboard() {
 
   useEffect(() => {
     loadData();
+
+    const handleWorkspaceSwitch = () => {
+      loadData();
+    };
+    window.addEventListener("portal:workspace-switched", handleWorkspaceSwitch);
+    return () => {
+      window.removeEventListener("portal:workspace-switched", handleWorkspaceSwitch);
+    };
   }, []);
 
   const contactName =
     profile?.contact?.full_name || localCustomer?.email?.split("@")[0] || "Customer";
   const accountName = profile?.account?.name || "Client Portal";
+  const isRealEstate =
+    profile?.tenant?.industry?.toLowerCase().includes("real estate") || false;
 
-  // KPIs
-  const kpis = useMemo(() => {
-    const total = tickets.length;
-    const open = tickets.filter((t) => t.status === "Open").length;
-    const inProgress = tickets.filter(
-      (t) => t.status === "In Progress" || t.status === "Waiting on Customer"
-    ).length;
-    const resolvedClosed = tickets.filter(
-      (t) => t.status === "Resolved" || t.status === "Closed"
-    ).length;
-    return { total, open, inProgress, resolvedClosed };
-  }, [tickets]);
-
-  // Top 5 recent tickets
-  const recentTickets = useMemo(() => {
-    return tickets.slice(0, 5);
-  }, [tickets]);
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Open":
-        return <span className="badge-status status-open">Open</span>;
-      case "In Progress":
-        return <span className="badge-status status-in-progress">In Progress</span>;
-      case "Waiting on Customer":
-        return <span className="badge-status status-waiting">Waiting on You</span>;
-      case "Resolved":
-        return <span className="badge-status status-resolved">Resolved</span>;
-      case "Closed":
-        return <span className="badge-status status-closed">Closed</span>;
-      default:
-        return <span className="badge-status">{status}</span>;
-    }
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    const prio = priority.toLowerCase();
-    return <span className={`badge-priority prio-${prio}`}>{priority}</span>;
-  };
+  const support = dashboard?.support;
+  const commercial = dashboard?.commercial_and_delivery;
+  const billing = dashboard?.billing;
+  const documents = dashboard?.documents;
+  const realEstate = dashboard?.real_estate;
 
   return (
     <div className="cp-dashboard">
@@ -96,144 +82,283 @@ export default function CustomerPortalDashboard() {
         <div className="cp-welcome-text">
           <h1>Welcome, {contactName}</h1>
           <p>
-            Connected to <strong>{accountName}</strong>. Manage your support requests, track ongoing resolutions, and collaborate directly with our engineering team.
+            Connected to <strong>{accountName}</strong>. Overview of your commercial contracts, projects, invoices, documents, and support requests.
           </p>
         </div>
-        <Link to="/portal/tickets?new=true" className="cp-banner-btn">
-          <PlusIcon size={16} />
-          <span>Submit New Ticket</span>
-        </Link>
-      </div>
-
-      {/* KPI Metrics */}
-      <div className="cp-kpis">
-        <div className="cp-kpi-card">
-          <div className="cp-kpi-icon blue">
-            <LifeBuoyIcon size={24} />
-          </div>
-          <div>
-            <div className="cp-kpi-label">Total Account Tickets</div>
-            <div className="cp-kpi-value">{kpis.total}</div>
-          </div>
-        </div>
-
-        <div className="cp-kpi-card">
-          <div className="cp-kpi-icon amber">
-            <ClockIcon size={24} />
-          </div>
-          <div>
-            <div className="cp-kpi-label">Open Tickets</div>
-            <div className="cp-kpi-value">{kpis.open}</div>
-          </div>
-        </div>
-
-        <div className="cp-kpi-card">
-          <div className="cp-kpi-icon purple">
-            <AlertCircleIcon size={24} />
-          </div>
-          <div>
-            <div className="cp-kpi-label">In Progress</div>
-            <div className="cp-kpi-value">{kpis.inProgress}</div>
-          </div>
-        </div>
-
-        <div className="cp-kpi-card">
-          <div className="cp-kpi-icon emerald">
-            <CheckCircleIcon size={24} />
-          </div>
-          <div>
-            <div className="cp-kpi-label">Resolved / Closed</div>
-            <div className="cp-kpi-value">{kpis.resolvedClosed}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Tickets Section */}
-      <div className="cp-section-card">
-        <div className="cp-section-header">
-          <h2>Recent Support Tickets</h2>
-          <Link to="/portal/tickets" className="cp-section-link">
-            <span>View All Tickets ({kpis.total})</span>
-            <ArrowRightIcon size={15} />
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="cp-banner-btn"
+            style={{ background: "rgba(255, 255, 255, 0.15)", border: "1px solid rgba(255, 255, 255, 0.25)" }}
+            onClick={loadData}
+            title="Refresh dashboard metrics"
+          >
+            <RefreshIcon size={16} />
+            <span>Refresh</span>
+          </button>
+          <Link to="/portal/tickets?new=true" className="cp-banner-btn">
+            <PlusIcon size={16} />
+            <span>Submit New Ticket</span>
           </Link>
         </div>
+      </div>
 
-        {loading ? (
-          <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-            <RefreshIcon size={24} className="animate-spin" style={{ margin: "0 auto 12px" }} />
-            <div>Loading support tickets...</div>
+      {error && (
+        <div className="support-alert error" style={{ marginBottom: 24 }}>
+          <AlertCircleIcon size={18} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {loading && !dashboard ? (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: "#64748b" }}>
+          <RefreshIcon size={28} className="animate-spin" style={{ margin: "0 auto 12px" }} />
+          <div>Loading unified client portal metrics...</div>
+        </div>
+      ) : (
+        <>
+          {/* SECTION 1: COMMERCIAL & DELIVERY */}
+          <div className="cp-section-block" style={{ marginBottom: 28 }}>
+            <div className="cp-section-header">
+              <h2 className="cp-section-title">Commercial & Project Delivery</h2>
+              <span className="cp-section-tag">Active Agreements & Roadmap</span>
+            </div>
+
+            <div className="cp-kpis">
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon blue">
+                  <FileTextIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Software Estimates</div>
+                  <div className="cp-kpi-value">{commercial?.total_estimates ?? 0}</div>
+                  <div className="cp-kpi-sub">
+                    {commercial?.pending_approval_estimates ?? 0} pending approval
+                  </div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon emerald">
+                  <ShieldIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Contracts</div>
+                  <div className="cp-kpi-value">{commercial?.total_contracts ?? 0}</div>
+                  <div className="cp-kpi-sub">
+                    {commercial?.pending_signature_contracts ?? 0} pending signature • {commercial?.active_contracts ?? 0} active
+                  </div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon purple">
+                  <CheckCircleIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Active Projects</div>
+                  <div className="cp-kpi-value">{commercial?.active_projects ?? 0}</div>
+                  <div className="cp-kpi-sub">
+                    {commercial?.total_projects ?? 0} total contracted projects
+                  </div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon amber">
+                  <FileTextIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Shared Documents</div>
+                  <div className="cp-kpi-value">{documents?.shared_documents ?? 0}</div>
+                  <div className="cp-kpi-sub">Verified documents available</div>
+                </div>
+              </div>
+            </div>
           </div>
-        ) : error ? (
-          <div className="support-alert error">
-            <AlertCircleIcon size={18} />
-            <span>{error}</span>
+
+          {/* SECTION 2: BILLING & FINANCIALS */}
+          <div className="cp-section-block" style={{ marginBottom: 28 }}>
+            <div className="cp-section-header">
+              <h2 className="cp-section-title">Billing & Financial Overview</h2>
+              <span className="cp-section-tag">Invoices & Balances</span>
+            </div>
+
+            <div className="cp-kpis">
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon blue">
+                  <FileTextIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Total Invoices</div>
+                  <div className="cp-kpi-value">{billing?.total_invoices ?? 0}</div>
+                  <div className="cp-kpi-sub">
+                    {billing?.overdue_invoices ? (
+                      <span style={{ color: "#ef4444", fontWeight: 600 }}>
+                        {billing.overdue_invoices} overdue
+                      </span>
+                    ) : (
+                      "0 overdue"
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon emerald">
+                  <CheckCircleIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Total Paid</div>
+                  <div className="cp-kpi-value">
+                    ${billing?.total_paid ?? "0.00"}
+                  </div>
+                  <div className="cp-kpi-sub">
+                    Of ${billing?.total_invoiced ?? "0.00"} total invoiced
+                  </div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon amber">
+                  <ClockIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Outstanding Balance</div>
+                  <div className="cp-kpi-value" style={{ color: Number(billing?.outstanding_balance || 0) > 0 ? "#f59e0b" : undefined }}>
+                    ${billing?.outstanding_balance ?? "0.00"}
+                  </div>
+                  <div className="cp-kpi-sub">Current amount due</div>
+                </div>
+              </div>
+
+              {isRealEstate && (
+                <div className="cp-kpi-card">
+                  <div className="cp-kpi-icon emerald">
+                    <BuildingIcon size={22} />
+                  </div>
+                  <div>
+                    <div className="cp-kpi-label">Property Bookings</div>
+                    <div className="cp-kpi-value">{realEstate?.total_bookings ?? 0}</div>
+                    <div className="cp-kpi-sub">{realEstate?.active_bookings ?? 0} active</div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        ) : recentTickets.length === 0 ? (
-          <div className="empty-state">
-            <LifeBuoyIcon size={40} style={{ opacity: 0.3, margin: "0 auto 10px" }} />
-            <h3>No Support Tickets Found</h3>
-            <p>Your account does not have any active support tickets right now.</p>
-            <Link
-              to="/portal/tickets?new=true"
-              className="btn-primary"
-              style={{ display: "inline-flex", marginTop: 12 }}
-            >
-              <PlusIcon size={16} />
-              <span>Submit Your First Ticket</span>
+
+          {/* SECTION 3: SUPPORT & RESOLUTION */}
+          <div className="cp-section-block" style={{ marginBottom: 28 }}>
+            <div className="cp-section-header">
+              <h2 className="cp-section-title">Support & Service Desk</h2>
+              <span className="cp-section-tag">Account Tickets</span>
+            </div>
+
+            <div className="cp-kpis">
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon blue">
+                  <LifeBuoyIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Total Account Tickets</div>
+                  <div className="cp-kpi-value">{support?.total_tickets ?? 0}</div>
+                  <div className="cp-kpi-sub">Lifetime support requests</div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon amber">
+                  <ClockIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Open Tickets</div>
+                  <div className="cp-kpi-value">{support?.open_tickets ?? 0}</div>
+                  <div className="cp-kpi-sub">Currently under engineering review</div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon purple">
+                  <AlertCircleIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Waiting on You</div>
+                  <div className="cp-kpi-value">{support?.waiting_on_customer ?? 0}</div>
+                  <div className="cp-kpi-sub">Requires customer response</div>
+                </div>
+              </div>
+
+              <div className="cp-kpi-card">
+                <div className="cp-kpi-icon emerald">
+                  <CheckCircleIcon size={22} />
+                </div>
+                <div>
+                  <div className="cp-kpi-label">Resolved / Closed</div>
+                  <div className="cp-kpi-value">{support?.resolved_or_closed_tickets ?? 0}</div>
+                  <div className="cp-kpi-sub">Completed resolutions</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Action Tiles */}
+          <div className="cp-action-tiles" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+            <Link to="/portal/estimates" className="cp-action-tile">
+              <div className="cp-action-tile-icon blue">
+                <FileTextIcon size={20} />
+              </div>
+              <div className="cp-action-tile-title">Review Estimates</div>
+              <div className="cp-action-tile-desc">Inspect revisions & approve proposals</div>
+              <span className="cp-action-tile-link">View Estimates &rarr;</span>
+            </Link>
+
+            <Link to="/portal/contracts" className="cp-action-tile">
+              <div className="cp-action-tile-icon emerald">
+                <ShieldIcon size={20} />
+              </div>
+              <div className="cp-action-tile-title">Sign Contracts</div>
+              <div className="cp-action-tile-desc">Inspect scopes, terms & sign agreements</div>
+              <span className="cp-action-tile-link">View Contracts &rarr;</span>
+            </Link>
+
+            <Link to="/portal/projects" className="cp-action-tile">
+              <div className="cp-action-tile-icon purple">
+                <CheckCircleIcon size={20} />
+              </div>
+              <div className="cp-action-tile-title">Track Projects</div>
+              <div className="cp-action-tile-desc">View sprint delivery & milestones</div>
+              <span className="cp-action-tile-link">View Projects &rarr;</span>
+            </Link>
+
+            <Link to="/portal/invoices" className="cp-action-tile">
+              <div className="cp-action-tile-icon amber">
+                <FileTextIcon size={20} />
+              </div>
+              <div className="cp-action-tile-title">Invoices & Billing</div>
+              <div className="cp-action-tile-desc">Inspect itemized bills & payment receipts</div>
+              <span className="cp-action-tile-link">View Invoices &rarr;</span>
+            </Link>
+
+            <Link to="/portal/documents" className="cp-action-tile">
+              <div className="cp-action-tile-icon blue">
+                <FileTextIcon size={20} />
+              </div>
+              <div className="cp-action-tile-title">Shared Documents</div>
+              <div className="cp-action-tile-desc">Download shared files & resources</div>
+              <span className="cp-action-tile-link">View Documents &rarr;</span>
+            </Link>
+
+            <Link to="/portal/tickets" className="cp-action-tile">
+              <div className="cp-action-tile-icon emerald">
+                <LifeBuoyIcon size={20} />
+              </div>
+              <div className="cp-action-tile-title">Support Tickets</div>
+              <div className="cp-action-tile-desc">Manage support cases & resolutions</div>
+              <span className="cp-action-tile-link">View Tickets &rarr;</span>
             </Link>
           </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="support-table">
-              <thead>
-                <tr>
-                  <th>Ticket #</th>
-                  <th>Subject</th>
-                  <th>Category</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Last Updated</th>
-                  <th style={{ textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTickets.map((t) => (
-                  <tr key={t.id}>
-                    <td>
-                      <Link
-                        to={`/portal/tickets/${t.id}`}
-                        className="ticket-number-link"
-                      >
-                        {t.ticket_number}
-                      </Link>
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{t.subject}</td>
-                    <td>
-                      <span className="badge-category">{t.category}</span>
-                    </td>
-                    <td>{getPriorityBadge(t.priority)}</td>
-                    <td>{getStatusBadge(t.status)}</td>
-                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
-                      {t.updated_at ? new Date(t.updated_at).toLocaleDateString() : "—"}
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <Link
-                        to={`/portal/tickets/${t.id}`}
-                        className="btn-secondary"
-                        style={{ padding: "6px 12px", textDecoration: "none" }}
-                      >
-                        <span>View</span>
-                        <ExternalLinkIcon size={13} />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
-
