@@ -7,9 +7,6 @@ from app.database.connection import settings
 import logging
 import smtplib
 import ssl
-from email.message import EmailMessage
-
-from app.database.connection import settings
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +92,7 @@ SCuilONE Team
         start_tls=True
     )
 
+
 def send_notification_email(
     recipient_email: str,
     title: str,
@@ -104,7 +102,7 @@ def send_notification_email(
         "NOTIFICATION EMAIL FUNCTION CALLED: recipient=%s, title=%s",
         recipient_email,
         title,
-        )
+    )
     if not recipient_email:
         logger.warning(
             "Notification email skipped: recipient email is missing."
@@ -184,6 +182,32 @@ async def send_customer_portal_invitation_email(
         username=settings.SMTP_USERNAME, password=settings.SMTP_PASSWORD, start_tls=True
     )
 
+
+async def send_customer_portal_password_reset_email(
+    recipient_email: str, full_name: str, reset_token: str, tenant_id: str
+):
+    from urllib.parse import quote
+
+    reset_url = (
+        f"{settings.FRONTEND_URL.rstrip('/')}"
+        f"/customer-portal/reset-password?token={quote(reset_token)}&tenant_id={quote(tenant_id)}"
+    )
+    message = EmailMessage()
+    message["From"] = settings.SMTP_FROM_EMAIL
+    message["To"] = recipient_email
+    message["Subject"] = "Reset your SCuilONE customer portal password"
+    message.set_content(
+        f"Hello {full_name},\n\n"
+        "We received a request to reset your SCuilONE customer portal password.\n\n"
+        "Reset your password using this one-time link (expires in 1 hour):\n"
+        f"{reset_url}\n\n"
+        "If you did not request a password reset, you can safely ignore this email.\n\n"
+        "Regards,\nSCuilONE Team\n"
+    )
+    await aiosmtplib.send(
+        message, hostname=settings.SMTP_HOST, port=settings.SMTP_PORT,
+        username=settings.SMTP_USERNAME, password=settings.SMTP_PASSWORD, start_tls=True
+    )
 
 
 def _clean_header_text(value: str, limit: int = 120) -> str:

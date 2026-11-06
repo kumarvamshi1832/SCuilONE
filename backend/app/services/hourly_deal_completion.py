@@ -5,13 +5,12 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.activity import Activity
-from app.models.activity_link import ActivityLink
 from app.models.deal import Deal
 from app.models.software_contract import SoftwareContract
 from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment, SoftwareCreditNote
 from app.models.software_project import SoftwareProject
 from app.models.software_time_entry import SoftwareTimeEntry
+from app.services.project_work import project_activity_ids
 
 
 def maybe_mark_hourly_deal_won(db: Session, tenant_id, project_id) -> bool:
@@ -31,24 +30,14 @@ def maybe_mark_hourly_deal_won(db: Session, tenant_id, project_id) -> bool:
     if not contract or not contract.deal_id:
         return False
 
-    # Fetch all billable, approved entries attached to this project through ActivityLink.
-    billable_entries = db.query(SoftwareTimeEntry.id).join(
-        Activity, Activity.id == SoftwareTimeEntry.activity_id
-    ).join(
-        ActivityLink, ActivityLink.activity_id == Activity.id
-    ).filter(
+    # Every approved, billable entry for this project (linked directly or through one of
+    # its sprints) must already be on an invoice.
+    project_tasks = project_activity_ids(db, tenant_id, project.id)
+    uninvoiced = db.query(SoftwareTimeEntry.id).filter(
         SoftwareTimeEntry.tenant_id == tenant_id,
-        Activity.tenant_id == tenant_id,
-        ActivityLink.tenant_id == tenant_id,
-        ActivityLink.module == "software_project",
-        ActivityLink.record_id == project.id,
+        SoftwareTimeEntry.activity_id.in_(db.query(project_tasks.c.activity_id)),
         SoftwareTimeEntry.is_billable.is_(True),
         SoftwareTimeEntry.billing_status == "Approved",
-    ).subquery()
-
-    # Every approved billable entry must be associated with an invoice item.
-    uninvoiced = db.query(SoftwareTimeEntry.id).filter(
-        SoftwareTimeEntry.id.in_(db.query(billable_entries.c.id)),
         ~SoftwareTimeEntry.id.in_(db.query(SoftwareInvoiceItem.time_entry_id).filter(
             SoftwareInvoiceItem.tenant_id == tenant_id,
             SoftwareInvoiceItem.time_entry_id.is_not(None),
