@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 import app.core.cloudinary_config
 from app.core.dependencies import require_active_user
-from app.core.industry_modules import require_enabled_module
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.building import Building
@@ -37,7 +36,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/buildings",
     tags=["Building Images"],
-    dependencies=[Depends(require_enabled_module("buildings"))],
 )
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024

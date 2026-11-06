@@ -7,8 +7,6 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.database.connection import SessionLocal
 from app.models.user import User
-from app.models.role import Role
-from app.models.user_role import UserRole
 
 
 
@@ -51,6 +49,8 @@ def get_current_user(
 
     user_id = payload.get("user_id")
     tenant_id = payload.get("tenant_id")
+    role = payload.get("role")
+
     if not user_id or not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -77,23 +77,14 @@ def get_current_user(
             detail="User not found"
         )
 
-    # Roles can change after a token is issued, so use the current database
-    # assignment instead of trusting the role claim embedded in the token.
-    role = db.query(Role).join(
-        UserRole,
-        UserRole.role_id == Role.id,
-    ).filter(
-        UserRole.user_id == user.id
-    ).first()
-
     return {
         "user_id": str(user.id),
-        "tenant_id": str(user.tenant_id),
-        "role": role.name if role else None,
-        "status": user.status,
-        "must_change_password": user.must_change_password,
-        "profile_completed": user.profile_completed,
-        "token_purpose": payload.get("purpose", "access"),
+    "tenant_id": str(user.tenant_id),
+    "role": role,
+    "status": user.status,
+    "must_change_password": user.must_change_password,
+    "profile_completed": user.profile_completed,
+    "token_purpose": payload.get("purpose", "access")
     }
 
 

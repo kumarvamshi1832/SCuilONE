@@ -56,7 +56,7 @@ permissions = [
     ("document.create", "Upload documents"),
     ("document.delete", "Delete documents"),
 
-    ("audit.view", "View tenant audit logs"),
+    ("audit.view","View tenant audit logs"),
 
     ("property.view", "View properties"),
     ("property.create", "Create properties"),
@@ -87,6 +87,7 @@ permissions = [
     ("site_visit.create", "Create site visits"),
     ("site_visit.update", "Update site visits"),
     ("site_visit.delete", "Delete site visits"),
+
 
     ("booking.view", "View bookings"),
     ("booking.create", "Create bookings"),
@@ -124,6 +125,7 @@ permissions = [
     ("software_project.update", "Update software projects"),
     ("software_project.delete", "Delete software projects"),
 
+   
     ("software_sprint.view", "View software sprints"),
     ("software_sprint.create", "Create software sprints"),
     ("software_sprint.update", "Update software sprints"),
@@ -138,6 +140,7 @@ permissions = [
     ("software_time.delete", "Delete software time entries"),
     ("software_time.approve", "Approve or reject time entries for billing"),
 
+    
     ("software_invoice.view", "View software invoices"),
     ("software_invoice.create", "Create software invoices"),
     ("software_invoice.update", "Update draft software invoices"),
@@ -149,13 +152,10 @@ permissions = [
     ("software_invoice.payment.reverse", "Reverse recorded invoice payments"),
     ("software_invoice.credit_note.create", "Issue credit notes against invoices"),
 
-    ("support_ticket.view", "View support tickets"),
-    ("support_ticket.create", "Create support tickets"),
-    ("support_ticket.update", "Update and comment on support tickets"),
-    ("support_ticket.delete", "Delete closed support tickets"),
+    
 
-    ("customer_portal.invite", "Invite customer contacts to the portal"),
-    ("customer_portal.manage", "Suspend or reactivate customer portal users"),
+
+
 ]
 
 

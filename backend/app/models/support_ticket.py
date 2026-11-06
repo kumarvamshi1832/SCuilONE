@@ -64,8 +64,3 @@ class SupportTicketComment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     ticket: Mapped[SupportTicket] = relationship("SupportTicket", back_populates="comments")
-
-    @property
-    def author_type(self) -> str:
-        """Customer-safe author label so portal responses never leak staff user ids."""
-        return "customer" if self.author_customer_portal_user_id else "support"

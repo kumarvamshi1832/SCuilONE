@@ -50,18 +50,16 @@ from app.routes.software_delivery_reports import (
 from app.routes.software_invoices import router as software_invoices_router
 from app.routes.support_tickets import router as support_tickets_router
 from app.routes.customer_portal import router as customer_portal_router
-from app.routes.platform_admin import router as platform_admin_router
-from app.routes.platform_operations import router as platform_operations_router
+
+
+
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.rate_limiter import limiter
 
-app = FastAPI(
-    title="SCuilONE — Multi-Industry Multi-Tenant CRM & Platform Admin API",
-    version="1.0.0",
-)
+app = FastAPI()
 
 from fastapi.openapi.utils import get_openapi
 
@@ -117,9 +115,11 @@ origins = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
     "http://localhost:8000",
+
     "https://s-cuil-one.vercel.app",
     "https://s-cuil-one-git-backend-vamshi-kumarvamshi1832-7668s-projects.vercel.app",
     "https://s-cuil-gg9u5e3ah-kumarvamshi1832-7668s-projects.vercel.app",
+
 ]
 
 app.add_middleware(
@@ -173,12 +173,11 @@ app.include_router(software_delivery_reports_router)
 app.include_router(software_invoices_router)
 app.include_router(support_tickets_router)
 app.include_router(customer_portal_router)
-app.include_router(platform_admin_router)
-app.include_router(platform_operations_router)
+
 
 
 @app.get("/")
 def home():
     return {
-        "message": "SCuilONE CRM Backend Running",
+        "message": "SCuilONE CRM Backend Running"
     }

@@ -49,42 +49,16 @@ from app.models.software_estimate_item import SoftwareEstimateItem
 from app.models.software_contract import SoftwareContract
 from app.models.software_contract_milestone import SoftwareContractMilestone
 
-from app.models.software_project import SoftwareProject
+from app.models.software_project import SoftwareProject  
 from app.models.software_sprint import SoftwareSprint
 from app.models.industry_pack import IndustryPack
 from app.models.tenant_industry_config import TenantIndustryConfig
 from app.models.software_time_entry import SoftwareTimeEntry
-from app.models.software_invoice import (
-    SoftwareInvoice,
-    SoftwareInvoiceItem,
-    SoftwareInvoicePayment,
-    SoftwareCreditNote,
-)
+from app.models.software_invoice import SoftwareInvoice, SoftwareInvoiceItem, SoftwareInvoicePayment, SoftwareCreditNote
 from app.models.document_sequence import DocumentSequence
 from app.models.support_ticket import SupportTicket, SupportTicketComment
-from app.models.customer_portal import (
-    CustomerPortalUser,
-    CustomerPortalInvitation,
-    CustomerPortalSession,
-    CustomerPortalPasswordReset,
-)
+from app.models.customer_portal import CustomerPortalUser, CustomerPortalInvitation, CustomerPortalSession
 from app.models.software_invoice_reminder import SoftwareInvoiceReminder
-from app.models.platform import (
-    PlatformIndustryTeam,
-    PlatformEmployee,
-    PlatformSubscriptionPlan,
-    PlatformTenantSubscription,
-    PlatformBillingInvoice,
-    PlatformBillingPayment,
-    PlatformRefundRequest,
-    PlatformExpense,
-    PlatformSalesProspect,
-    PlatformSupportTicketMeta,
-    PlatformKnowledgeArticle,
-    PlatformTechnicalIncident,
-    PlatformSecurityEvent,
-    PlatformSetting,
-)
 
 
 config = context.config

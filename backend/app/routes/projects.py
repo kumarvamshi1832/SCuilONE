@@ -18,7 +18,7 @@ router = APIRouter(
     prefix="/api/v1/projects",
     tags=["Projects"],
     dependencies=[
-        Depends(require_enabled_module("real_estate_projects")),
+        Depends(require_enabled_module("projects")),
     ],
 )
 

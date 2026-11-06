@@ -19,9 +19,6 @@ SOFTWARE_MODULES = [
     "software_contracts",
     "software_projects",
     "software_sprints",
-    "software_time_entries",
-    "software_invoices",
-    "software_delivery_reports",
 ]
 
 REAL_ESTATE_MODULES = [
@@ -44,7 +41,7 @@ INDUSTRY_PACKS = [
             "businesses, including requirements, estimates, "
             "contracts, projects, and sprints."
         ),
-        "version": "1.1.0",
+        "version": "1.0.0",
         "is_active": True,
         "default_config": {
             "enabled_modules": COMMON_MODULES + SOFTWARE_MODULES,
@@ -60,22 +57,10 @@ INDUSTRY_PACKS = [
             "including properties, buildings, projects, buyer "
             "requirements, property matches, site visits, and bookings."
         ),
-        "version": "1.1.0",
-        "is_active": True,
-        "default_config": {
-            "enabled_modules": COMMON_MODULES + REAL_ESTATE_MODULES,
-            "dashboard_widgets": [],
-            "report_widgets": [],
-        },
-    },
-    {
-        "pack_key": "other",
-        "name": "General CRM",
-        "description": "Core CRM modules for businesses without a specialized industry pack.",
         "version": "1.0.0",
         "is_active": True,
         "default_config": {
-            "enabled_modules": COMMON_MODULES,
+            "enabled_modules": COMMON_MODULES + REAL_ESTATE_MODULES,
             "dashboard_widgets": [],
             "report_widgets": [],
         },
@@ -97,16 +82,6 @@ def seed_industry_packs(db: Session) -> None:
         )
 
         if existing:
-            if existing.version != pack_data["version"]:
-                # Industry pack defaults are centrally managed; tenant-specific
-                # changes live separately in TenantIndustryConfig.overrides.
-                existing.name = pack_data["name"]
-                existing.description = pack_data["description"]
-                existing.version = pack_data["version"]
-                existing.is_active = pack_data["is_active"]
-                existing.default_config = pack_data["default_config"]
-                print(f"Updated pack defaults: {existing.pack_key} ({existing.version})")
-                continue
             existing_count += 1
             print(
                 f"Already exists: {existing.pack_key}. "

@@ -1,5 +1,6 @@
 from app.models.user_mfa import UserMFA
 import hashlib
+import random
 import secrets
 import traceback
 import uuid
@@ -56,7 +57,6 @@ from app.schemas.auth import (
     LoginRequest,
     ProfileCompletionRequest,
     RegisterRequest,
-    ResendOTPRequest,
     ResetPasswordRequest,
     VerifyOTPRequest,
     VerifyResetOTPRequest,
@@ -513,7 +513,7 @@ async def register(
 
     db.add(pending_registration)
 
-    otp = str(secrets.randbelow(900000) + 100000)
+    otp = str(random.randint(100000, 999999))
     otp_hash = hash_password(otp)
 
     otp_record = OTPVerification(
@@ -543,63 +543,6 @@ async def register(
         "message": "OTP sent successfully",
         "email": data.email,
     }
-
-
-@router.post("/resend-otp")
-@limiter.limit("3/hour")
-async def resend_otp(
-    request: Request,
-    response: Response,
-    data: ResendOTPRequest,
-    db: Session = Depends(get_db),
-):
-    # Avoid confirming whether an email has a pending registration.
-    generic_response = {
-        "message": "If a registration is pending for this email, a new OTP has been sent.",
-        "email": data.email,
-    }
-
-    pending_registration = db.query(PendingRegistration).filter(
-        PendingRegistration.email == data.email
-    ).first()
-    if not pending_registration:
-        return generic_response
-
-    otp_record = db.query(OTPVerification).filter(
-        OTPVerification.email == data.email
-    ).first()
-
-    otp = str(secrets.randbelow(900000) + 100000)
-    otp_hash = hash_password(otp)
-    expires_at = datetime.utcnow() + timedelta(minutes=10)
-
-    if otp_record:
-        otp_record.otp_hash = otp_hash
-        otp_record.expires_at = expires_at
-        otp_record.attempts = 0
-    else:
-        db.add(OTPVerification(
-            email=data.email,
-            otp_hash=otp_hash,
-            expires_at=expires_at,
-            attempts=0,
-        ))
-
-    try:
-        db.commit()
-        await send_otp_email(
-            recipient_email=data.email,
-            otp=otp,
-        )
-    except Exception:
-        db.rollback()
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail="Unable to resend OTP. Please try again.",
-        )
-
-    return generic_response
 
 
 @router.post("/verify-otp")
@@ -738,18 +681,6 @@ def login(
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password",
-        )
-
-    pending_password_reset = db.query(PasswordResetOTP).filter(
-        PasswordResetOTP.email == data.email
-    ).first()
-    if pending_password_reset:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "You requested a password reset. Complete the reset before "
-                "logging in. If your OTP expired, request a new one."
-            ),
         )
 
     if user.status == "Inactive" and (
@@ -990,13 +921,11 @@ async def forgot_password(
         User.email == data.email
     ).first()
 
-    # Keep the response the same for known and unknown addresses to avoid
-    # exposing which email addresses have accounts.
     if not user:
-        return {
-            "message": "If an account exists for this email, a password-reset OTP has been sent.",
-            "email": data.email,
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
 
     old_otps = db.query(PasswordResetOTP).filter(
         PasswordResetOTP.email == data.email
@@ -1007,7 +936,7 @@ async def forgot_password(
 
     db.flush()
 
-    otp = str(secrets.randbelow(900000) + 100000)
+    otp = str(random.randint(100000, 999999))
     otp_hash = hash_password(otp)
 
     reset_otp = PasswordResetOTP(
@@ -1031,7 +960,7 @@ async def forgot_password(
         )
 
     return {
-        "message": "If an account exists for this email, a password-reset OTP has been sent.",
+        "message": "Password reset OTP sent successfully",
         "email": data.email,
     }
 
@@ -1055,12 +984,16 @@ def verify_reset_otp(
         )
 
     if datetime.utcnow() > otp_record.expires_at:
+        db.delete(otp_record)
+        db.commit()
         raise HTTPException(
             status_code=400,
             detail="OTP has expired. Please request a new OTP.",
         )
 
     if otp_record.attempts >= 5:
+        db.delete(otp_record)
+        db.commit()
         raise HTTPException(
             status_code=400,
             detail="Too many attempts. Please request a new OTP.",
@@ -1077,9 +1010,7 @@ def verify_reset_otp(
 
     reset_token = create_password_reset_token(data.email)
 
-    # Keep this row as a pending-reset marker until the new password is saved.
-    # The attempt limit prevents this OTP from being used again.
-    otp_record.attempts = 5
+    db.delete(otp_record)
     db.commit()
 
     return {
@@ -1110,16 +1041,6 @@ def reset_password(
             detail="Invalid password reset token",
         )
 
-    verified_reset = db.query(PasswordResetOTP).filter(
-        PasswordResetOTP.email == data.email,
-        PasswordResetOTP.attempts >= 5,
-    ).first()
-    if not verified_reset:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid password reset token",
-        )
-
     user = db.query(User).filter(
         User.email == data.email
     ).first()
@@ -1131,10 +1052,6 @@ def reset_password(
         )
 
     user.password = hash_password(data.new_password)
-
-    db.query(PasswordResetOTP).filter(
-        PasswordResetOTP.email == data.email
-    ).delete(synchronize_session=False)
     
     revoke_all_user_refresh_sessions(
         db=db,

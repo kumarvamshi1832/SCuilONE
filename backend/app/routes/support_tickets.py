@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
-from app.core.platform_rbac import auto_route_support_ticket
 from app.database.connection import SessionLocal
 from app.models.account import Account
 from app.models.contact import Contact
@@ -145,7 +144,6 @@ def create_support_ticket(payload: SupportTicketCreate,
     try:
         db.add(ticket)
         db.flush()
-        auto_route_support_ticket(db, ticket, actor_user_id=user_id)
         log_audit(db, tenant_id, user_id, "CREATE", "support_tickets", ticket.id,
                   f"Created support ticket {ticket.ticket_number}", after_data=ticket_snapshot(ticket))
         db.commit()
