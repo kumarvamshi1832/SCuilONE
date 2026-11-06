@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
-from fastapi import Response
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, or_
@@ -587,7 +587,6 @@ def update_portal_user_status(
 @limiter.limit("5/minute")
 def activate_customer_portal(
     request: Request,
-    response: Response,
     payload: PortalActivateRequest,
     db: Session = Depends(get_db),
 ):
@@ -642,7 +641,6 @@ def activate_customer_portal(
 @limiter.limit("5/minute")
 def customer_portal_login(
     request: Request,
-    response: Response,
     payload: PortalLoginRequest,
     db: Session = Depends(get_db),
 ):
@@ -716,7 +714,6 @@ def customer_portal_login(
 @limiter.limit("10/minute")
 def customer_portal_refresh(
     request: Request,
-    response: Response,
     payload: PortalRefreshRequest,
     db: Session = Depends(get_db),
 ):
@@ -832,7 +829,6 @@ def customer_portal_workspaces(portal: dict = Depends(require_portal_user), db: 
 @limiter.limit("20/minute")
 def customer_portal_switch_workspace(
     request: Request,
-    response: Response,
     payload: PortalSwitchWorkspaceRequest,
     portal: dict = Depends(require_portal_user),
     db: Session = Depends(get_db),
@@ -897,7 +893,6 @@ def customer_portal_switch_workspace(
 @limiter.limit("3/hour")
 async def customer_portal_forgot_password(
     request: Request,
-    response: Response,
     payload: PortalForgotPasswordRequest,
     db: Session = Depends(get_db),
 ):
@@ -961,7 +956,6 @@ async def customer_portal_forgot_password(
 @limiter.limit("5/minute")
 def customer_portal_reset_password(
     request: Request,
-    response: Response,
     payload: PortalResetPasswordRequest,
     db: Session = Depends(get_db),
 ):
@@ -1013,7 +1007,6 @@ def customer_portal_reset_password(
 @limiter.limit("5/minute")
 def customer_portal_change_password(
     request: Request,
-    response: Response,
     payload: PortalChangePasswordRequest,
     portal: dict = Depends(require_portal_user),
     db: Session = Depends(get_db),
