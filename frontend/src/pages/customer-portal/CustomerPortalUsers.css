@@ -4,6 +4,7 @@
    ========================================================================== */
 
 .portal-admin-container {
+  --text-color: #1e293b;
   padding: 24px;
   max-width: 1600px;
   margin: 0 auto;
@@ -11,7 +12,10 @@
   box-sizing: border-box;
 }
 
-.dashboard-wrapper.dark .portal-admin-container {
+.dashboard-wrapper.dark .portal-admin-container,
+.dark .portal-admin-container,
+[data-theme='dark'] .portal-admin-container {
+  --text-color: #f1f5f9;
   color: #f1f5f9;
 }
 
@@ -533,6 +537,68 @@
 
 .dashboard-wrapper.dark .portal-table tr:hover td {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.portal-contact-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dashboard-wrapper.dark .portal-contact-name,
+.dark .portal-contact-name,
+[data-theme='dark'] .portal-contact-name {
+  color: #f8fafc !important;
+}
+
+.portal-account-name {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.dashboard-wrapper.dark .portal-account-name,
+.dark .portal-account-name,
+[data-theme='dark'] .portal-account-name {
+  color: #f1f5f9 !important;
+}
+
+.portal-user-email {
+  color: #334155;
+}
+
+.dashboard-wrapper.dark .portal-user-email,
+.dark .portal-user-email,
+[data-theme='dark'] .portal-user-email {
+  color: #cbd5e1 !important;
+}
+
+.portal-date-cell {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.dashboard-wrapper.dark .portal-date-cell,
+.dark .portal-date-cell,
+[data-theme='dark'] .portal-date-cell {
+  color: #94a3b8 !important;
+}
+
+.portal-confirmation-box {
+  background: rgba(0, 0, 0, 0.03);
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #1e293b;
+}
+
+.dashboard-wrapper.dark .portal-confirmation-box,
+.dark .portal-confirmation-box,
+[data-theme='dark'] .portal-confirmation-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  color: #f1f5f9;
 }
 
 /* Empty State */

@@ -600,7 +600,7 @@ export default function SupportTickets() {
                     </span>
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600, color: "var(--text-color, #0f172a)", marginBottom: 4 }}>
+                    <div className="ticket-subject-text">
                       {ticket.subject}
                     </div>
                     <span className="badge-category">{ticket.category}</span>

@@ -34,8 +34,12 @@ export default function CustomerPortalUsers() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
+  const [contactsLoading, setContactsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contactsError, setContactsError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const isFetchingContactsRef = React.useRef(false);
 
   // Permissions
   const permissions = useMemo(() => getCustomerPortalPermissions(), []);
@@ -77,23 +81,64 @@ export default function CustomerPortalUsers() {
     }
   }, []);
 
-  // Fetch Contacts and Accounts for Invitation Dropdown
-  useEffect(() => {
-    async function loadMetadata() {
-      try {
-        const [contactList, accountList] = await Promise.all([
-          getContacts().catch(() => []),
-          getAccounts().catch(() => []),
-        ]);
-        setContacts(contactList || []);
-        setAccounts(accountList || []);
-      } catch (err) {
-        console.warn("Failed to load contacts or accounts for portal invites:", err);
-      }
+  // Reusable Contact and Account Loader for Customer Portal Invites
+  const loadContacts = useCallback(async () => {
+    if (isFetchingContactsRef.current) return;
+    isFetchingContactsRef.current = true;
+    setContactsLoading(true);
+    setContactsError(null);
+    try {
+      const [contactList, accountList] = await Promise.all([
+        getContacts(),
+        getAccounts(),
+      ]);
+      const fetchedContacts = contactList || [];
+      const fetchedAccounts = accountList || [];
+      setContacts(fetchedContacts);
+      setAccounts(fetchedAccounts);
+
+      // Preserve selected contact if still valid and eligible; otherwise clear invalid selection
+      setSelectedContactId((prev) => {
+        if (!prev) return "";
+        const isStillEligible = fetchedContacts.some(
+          (c) =>
+            c.id === prev &&
+            Boolean(c.email && c.email.trim().length > 0) &&
+            Boolean(c.account_id)
+        );
+        return isStillEligible ? prev : "";
+      });
+    } catch (err: any) {
+      console.error("Failed to load contacts or accounts for portal invites:", err);
+      setContactsError(
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Failed to load CRM contacts. Please check connection and try again."
+      );
+    } finally {
+      setContactsLoading(false);
+      isFetchingContactsRef.current = false;
     }
-    loadMetadata();
+  }, []);
+
+  // Fetch both Portal Users and Contacts on initial mount
+  useEffect(() => {
     fetchPortalUsers();
-  }, [fetchPortalUsers]);
+    loadContacts();
+  }, [fetchPortalUsers, loadContacts]);
+
+  // Combined Refresh for both Customer Portal Users and CRM Contacts
+  const handleRefreshAll = useCallback(async () => {
+    await Promise.all([fetchPortalUsers(), loadContacts()]);
+  }, [fetchPortalUsers, loadContacts]);
+
+  // Handle opening the Invite Customer Contact modal
+  const handleOpenInviteModal = useCallback(() => {
+    setSelectedContactId("");
+    setInviteSuccess(null);
+    setIsInviteOpen(true);
+    loadContacts();
+  }, [loadContacts]);
 
   // Account map for quick lookup
   const accountMap = useMemo(() => {
@@ -153,7 +198,7 @@ export default function CustomerPortalUsers() {
       const result = await inviteCustomerContact(selectedContactId);
       setInviteSuccess(result);
       showToast(`Invitation successfully sent to ${result.email}!`, "success");
-      fetchPortalUsers();
+      handleRefreshAll();
     } catch (err: any) {
       showToast(err?.response?.data?.detail || "Failed to send portal invitation.", "error");
     } finally {
@@ -299,19 +344,20 @@ export default function CustomerPortalUsers() {
           </div>
         </div>
         <div className="support-header-actions">
-          <button className="btn-secondary" onClick={fetchPortalUsers} disabled={loading}>
-            <RefreshIcon size={16} className={loading ? "animate-spin" : ""} />
+          <button
+            className="btn-secondary"
+            onClick={handleRefreshAll}
+            disabled={loading || contactsLoading}
+            title="Refresh portal users and CRM contacts"
+          >
+            <RefreshIcon size={16} className={loading || contactsLoading ? "animate-spin" : ""} />
             <span>Refresh</span>
           </button>
           <button
             className="btn-primary"
             disabled={!permissions.canInvite}
             title={!permissions.canInvite ? "Requires customer_portal.invite permission" : undefined}
-            onClick={() => {
-              setSelectedContactId("");
-              setInviteSuccess(null);
-              setIsInviteOpen(true);
-            }}
+            onClick={handleOpenInviteModal}
           >
             <UserPlusIcon size={16} />
             <span>Invite Customer Contact</span>
@@ -443,30 +489,30 @@ export default function CustomerPortalUsers() {
                 return (
                   <tr key={user.portal_user_id}>
                     <td>
-                      <div style={{ fontWeight: 600, color: "var(--text-color, #0f172a)" }}>
+                      <div className="portal-contact-name">
                         {user.contact_name}
                       </div>
                     </td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <BuildingIcon size={14} color="#64748b" />
-                        <span>{user.account_name}</span>
+                        <span className="portal-account-name">{user.account_name}</span>
                       </div>
                     </td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <MailIcon size={14} color="#64748b" />
-                        <span>{user.email}</span>
+                        <span className="portal-user-email">{user.email}</span>
                       </div>
                     </td>
                     <td>{getStatusBadge(user.status)}</td>
-                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+                    <td className="portal-date-cell">
                       {user.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}
                     </td>
-                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+                    <td className="portal-date-cell">
                       {user.activated_at ? new Date(user.activated_at).toLocaleDateString() : "—"}
                     </td>
-                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+                    <td className="portal-date-cell">
                       {user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"}
                     </td>
                     <td style={{ textAlign: "right" }}>
@@ -629,17 +675,7 @@ export default function CustomerPortalUsers() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  background: "var(--bg-secondary, rgba(0,0,0,0.03))",
-                  padding: "12px 14px",
-                  borderRadius: "8px",
-                  fontSize: "0.8125rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                }}
-              >
+              <div className="portal-confirmation-box">
                 <div>
                   <strong>Customer Contact:</strong> {confirmAction.user.contact_name}
                 </div>
@@ -811,13 +847,38 @@ export default function CustomerPortalUsers() {
                   </p>
 
                   <div className="form-group">
-                    <label>Select Customer Contact *</label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <label style={{ margin: 0 }}>Select Customer Contact *</label>
+                      <button
+                        type="button"
+                        onClick={loadContacts}
+                        disabled={contactsLoading}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#3b82f6",
+                          cursor: contactsLoading ? "not-allowed" : "pointer",
+                          fontSize: "0.75rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          padding: 0,
+                        }}
+                        title="Reload CRM contacts"
+                      >
+                        <RefreshIcon size={12} className={contactsLoading ? "animate-spin" : ""} />
+                        <span>{contactsLoading ? "Refreshing..." : "Reload Contacts"}</span>
+                      </button>
+                    </div>
                     <select
                       value={selectedContactId}
                       required
+                      disabled={contactsLoading}
                       onChange={(e) => setSelectedContactId(e.target.value)}
                     >
-                      <option value="">-- Choose Contact --</option>
+                      <option value="">
+                        {contactsLoading ? "-- Loading CRM Contacts... --" : "-- Choose Contact --"}
+                      </option>
                       {eligibleContacts.map((c) => {
                         const accName =
                           (c.account_id ? accountMap.get(c.account_id) : null) ||
@@ -832,7 +893,28 @@ export default function CustomerPortalUsers() {
                     </select>
                   </div>
 
-                  {eligibleContacts.length === 0 && (
+                  {contactsError && (
+                    <div className="support-alert error" style={{ marginTop: 12 }}>
+                      <span>{contactsError}</span>
+                      <button
+                        type="button"
+                        onClick={loadContacts}
+                        style={{
+                          marginLeft: 8,
+                          background: "none",
+                          border: "none",
+                          color: "inherit",
+                          textDecoration: "underline",
+                          cursor: "pointer",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
+                  {!contactsLoading && !contactsError && eligibleContacts.length === 0 && (
                     <div className="support-alert info" style={{ marginTop: 12 }}>
                       <span>
                         No contacts with both a valid email address and an associated Account found in

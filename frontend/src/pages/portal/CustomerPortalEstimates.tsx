@@ -13,11 +13,11 @@ import {
   getPortalEstimate,
   acceptPortalEstimate,
   rejectPortalEstimate,
+  ESTIMATE_STATUS_OPTIONS,
+  isEstimatePendingApproval,
 } from "../../services/customerPortalCommercialService";
 import type { PortalEstimate } from "../../types/customerPortal";
 import "./CustomerPortalTickets.css";
-
-const ESTIMATE_STATUSES = ["Sent", "Accepted", "Rejected", "Expired"];
 
 export default function CustomerPortalEstimates() {
   const [estimates, setEstimates] = useState<PortalEstimate[]>([]);
@@ -57,6 +57,14 @@ export default function CustomerPortalEstimates() {
 
   useEffect(() => {
     fetchEstimates();
+
+    const handleWorkspaceSwitch = () => {
+      fetchEstimates();
+    };
+    window.addEventListener("portal:workspace-switched", handleWorkspaceSwitch);
+    return () => {
+      window.removeEventListener("portal:workspace-switched", handleWorkspaceSwitch);
+    };
   }, [fetchEstimates]);
 
   const handleOpenDetail = async (id: string) => {
@@ -108,18 +116,24 @@ export default function CustomerPortalEstimates() {
   });
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Sent":
-        return <span className="badge-status status-waiting">Pending Approval</span>;
-      case "Accepted":
-        return <span className="badge-status status-resolved">Accepted</span>;
-      case "Rejected":
-        return <span className="badge-status status-closed">Rejected</span>;
-      case "Expired":
-        return <span className="badge-status" style={{ background: "rgba(100, 116, 139, 0.12)", color: "#64748b" }}>Expired</span>;
-      default:
-        return <span className="badge-status">{status}</span>;
+    if (isEstimatePendingApproval(status)) {
+      return <span className="badge-status status-waiting">Pending Approval</span>;
     }
+    const s = status ? status.trim().toLowerCase() : "";
+    if (s === "accepted") {
+      return <span className="badge-status status-resolved">Accepted</span>;
+    }
+    if (s === "rejected") {
+      return <span className="badge-status status-closed">Rejected</span>;
+    }
+    if (s === "expired") {
+      return (
+        <span className="badge-status" style={{ background: "rgba(100, 116, 139, 0.12)", color: "#64748b" }}>
+          Expired
+        </span>
+      );
+    }
+    return <span className="badge-status">{status}</span>;
   };
 
   return (
@@ -162,9 +176,9 @@ export default function CustomerPortalEstimates() {
             className="cp-select"
           >
             <option value="">All Statuses</option>
-            {ESTIMATE_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
+            {ESTIMATE_STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
@@ -213,13 +227,13 @@ export default function CustomerPortalEstimates() {
                 {filtered.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong style={{ color: "#2563eb" }}>{item.estimate_number}</strong>
+                      <strong style={{ color: "var(--cp-accent)" }}>{item.estimate_number}</strong>
                     </td>
                     <td>v{item.revision_number}</td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{item.title}</div>
                       {item.description && (
-                        <small style={{ color: "#64748b" }}>
+                        <small style={{ color: "var(--cp-text-muted)" }}>
                           {item.description.slice(0, 60)}
                           {item.description.length > 60 ? "..." : ""}
                         </small>
@@ -227,8 +241,8 @@ export default function CustomerPortalEstimates() {
                     </td>
                     <td>{item.billing_type}</td>
                     <td>{getStatusBadge(item.status)}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.issue_date}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.expiry_date || "—"}</td>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.issue_date}</td>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.expiry_date || "—"}</td>
                     <td style={{ fontWeight: 700 }}>
                       {item.currency} {Number(item.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
@@ -340,7 +354,7 @@ export default function CustomerPortalEstimates() {
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
                 <div style={{ width: 280, display: "flex", flexDirection: "column", gap: 6, fontSize: "0.875rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "#64748b" }}>Subtotal:</span>
+                    <span style={{ color: "var(--cp-text-muted)" }}>Subtotal:</span>
                     <strong>{selectedEstimate.currency} {Number(selectedEstimate.subtotal).toFixed(2)}</strong>
                   </div>
                   {Number(selectedEstimate.discount_amount) > 0 && (
@@ -350,12 +364,12 @@ export default function CustomerPortalEstimates() {
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "#64748b" }}>Tax Amount:</span>
+                    <span style={{ color: "var(--cp-text-muted)" }}>Tax Amount:</span>
                     <strong>{selectedEstimate.currency} {Number(selectedEstimate.tax_amount).toFixed(2)}</strong>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #cbd5e1", paddingTop: 6, fontSize: "1rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--cp-border)", paddingTop: 6, fontSize: "1rem" }}>
                     <span>Total Amount:</span>
-                    <strong style={{ color: "#2563eb" }}>
+                    <strong style={{ color: "var(--cp-accent)" }}>
                       {selectedEstimate.currency} {Number(selectedEstimate.total_amount).toFixed(2)}
                     </strong>
                   </div>
@@ -363,8 +377,8 @@ export default function CustomerPortalEstimates() {
               </div>
 
               {selectedEstimate.terms_and_conditions && (
-                <div style={{ background: "rgba(0,0,0,0.02)", padding: 14, borderRadius: 8, fontSize: "0.8125rem", color: "#64748b", marginBottom: 20 }}>
-                  <strong style={{ color: "#0f172a", display: "block", marginBottom: 4 }}>Terms & Conditions:</strong>
+                <div style={{ background: "var(--cp-surface-2)", border: "1px solid var(--cp-border)", padding: 14, borderRadius: 8, fontSize: "0.8125rem", color: "var(--cp-text-muted)", marginBottom: 20 }}>
+                  <strong style={{ color: "var(--cp-text)", display: "block", marginBottom: 4 }}>Terms & Conditions:</strong>
                   <div style={{ whiteSpace: "pre-wrap" }}>{selectedEstimate.terms_and_conditions}</div>
                 </div>
               )}
@@ -375,8 +389,8 @@ export default function CustomerPortalEstimates() {
                 Close
               </button>
 
-              {/* Accept & Reject buttons shown only if status is Sent */}
-              {selectedEstimate.status === "Sent" && (
+              {/* Accept & Reject buttons shown only if status is Sent / Pending Approval */}
+              {isEstimatePendingApproval(selectedEstimate.status) && (
                 <div style={{ display: "flex", gap: 10 }}>
                   <button
                     type="button"

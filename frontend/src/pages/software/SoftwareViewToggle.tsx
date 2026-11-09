@@ -82,3 +82,4 @@ export const SoftwareViewToggle: React.FC<SoftwareViewToggleProps> = ({
 };
 
 export default SoftwareViewToggle;
+

@@ -312,6 +312,9 @@ export default function AppRoutes() {
             <Route path="documents" element={<CustomerPortalDocuments />} />
             <Route path="tickets" element={<CustomerPortalTickets />} />
             <Route path="tickets/:ticketId" element={<CustomerPortalTicketDetails />} />
+            <Route path="properties" element={<CustomerPortalRealEstate initialTab="properties" />} />
+            <Route path="bookings" element={<CustomerPortalRealEstate initialTab="bookings" />} />
+            <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
           </Route>
@@ -329,6 +332,9 @@ export default function AppRoutes() {
             <Route path="documents" element={<CustomerPortalDocuments />} />
             <Route path="tickets" element={<CustomerPortalTickets />} />
             <Route path="tickets/:ticketId" element={<CustomerPortalTicketDetails />} />
+            <Route path="properties" element={<CustomerPortalRealEstate initialTab="properties" />} />
+            <Route path="bookings" element={<CustomerPortalRealEstate initialTab="bookings" />} />
+            <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
           </Route>
@@ -344,6 +350,9 @@ export default function AppRoutes() {
             <Route path="documents" element={<CustomerPortalDocuments />} />
             <Route path="tickets" element={<CustomerPortalTickets />} />
             <Route path="tickets/:ticketId" element={<CustomerPortalTicketDetails />} />
+            <Route path="properties" element={<CustomerPortalRealEstate initialTab="properties" />} />
+            <Route path="bookings" element={<CustomerPortalRealEstate initialTab="bookings" />} />
+            <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
           </Route>

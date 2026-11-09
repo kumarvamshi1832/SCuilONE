@@ -11,13 +11,18 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem("theme");
-    return (saved === "dark" || saved === "light") ? saved : "light";
+    const saved = localStorage.getItem("portal_theme") || localStorage.getItem("theme");
+    if (saved === "dark" || saved === "light") return saved;
+    // System preference fallback when no saved preference exists
+    if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "dark"; // Default approved theme for SCuilONE Customer Portal
   });
 
   useEffect(() => {
     localStorage.setItem("theme", theme);
-    // Optional: add a class to the body to help with global styles if needed
+    localStorage.setItem("portal_theme", theme);
     document.body.className = theme;
   }, [theme]);
 

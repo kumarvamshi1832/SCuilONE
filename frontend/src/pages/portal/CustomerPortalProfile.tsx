@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ShieldIcon,
@@ -10,6 +10,11 @@ import {
   UserIcon,
   EyeIcon,
   EyeOffIcon,
+  CameraIcon,
+  UploadIcon,
+  TrashIcon,
+  CheckIcon,
+  XIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalProfile,
@@ -19,6 +24,14 @@ import {
   getPortalCustomer,
   extractRateLimitInfo,
 } from "../../services/customerPortalAuthService";
+import {
+  getPortalAvatar,
+  savePortalAvatar,
+  removePortalAvatar,
+  validateAvatarFile,
+  fileToDataUrl,
+  PORTAL_AVATAR_EVENT,
+} from "../../services/customerPortalAvatarService";
 import type { PortalProfileResponse } from "../../types/customerPortal";
 import "./CustomerPortalProfile.css";
 
@@ -36,6 +49,12 @@ export default function CustomerPortalProfile() {
   const [phone, setPhone] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [address, setAddress] = useState("");
+
+  // Profile Avatar state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   // Change Password state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -197,6 +216,86 @@ export default function CustomerPortalProfile() {
   const accountName = profile?.account?.name || "Client Portal";
   const initials = contactName.slice(0, 2).toUpperCase();
 
+  // Resolved user identifier for avatar storage
+  const userKey =
+    profile?.id ||
+    localCustomer?.id ||
+    profile?.contact?.id ||
+    localCustomer?.email;
+
+  useEffect(() => {
+    setAvatarUrl(getPortalAvatar(userKey));
+  }, [userKey]);
+
+  useEffect(() => {
+    const handleAvatarUpdated = (event: Event) => {
+      const customEvt = event as CustomEvent<{
+        userIdentifier?: string;
+        avatarUrl?: string | null;
+      }>;
+      setAvatarUrl(customEvt.detail?.avatarUrl ?? null);
+    };
+    window.addEventListener(PORTAL_AVATAR_EVENT, handleAvatarUpdated);
+    return () => {
+      window.removeEventListener(PORTAL_AVATAR_EVENT, handleAvatarUpdated);
+    };
+  }, []);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateAvatarFile(file);
+    if (!validation.valid) {
+      setAvatarError(validation.error || "Invalid file format or size.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setAvatarError(null);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setPreviewAvatar(dataUrl);
+    } catch (err: any) {
+      setAvatarError(err?.message || "Failed to process the selected photo.");
+    }
+  };
+
+  const handleSaveAvatar = () => {
+    if (!previewAvatar) return;
+    try {
+      savePortalAvatar(userKey, previewAvatar);
+      setAvatarUrl(previewAvatar);
+      setPreviewAvatar(null);
+      setAvatarError(null);
+      setSuccessMessage("Profile photo updated successfully.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err: any) {
+      setAvatarError(err?.message || "Failed to save profile photo.");
+    }
+  };
+
+  const handleCancelPreview = () => {
+    setPreviewAvatar(null);
+    setAvatarError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemoveAvatar = () => {
+    try {
+      removePortalAvatar(userKey);
+      setAvatarUrl(null);
+      setPreviewAvatar(null);
+      setAvatarError(null);
+      setSuccessMessage("Profile photo removed.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err: any) {
+      setAvatarError(err?.message || "Failed to remove profile photo.");
+    }
+  };
+
+  const displayedAvatar = previewAvatar || avatarUrl;
+
   if (loading) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px", color: "#64748b" }}>
@@ -209,10 +308,26 @@ export default function CustomerPortalProfile() {
   return (
     <div className="cp-profile-page">
       <div className="cp-profile-card">
+        {/* Hidden File Input for Avatar Upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+          style={{ display: "none" }}
+          onChange={handleFileSelect}
+        />
+
         {error && (
           <div className="support-alert error" style={{ marginBottom: 20 }}>
             <AlertCircleIcon size={18} />
             <span>{error}</span>
+          </div>
+        )}
+
+        {avatarError && (
+          <div className="support-alert error" style={{ marginBottom: 20 }}>
+            <AlertCircleIcon size={18} />
+            <span>{avatarError}</span>
           </div>
         )}
 
@@ -225,14 +340,90 @@ export default function CustomerPortalProfile() {
 
         {/* Profile Header */}
         <div className="cp-profile-header">
-          <div className="cp-profile-avatar-lg">{initials}</div>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0 0 4px 0" }}>
+          <div className="cp-profile-avatar-wrapper">
+            <div
+              className={`cp-profile-avatar-lg ${previewAvatar ? "is-preview" : ""}`}
+            >
+              {displayedAvatar ? (
+                <img
+                  src={displayedAvatar}
+                  alt={contactName}
+                  className="cp-profile-avatar-img"
+                />
+              ) : (
+                <span>{initials}</span>
+              )}
+              <button
+                type="button"
+                className="cp-avatar-edit-badge"
+                onClick={() => fileInputRef.current?.click()}
+                title={displayedAvatar ? "Change profile photo" : "Upload profile photo"}
+                aria-label="Upload profile photo"
+              >
+                <CameraIcon size={13} />
+              </button>
+            </div>
+            {previewAvatar && (
+              <span className="cp-avatar-preview-tag">Preview</span>
+            )}
+          </div>
+
+          <div className="cp-profile-header-info">
+            <h1 className="cp-profile-name">
               {contactName}
             </h1>
-            <div style={{ color: "#64748b", fontSize: "0.875rem" }}>
+            <div className="cp-profile-sub">
               {profile?.contact?.job_title ? `${profile.contact.job_title} • ` : ""}
               {accountName} &bull; Verified Client Portal Member
+            </div>
+
+            {/* Profile Avatar Actions */}
+            <div className="cp-avatar-actions">
+              {previewAvatar ? (
+                <div className="cp-avatar-preview-actions">
+                  <button
+                    type="button"
+                    className="cp-avatar-btn cp-avatar-btn-save"
+                    onClick={handleSaveAvatar}
+                  >
+                    <CheckIcon size={14} />
+                    <span>Save Photo</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="cp-avatar-btn cp-avatar-btn-cancel"
+                    onClick={handleCancelPreview}
+                  >
+                    <XIcon size={14} />
+                    <span>Cancel</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="cp-avatar-default-actions">
+                  <button
+                    type="button"
+                    className="cp-avatar-btn cp-avatar-btn-upload"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <UploadIcon size={14} />
+                    <span>{avatarUrl ? "Change Photo" : "Upload Photo"}</span>
+                  </button>
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      className="cp-avatar-btn cp-avatar-btn-remove"
+                      onClick={handleRemoveAvatar}
+                      title="Remove current profile photo"
+                    >
+                      <TrashIcon size={14} />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+              )}
+              <span className="cp-avatar-hint">
+                JPG, JPEG, PNG, WEBP &bull; Max 5MB
+              </span>
             </div>
           </div>
           <div>
@@ -260,6 +451,59 @@ export default function CustomerPortalProfile() {
         {/* Edit Form or View Grid */}
         {isEditing ? (
           <form onSubmit={handleProfileSubmit} style={{ marginTop: 24 }}>
+            {/* Photo Edit Callout in Form */}
+            <div className="cp-profile-photo-panel">
+              <div className="cp-profile-photo-panel-left">
+                <div className="cp-profile-avatar-wrapper">
+                  <div
+                    className={`cp-profile-avatar-lg ${previewAvatar ? "is-preview" : ""}`}
+                    style={{ width: 56, height: 56, fontSize: "1.25rem" }}
+                  >
+                    {displayedAvatar ? (
+                      <img
+                        src={displayedAvatar}
+                        alt={contactName}
+                        className="cp-profile-avatar-img"
+                      />
+                    ) : (
+                      <span>{initials}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="cp-profile-photo-panel-title">
+                    Profile Photo
+                  </div>
+                  <div className="cp-profile-photo-panel-desc">
+                    {previewAvatar
+                      ? "Previewing new image. Click 'Save Photo' above to apply."
+                      : avatarUrl
+                      ? "Your custom profile image is currently active."
+                      : "No image uploaded. Initials avatar is active."}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="cp-avatar-btn cp-avatar-btn-upload"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <UploadIcon size={14} />
+                  <span>{avatarUrl ? "Change Image" : "Upload Image"}</span>
+                </button>
+                {avatarUrl && !previewAvatar && (
+                  <button
+                    type="button"
+                    className="cp-avatar-btn cp-avatar-btn-remove"
+                    onClick={handleRemoveAvatar}
+                  >
+                    <TrashIcon size={14} />
+                    <span>Remove</span>
+                  </button>
+                )}
+              </div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
               <div className="cp-form-group">
                 <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, marginBottom: 6 }}>
@@ -330,7 +574,7 @@ export default function CustomerPortalProfile() {
             </div>
           </form>
         ) : (
-          <div className="cp-profile-info-grid" style={{ marginTop: 24 }}>
+          <div className="cp-profile-info-grid">
             <div className="cp-profile-field">
               <span className="cp-profile-field-label">Full Name</span>
               <span className="cp-profile-field-val">{contactName}</span>
@@ -393,12 +637,12 @@ export default function CustomerPortalProfile() {
         )}
 
         {/* Change Password Section */}
-        <div style={{ marginTop: 40, borderTop: "1px solid #e2e8f0", paddingTop: 28 }}>
-          <h2 style={{ fontSize: "1.15rem", fontWeight: 700, margin: "0 0 8px 0", display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="cp-profile-section-divider">
+          <h2 className="cp-profile-section-title">
             <LockIcon size={18} />
             <span>Change Portal Password</span>
           </h2>
-          <p style={{ margin: "0 0 16px 0", fontSize: "0.85rem", color: "#64748b" }}>
+          <p className="cp-profile-section-desc">
             Update your login password. Changing your password will revoke all active portal sessions and require logging in again.
           </p>
 
@@ -409,12 +653,12 @@ export default function CustomerPortalProfile() {
             </div>
           )}
 
-          <form onSubmit={handleChangePassword} style={{ maxWidth: 480 }}>
-            <div className="cp-form-group" style={{ marginBottom: 14 }}>
+          <form onSubmit={handleChangePassword} className="cp-profile-password-form">
+            <div className="form-group" style={{ marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, marginBottom: 6 }}>
                 Current Password *
               </label>
-              <div style={{ position: "relative" }}>
+              <div className="cp-password-field-wrapper">
                 <input
                   type={showCurrentPassword ? "text" : "password"}
                   required
@@ -422,23 +666,23 @@ export default function CustomerPortalProfile() {
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   className="cp-input"
                   placeholder="Enter current password"
-                  style={{ width: "100%", paddingRight: 40 }}
                 />
                 <button
                   type="button"
+                  className="cp-password-toggle-btn"
                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}
+                  aria-label={showCurrentPassword ? "Hide password" : "Show password"}
                 >
                   {showCurrentPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
                 </button>
               </div>
             </div>
 
-            <div className="cp-form-group" style={{ marginBottom: 14 }}>
+            <div className="form-group" style={{ marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, marginBottom: 6 }}>
                 New Password (minimum 15 characters) *
               </label>
-              <div style={{ position: "relative" }}>
+              <div className="cp-password-field-wrapper">
                 <input
                   type={showNewPassword ? "text" : "password"}
                   required
@@ -446,23 +690,23 @@ export default function CustomerPortalProfile() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="cp-input"
                   placeholder="Enter new strong password"
-                  style={{ width: "100%", paddingRight: 40 }}
                 />
                 <button
                   type="button"
+                  className="cp-password-toggle-btn"
                   onClick={() => setShowNewPassword(!showNewPassword)}
-                  style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}
+                  aria-label={showNewPassword ? "Hide password" : "Show password"}
                 >
                   {showNewPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
                 </button>
               </div>
             </div>
 
-            <div className="cp-form-group" style={{ marginBottom: 16 }}>
+            <div className="form-group" style={{ marginBottom: 18 }}>
               <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 600, marginBottom: 6 }}>
                 Confirm New Password *
               </label>
-              <div style={{ position: "relative" }}>
+              <div className="cp-password-field-wrapper">
                 <input
                   type={showConfirmPassword ? "text" : "password"}
                   required
@@ -470,12 +714,12 @@ export default function CustomerPortalProfile() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="cp-input"
                   placeholder="Re-enter new password"
-                  style={{ width: "100%", paddingRight: 40 }}
                 />
                 <button
                   type="button"
+                  className="cp-password-toggle-btn"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
                 >
                   {showConfirmPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
                 </button>
@@ -505,30 +749,22 @@ export default function CustomerPortalProfile() {
         </div>
 
         {/* Security & Access Section */}
-        <div
-          style={{
-            marginTop: 36,
-            padding: 20,
-            borderRadius: 12,
-            background: "rgba(37, 99, 235, 0.05)",
-            border: "1px solid rgba(37, 99, 235, 0.15)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, fontWeight: 700, color: "#1d4ed8" }}>
+        <div className="cp-profile-security-box">
+          <div className="cp-profile-security-header">
             <ShieldIcon size={18} />
             <span>Enterprise Security & Data Isolation</span>
           </div>
-          <p style={{ margin: 0, fontSize: "0.8125rem", color: "#475569", lineHeight: 1.5 }}>
+          <p className="cp-profile-security-text">
             Your portal session is cryptographically isolated from internal CRM administrative systems.
             You only have access to records and support tickets belonging to <strong>{accountName}</strong>.
           </p>
         </div>
 
         {/* Logout Button */}
-        <div style={{ marginTop: 28, display: "flex", justifyContent: "flex-end" }}>
+        <div className="cp-profile-logout-wrap">
           <button
-            className="btn-secondary"
-            style={{ color: "#dc2626", borderColor: "#fca5a5" }}
+            type="button"
+            className="cp-profile-logout-btn"
             onClick={handleLogout}
           >
             <LogOutIcon size={16} />

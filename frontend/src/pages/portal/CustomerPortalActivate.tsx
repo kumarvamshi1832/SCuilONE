@@ -120,11 +120,17 @@ export default function CustomerPortalActivate() {
         localStorage.setItem("scuilone_portal_tenant_id", tenantToUse);
       }
 
+      // Friendly message: if multiple workspaces or existing identity connected, inform the customer
+      const friendlyMessage =
+        response.message && response.message.toLowerCase().includes("connected")
+          ? response.message
+          : "Your SCuilONE account is now connected to your company workspace. You can sign in and choose which workspace you want to access.";
+
       navigate("/portal/login", {
         replace: true,
         state: {
           tenant_id: tenantToUse,
-          message: "Account Activated Successfully. You can now sign in with your credentials.",
+          message: friendlyMessage,
         },
       });
     } catch (err: any) {

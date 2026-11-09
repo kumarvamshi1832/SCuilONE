@@ -26,10 +26,34 @@ function getStatusClass(status: string): string {
   }
 }
 
+function isValidReadableText(text?: string | null): boolean {
+  if (!text || typeof text !== "string") return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
 
+  // Reject obvious placeholder/null/error tokens
+  if (["null", "undefined", "--", "---", "none", "unknown", "—"].includes(trimmed.toLowerCase())) {
+    return false;
+  }
+
+  // Reject corrupted text, mojibake, or unicode replacement characters
+  if (/[\ufffd\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(trimmed)) {
+    return false;
+  }
+  if (/[├óΓé¼ΓÇ¥â€™Â]/.test(trimmed)) {
+    return false;
+  }
+
+  // Must contain at least one valid word/alphanumeric letter or digit
+  if (!/[\p{L}\p{N}]/u.test(trimmed)) {
+    return false;
+  }
+
+  return true;
+}
 
 export default function Leads() {
-  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Permissions ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
+  /* ─── Permissions ─── */
   const permissions = useMemo(() => getLeadPermissions(), []);
 
   const { industry } = useParams();
@@ -45,7 +69,7 @@ export default function Leads() {
   const currentIndustry = industry || tenantIndustry;
   const isEdu = currentIndustry === "education-consulting";
 
-  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ State ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
+  /* ─── State ─── */
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,11 +148,19 @@ export default function Leads() {
   };
 
   const getUserDisplay = (userId?: string | null): { name: string; role: string } => {
-    if (!userId) return { name: "├óΓé¼ΓÇ¥", role: "" };
-    const user = users.find((u) => u.id === userId);
-    return user
-      ? { name: user.full_name, role: user.role }
-      : { name: "--", role: "" };
+    if (!userId || typeof userId !== "string" || !userId.trim()) {
+      return { name: "—", role: "" };
+    }
+
+    const cleanId = userId.trim().toLowerCase();
+    const user = users.find((u) => u.id && u.id.trim().toLowerCase() === cleanId);
+
+    if (!user || !isValidReadableText(user.full_name)) {
+      return { name: "—", role: "" };
+    }
+
+    const cleanRole = isValidReadableText(user.role) ? user.role.trim() : "";
+    return { name: user.full_name.trim(), role: cleanRole };
   };
 
   const clearFilters = () => {
@@ -141,7 +173,7 @@ export default function Leads() {
 
   const hasActiveFilters = search || statusFilter || sourceFilter || assignedFilter;
 
-  /* Filtering (client-side) ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
+  /* ─── Filtering (client-side) ─── */
 
   const filteredLeads = leads.filter((lead) => {
     // Text search
@@ -436,14 +468,21 @@ export default function Leads() {
                         <td>
                           {(() => {
                             const display = getUserDisplay(lead.assigned_to);
-                            return display.role ? (
+                            if (display.name === "—") {
+                              return <span className="text-dim">—</span>;
+                            }
+                            return (
                               <div style={{ lineHeight: 1.3 }}>
                                 <span style={{ fontWeight: 500 }}>{display.name}</span>
-                                <br />
-                                <span className="text-dim" style={{ fontSize: '0.78rem' }}>{display.role}</span>
+                                {display.role && (
+                                  <>
+                                    <br />
+                                    <span className="text-dim" style={{ fontSize: "0.78rem" }}>
+                                      {display.role}
+                                    </span>
+                                  </>
+                                )}
                               </div>
-                            ) : (
-                              <span className="text-dim">{display.name}</span>
                             );
                           })()}
                         </td>

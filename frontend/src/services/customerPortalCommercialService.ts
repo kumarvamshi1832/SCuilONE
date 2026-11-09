@@ -13,10 +13,46 @@ import type {
 } from "../types/customerPortal";
 
 /* ─── Estimates ─── */
+export const ESTIMATE_STATUS_MAP: Record<string, string> = {
+  Sent: "Pending Approval",
+  Accepted: "Accepted",
+  Rejected: "Rejected",
+  Expired: "Expired",
+};
+
+export const ESTIMATE_STATUS_OPTIONS = [
+  { value: "Sent", label: "Pending Approval" },
+  { value: "Accepted", label: "Accepted" },
+  { value: "Rejected", label: "Rejected" },
+  { value: "Expired", label: "Expired" },
+];
+
+export const isEstimatePendingApproval = (status?: string | null): boolean => {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return (
+    s === "sent" ||
+    s === "pending approval" ||
+    s === "pending_approval" ||
+    s === "pending" ||
+    s === "under review"
+  );
+};
+
+export const getEstimateStatusLabel = (status?: string | null): string => {
+  if (!status) return "";
+  if (isEstimatePendingApproval(status)) return "Pending Approval";
+  return ESTIMATE_STATUS_MAP[status] || status;
+};
+
 export const getPortalEstimates = async (
   status?: string
 ): Promise<PortalEstimate[]> => {
-  const params = status ? `?status=${encodeURIComponent(status)}` : "";
+  let queryStatus = status;
+  if (status && (status.toLowerCase() === "pending approval" || status.toLowerCase() === "pending")) {
+    queryStatus = "Sent";
+  }
+  const params = queryStatus ? `?status=${encodeURIComponent(queryStatus)}` : "";
   const response = await portalApiClient.get<PortalEstimate[]>(
     `/api/v1/customer-portal/estimates${params}`
   );
@@ -149,3 +185,4 @@ export const getPortalSiteVisits = async (): Promise<PortalSiteVisit[]> => {
   );
   return response.data;
 };
+

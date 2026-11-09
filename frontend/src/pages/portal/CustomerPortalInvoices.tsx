@@ -167,11 +167,11 @@ export default function CustomerPortalInvoices() {
                 {filtered.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong style={{ color: "#2563eb" }}>{item.invoice_number}</strong>
+                      <strong style={{ color: "var(--cp-accent)" }}>{item.invoice_number}</strong>
                     </td>
                     <td>{getStatusBadge(item.status, item.is_overdue)}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.issue_date}</td>
-                    <td style={{ color: item.is_overdue ? "#ef4444" : "#64748b", fontSize: "0.8125rem" }}>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.issue_date}</td>
+                    <td style={{ color: item.is_overdue ? "#ef4444" : "var(--cp-text-muted)", fontSize: "0.8125rem" }}>
                       {item.due_date || "Upon Receipt"}
                       {item.is_overdue && item.days_overdue > 0 && (
                         <div style={{ color: "#ef4444", fontSize: "0.75rem", fontWeight: 600 }}>
@@ -358,3 +358,4 @@ export default function CustomerPortalInvoices() {
     </div>
   );
 }
+
