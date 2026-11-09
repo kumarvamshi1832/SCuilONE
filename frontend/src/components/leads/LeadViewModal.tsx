@@ -31,10 +31,27 @@ function getStatusClass(status: string): string {
   }
 }
 
+function isValidReadableText(text?: string | null): boolean {
+  if (!text || typeof text !== "string") return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (["null", "undefined", "--", "---", "none", "unknown", "—"].includes(trimmed.toLowerCase())) {
+    return false;
+  }
+  if (/[\ufffd\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(trimmed)) {
+    return false;
+  }
+  if (/[├óΓé¼ΓÇ¥â€™Â]/.test(trimmed)) {
+    return false;
+  }
+  return /[\p{L}\p{N}]/u.test(trimmed);
+}
+
 export default function LeadViewModal({ lead, users, onClose, onEdit }: LeadViewModalProps) {
-  const assignedUser = lead.assigned_to
-    ? users.find((u) => u.id === lead.assigned_to)
+  const assignedUser = lead.assigned_to && typeof lead.assigned_to === "string" && lead.assigned_to.trim()
+    ? users.find((u) => u.id && u.id.trim().toLowerCase() === lead.assigned_to?.trim().toLowerCase())
     : null;
+  const isAssignedValid = assignedUser && isValidReadableText(assignedUser.full_name);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -105,11 +122,9 @@ export default function LeadViewModal({ lead, users, onClose, onEdit }: LeadView
                 Assigned To
               </span>
               <span className="lead-view-value">
-                {assignedUser
-                  ? `${assignedUser.full_name} — ${assignedUser.role}`
-                  : lead.assigned_to
-                  ? "Unknown User"
-                  : "Unassigned"}
+                {isAssignedValid
+                  ? `${assignedUser.full_name.trim()}${isValidReadableText(assignedUser.role) ? ` — ${assignedUser.role.trim()}` : ""}`
+                  : "—"}
               </span>
             </div>
 

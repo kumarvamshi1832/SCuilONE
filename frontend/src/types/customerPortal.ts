@@ -59,7 +59,14 @@ export interface PortalWorkspace {
   tenant_name: string;
   account_id: string;
   account_name: string;
-  is_current: boolean;
+  industry?: string;
+  is_current?: boolean;
+}
+
+export interface PortalMultiWorkspaceSelectionResponse {
+  requires_tenant_selection: true;
+  message: string;
+  workspaces: PortalWorkspace[];
 }
 
 export interface PortalWorkspacesResponse {

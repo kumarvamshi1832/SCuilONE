@@ -141,12 +141,12 @@ export default function CustomerPortalProjects() {
                 {filtered.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong style={{ color: "#2563eb" }}>{item.project_number}</strong>
+                      <strong style={{ color: "var(--cp-accent)" }}>{item.project_number}</strong>
                     </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{item.name}</div>
                       {item.description && (
-                        <small style={{ color: "#64748b" }}>
+                        <small style={{ color: "var(--cp-text-muted)" }}>
                           {item.description.slice(0, 60)}
                           {item.description.length > 60 ? "..." : ""}
                         </small>
@@ -159,8 +159,8 @@ export default function CustomerPortalProjects() {
                       </span>
                     </td>
                     <td>{item.currency}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.start_date || "—"}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.target_end_date || "—"}</td>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.start_date || "—"}</td>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.target_end_date || "—"}</td>
                     <td style={{ textAlign: "right" }}>
                       <button
                         type="button"

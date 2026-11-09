@@ -1,41 +1,37 @@
-/* Customer Portal Ticket Details */
+/* ==========================================================================
+   SCuilONE Customer Portal - Ticket Details Page Styles
+   ========================================================================== */
+
 .cp-ticket-detail-page {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cp-back-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #64748b;
+  color: var(--cp-text-muted);
   text-decoration: none;
   font-size: 0.875rem;
   font-weight: 500;
-  transition: color 0.15s;
+  transition: color 0.15s ease;
 }
 
 .cp-back-link:hover {
-  color: #2563eb;
-}
-
-.cp-layout.dark .cp-back-link:hover {
-  color: #38bdf8;
+  color: var(--cp-accent);
 }
 
 .cp-ticket-card {
-  background: var(--cp-card-bg, #ffffff);
-  border: 1px solid var(--cp-border, #e2e8f0);
+  background: var(--cp-card-bg);
+  border: 1px solid var(--cp-border);
   border-radius: 14px;
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.cp-layout.dark .cp-ticket-card {
-  background: #1e293b;
-  border-color: #334155;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--cp-shadow-sm);
+  box-sizing: border-box;
 }
 
 .cp-ticket-header {
@@ -44,28 +40,37 @@
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 16px;
-  border-bottom: 1px solid var(--cp-border, #e2e8f0);
+  border-bottom: 1px solid var(--cp-border);
   padding-bottom: 20px;
   margin-bottom: 20px;
-}
-
-.cp-layout.dark .cp-ticket-header {
-  border-bottom-color: #334155;
 }
 
 .cp-ticket-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid var(--cp-border, #e2e8f0);
+  background: var(--cp-surface-2);
+  border: 1px solid var(--cp-border);
   border-radius: 10px;
   padding: 16px;
   margin-bottom: 24px;
+  box-sizing: border-box;
 }
 
-.cp-layout.dark .cp-ticket-meta {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: #334155;
+.cp-ticket-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
 }
 
+.cp-ticket-message {
+  background: var(--cp-surface-2);
+  border: 1px solid var(--cp-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.cp-ticket-message.staff {
+  border-left: 3px solid var(--cp-accent);
+}

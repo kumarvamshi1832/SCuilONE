@@ -226,12 +226,12 @@ export default function CustomerPortalContracts() {
                 {filtered.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong style={{ color: "#2563eb" }}>{item.contract_number}</strong>
+                      <strong style={{ color: "var(--cp-accent)" }}>{item.contract_number}</strong>
                     </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{item.title}</div>
                       {item.description && (
-                        <small style={{ color: "#64748b" }}>
+                        <small style={{ color: "var(--cp-text-muted)" }}>
                           {item.description.slice(0, 60)}
                           {item.description.length > 60 ? "..." : ""}
                         </small>
@@ -239,8 +239,8 @@ export default function CustomerPortalContracts() {
                     </td>
                     <td>{item.milestone_billing_mode || item.billing_type}</td>
                     <td>{getStatusBadge(item.status)}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.issue_date}</td>
-                    <td style={{ color: "#64748b", fontSize: "0.8125rem" }}>{item.start_date || "—"}</td>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.issue_date}</td>
+                    <td style={{ color: "var(--cp-text-muted)", fontSize: "0.8125rem" }}>{item.start_date || "—"}</td>
                     <td style={{ fontWeight: 700 }}>
                       {item.currency} {Number(item.contract_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>

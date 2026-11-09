@@ -388,10 +388,10 @@ export default function CustomerPortalTickets() {
                     </td>
                     <td>{getPriorityBadge(t.priority)}</td>
                     <td>{getStatusBadge(t.status)}</td>
-                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+                    <td style={{ fontSize: "0.8125rem", color: "var(--cp-text-muted)" }}>
                       {new Date(t.created_at).toLocaleDateString()}
                     </td>
-                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+                    <td style={{ fontSize: "0.8125rem", color: "var(--cp-text-muted)" }}>
                       {new Date(t.updated_at).toLocaleDateString()}
                     </td>
                     <td style={{ textAlign: "right" }}>
@@ -414,7 +414,7 @@ export default function CustomerPortalTickets() {
         {/* Server Pagination */}
         {!loading && tickets.length > 0 && (
           <div className="cp-pagination-bar">
-            <div style={{ fontSize: "0.8125rem", color: "#64748b" }}>
+            <div style={{ fontSize: "0.8125rem", color: "var(--cp-text-muted)" }}>
               Showing {Math.min((page - 1) * pageSize + 1, totalTickets)} to{" "}
               {Math.min(page * pageSize, totalTickets)} of {totalTickets} tickets
             </div>

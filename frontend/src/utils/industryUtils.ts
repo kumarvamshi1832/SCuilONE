@@ -214,21 +214,32 @@ export function getIndustryDisplayName(industry?: string | null): string {
     return 'B2B Sales';
   }
 
-  const norm = normalizeIndustry(industry);
-  switch (norm) {
-    case 'insurance-agency':
-      return 'Insurance Agency';
-    case 'digital-marketing-agency':
-      return 'Digital Marketing Agency';
-    case 'training-institute':
-      return 'Training Institute';
-    case 'education-consulting':
-      return 'Education Consulting';
-    case 'software-company':
-      return 'Software Company';
-    case 'real-estate':
-      return 'Real Estate';
-    default:
-      return 'Real Estate';
+  if (isKnownIndustry(cleaned)) {
+    const norm = normalizeIndustry(industry);
+    switch (norm) {
+      case 'insurance-agency':
+        return 'Insurance Agency';
+      case 'digital-marketing-agency':
+        return 'Digital Marketing Agency';
+      case 'training-institute':
+        return 'Training Institute';
+      case 'education-consulting':
+        return 'Education Consulting';
+      case 'software-company':
+        return 'Software Company';
+      case 'real-estate':
+        return 'Real Estate';
+      default:
+        return 'Real Estate';
+    }
   }
+
+  // Gracefully format unknown / arbitrary industry identifier
+  return industry
+    .trim()
+    .replace(/[/\\&_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
 }

@@ -48,6 +48,8 @@ interface MenuGroupConfig {
   routes: string[];
 }
 
+const CRM_SIDEBAR_COLLAPSED_KEY = "scuilone_crm_sidebar_collapsed";
+
 const MENU_GROUPS: MenuGroupConfig[] = [
   {
     id: "sales-crm",
@@ -348,6 +350,31 @@ export default function DashboardLayout({
   } | null>(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // CRM Collapsible Sidebar state (collapsed by default, remembered across navigation in session)
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = sessionStorage.getItem(CRM_SIDEBAR_COLLAPSED_KEY);
+      if (saved !== null) {
+        return saved === "true";
+      }
+    } catch {
+      // Fallback if sessionStorage is inaccessible
+    }
+    return true; // Collapsed by default across CRM modules
+  });
+
+  const handleToggleSidebar = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        sessionStorage.setItem(CRM_SIDEBAR_COLLAPSED_KEY, String(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  };
 
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
@@ -1437,6 +1464,23 @@ const toggleGroup = (groupId: string) => {
   }));
 };
 
+const handleGroupHeaderClick = (groupId: string) => {
+  if (isCollapsed) {
+    setIsCollapsed(false);
+    try {
+      sessionStorage.setItem(CRM_SIDEBAR_COLLAPSED_KEY, "false");
+    } catch {
+      // Ignore
+    }
+    setOpenGroups((prev) => ({
+      ...prev,
+      [groupId]: true,
+    }));
+  } else {
+    toggleGroup(groupId);
+  }
+};
+
 const renderGroupSection = (group: MenuGroupConfig, items: NavItem[]) => {
   const isOpen = Boolean(openGroups[group.id]);
   const hasActiveChild = items.some((item) => isActiveNavItem(item.path));
@@ -1446,8 +1490,9 @@ const renderGroupSection = (group: MenuGroupConfig, items: NavItem[]) => {
       <button
         type="button"
         className={`nav-group-header ${hasActiveChild ? "has-active" : ""}`}
-        onClick={() => toggleGroup(group.id)}
+        onClick={() => handleGroupHeaderClick(group.id)}
         aria-expanded={isOpen}
+        title={isCollapsed ? group.title : undefined}
       >
         <svg
           className="nav-icon"
@@ -1472,6 +1517,9 @@ const renderGroupSection = (group: MenuGroupConfig, items: NavItem[]) => {
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
+        {isCollapsed && (
+          <span className="sidebar-floating-tooltip">{group.title}</span>
+        )}
       </button>
 
       {isOpen && (
@@ -1520,54 +1568,61 @@ return (
 
       )}
 
-      <aside className={`dashboard-sidebar ${isSidebarOpen ? "open" : ""}`}>
+      <aside className={`dashboard-sidebar ${isCollapsed ? "collapsed" : "expanded"} ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
-          <div
-
-            className="brand-logo-text"
-
-            style={{ display: "flex", alignItems: "center" }}
-          >
-
-            {currentIndustry === "education-consulting" && (
-              <svg
-
-                className="brand-icon"
-
-                viewBox="0 0 24 24"
-
-                fill="none"
-
-                stroke="currentColor"
-
-                strokeWidth="2"
-
-                strokeLinecap="round"
-
-                strokeLinejoin="round"
-
-                style={{
-
-                  marginRight: "8px",
-
-                  width: "24px",
-
-                  height: "24px",
-
-                  flexShrink: 0,
-
-                }}
+          <div className="sidebar-brand-top">
+            <div className="brand-logo-container">
+              <div
+                className="brand-logo-text"
+                style={{ display: "flex", alignItems: "center" }}
               >
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                {currentIndustry === "education-consulting" && (
+                  <svg
+                    className="brand-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      marginRight: "8px",
+                      width: "24px",
+                      height: "24px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                    <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                  </svg>
+                )}
+
+                <h2 className="brand-full-heading" style={{ margin: 0 }}>
+                  <span className="text-blue">SCuil</span>
+                  <span className="text-white">ONE</span>
+                </h2>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="sidebar-toggle-btn"
+              onClick={handleToggleSidebar}
+              title={isCollapsed ? "Expand Menu" : "Collapse Menu"}
+              aria-label={isCollapsed ? "Expand Menu" : "Collapse Menu"}
+            >
+              <svg
+                className={`sidebar-toggle-arrow ${isCollapsed ? "collapsed" : "expanded"}`}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6" />
               </svg>
-
-            )}
-
-            <h2 style={{ margin: 0 }}>
-              <span className="text-blue">SCuil</span>
-              <span className="text-white">ONE</span>
-            </h2>
+            </button>
           </div>
 
           <div
@@ -1591,6 +1646,7 @@ return (
                 isActiveNavItem(dashboardItem.path) ? "active" : ""
               }`}
               onClick={() => setIsSidebarOpen(false)}
+              title={isCollapsed ? dashboardItem.label : undefined}
             >
               <svg
                 className="nav-icon"
@@ -1603,7 +1659,10 @@ return (
               >
                 <path d={dashboardItem.icon} />
               </svg>
-              <span>{dashboardItem.label}</span>
+              <span className="nav-item-label">{dashboardItem.label}</span>
+              {isCollapsed && (
+                <span className="sidebar-floating-tooltip">{dashboardItem.label}</span>
+              )}
             </Link>
           )}
 
@@ -1632,6 +1691,7 @@ return (
                     isActiveNavItem(reportsItem.path) ? "active" : ""
                   }`}
                   onClick={() => setIsSidebarOpen(false)}
+                  title={isCollapsed ? reportsItem.label : undefined}
                 >
                   <svg
                     className="nav-icon"
@@ -1644,7 +1704,10 @@ return (
                   >
                     <path d={reportsItem.icon} />
                   </svg>
-                  <span>{reportsItem.label}</span>
+                  <span className="nav-item-label">{reportsItem.label}</span>
+                  {isCollapsed && (
+                    <span className="sidebar-floating-tooltip">{reportsItem.label}</span>
+                  )}
                 </Link>
               )}
 
@@ -1666,6 +1729,7 @@ return (
                     isActiveNavItem(item.path) ? "active" : ""
                   }`}
                   onClick={() => setIsSidebarOpen(false)}
+                  title={isCollapsed ? item.label : undefined}
                 >
                   <svg
                     className="nav-icon"
@@ -1678,7 +1742,10 @@ return (
                   >
                     <path d={item.icon} />
                   </svg>
-                  <span>{item.label}</span>
+                  <span className="nav-item-label">{item.label}</span>
+                  {isCollapsed && (
+                    <span className="sidebar-floating-tooltip">{item.label}</span>
+                  )}
                 </Link>
               ))}
             </>
@@ -1690,54 +1757,46 @@ return (
             to={`${basePath}/help`}
             className={`nav-item ${location.pathname.endsWith("/help") ? "active" : ""}`}
             onClick={() => setIsSidebarOpen(false)}
+            title={isCollapsed ? "Help" : undefined}
           >
             <svg
-
               className="nav-icon"
-
               viewBox="0 0 24 24"
-
               fill="none"
-
               stroke="currentColor"
-
               strokeWidth="2"
-
               strokeLinecap="round"
-
               strokeLinejoin="round"
             >
               <circle cx="12" cy="12" r="10" />
               <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-
-            Help
+            <span className="nav-item-label">Help</span>
+            {isCollapsed && <span className="sidebar-floating-tooltip">Help</span>}
           </Link>
 
-          <button className="nav-item logout-btn" onClick={handleLogout}>
+          <button
+            type="button"
+            className="nav-item logout-btn"
+            onClick={handleLogout}
+            title={isCollapsed ? "Logout" : undefined}
+          >
             <svg
-
               className="nav-icon"
-
               viewBox="0 0 24 24"
-
               fill="none"
-
               stroke="currentColor"
-
               strokeWidth="2"
-
               strokeLinecap="round"
-
               strokeLinejoin="round"
             >
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
-
-            Logout
+            <span className="nav-item-label">Logout</span>
+            {isCollapsed && <span className="sidebar-floating-tooltip">Logout</span>}
           </button>
         </div>
       </aside>

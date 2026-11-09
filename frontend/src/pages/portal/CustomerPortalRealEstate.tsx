@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import {
   BuildingIcon,
   RefreshIcon,
@@ -7,6 +8,7 @@ import {
   AlertCircleIcon,
   EyeIcon,
   XIcon,
+  ReceiptIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalBookings,
@@ -26,8 +28,43 @@ const formatCurrency = (amount: number | string | undefined, currency = "USD") =
   }).format(num);
 };
 
-export default function CustomerPortalRealEstate() {
-  const [activeTab, setActiveTab] = useState<"bookings" | "visits">("bookings");
+export interface CustomerPortalRealEstateProps {
+  initialTab?: "properties" | "bookings" | "visits";
+}
+
+interface PropertySummaryItem {
+  id: string;
+  name: string;
+  propertyType?: string;
+  unitNumber?: string;
+  city?: string;
+  address?: string;
+  currency?: string;
+  bookingId?: string;
+  bookingStatus?: string;
+  agreedPrice?: string;
+  verifiedPaidAmount?: string;
+  remainingBalance?: string;
+}
+
+export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalRealEstateProps = {}) {
+  const location = useLocation();
+
+  const resolveTab = (): "properties" | "bookings" | "visits" => {
+    if (initialTab) return initialTab;
+    const path = location.pathname.toLowerCase();
+    if (path.includes("properties")) return "properties";
+    if (path.includes("site-visits") || path.includes("visits")) return "visits";
+    if (path.includes("bookings")) return "bookings";
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get("tab");
+    if (tabParam === "properties" || tabParam === "visits" || tabParam === "bookings") {
+      return tabParam;
+    }
+    return "properties";
+  };
+
+  const [activeTab, setActiveTab] = useState<"properties" | "bookings" | "visits">(resolveTab);
   const [bookings, setBookings] = useState<PortalBooking[]>([]);
   const [siteVisits, setSiteVisits] = useState<PortalSiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +73,10 @@ export default function CustomerPortalRealEstate() {
 
   const [selectedBooking, setSelectedBooking] = useState<PortalBooking | null>(null);
   const [loadingBookingDetail, setLoadingBookingDetail] = useState(false);
+
+  useEffect(() => {
+    setActiveTab(resolveTab());
+  }, [location.pathname, location.search, initialTab]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -100,6 +141,57 @@ export default function CustomerPortalRealEstate() {
     }
   };
 
+  const propertyCards = useMemo(() => {
+    const map = new Map<string, PropertySummaryItem>();
+
+    bookings.forEach((b) => {
+      const propId = b.property?.id || b.property_id || b.id;
+      if (!map.has(propId)) {
+        map.set(propId, {
+          id: propId,
+          name: b.property?.name || b.property_title || "Residential Unit",
+          propertyType: b.property?.property_type || "Apartment / Unit",
+          unitNumber: b.property?.unit_number || undefined,
+          city: b.property?.city || undefined,
+          address: b.property?.address || undefined,
+          currency: b.property?.currency || "USD",
+          bookingId: b.id,
+          bookingStatus: b.status,
+          agreedPrice: b.agreed_price,
+          verifiedPaidAmount: b.verified_paid_amount,
+          remainingBalance: b.remaining_balance,
+        });
+      }
+    });
+
+    siteVisits.forEach((v) => {
+      const propId = v.property?.id || v.property_id || v.id;
+      if (!map.has(propId)) {
+        map.set(propId, {
+          id: propId,
+          name: v.property?.name || v.property_title || "Property Visit Location",
+          propertyType: v.property?.property_type || "Residential",
+          city: v.property?.city || undefined,
+          address: v.property?.address || undefined,
+          currency: "USD",
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [bookings, siteVisits]);
+
+  const filteredProperties = propertyCards.filter((p) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.city && p.city.toLowerCase().includes(q)) ||
+      (p.unitNumber && p.unitNumber.toLowerCase().includes(q)) ||
+      (p.propertyType && p.propertyType.toLowerCase().includes(q))
+    );
+  });
+
   const filteredBookings = bookings.filter((b) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -141,6 +233,26 @@ export default function CustomerPortalRealEstate() {
       <div style={{ display: "flex", gap: 10, borderBottom: "1px solid var(--cp-border)", marginBottom: 20 }}>
         <button
           type="button"
+          onClick={() => setActiveTab("properties")}
+          style={{
+            padding: "10px 18px",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "properties" ? "2px solid var(--cp-primary)" : "2px solid transparent",
+            color: activeTab === "properties" ? "var(--cp-primary)" : "var(--cp-text-muted)",
+            fontWeight: activeTab === "properties" ? 600 : 500,
+            cursor: "pointer",
+            fontSize: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <BuildingIcon size={16} />
+          <span>Properties ({propertyCards.length})</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab("bookings")}
           style={{
             padding: "10px 18px",
@@ -156,7 +268,7 @@ export default function CustomerPortalRealEstate() {
             gap: 8,
           }}
         >
-          <BuildingIcon size={16} />
+          <ReceiptIcon size={16} />
           <span>Property Bookings ({bookings.length})</span>
         </button>
         <button
@@ -188,8 +300,10 @@ export default function CustomerPortalRealEstate() {
           <input
             type="text"
             placeholder={
-              activeTab === "bookings"
-                ? "Search by property or booking..."
+              activeTab === "properties"
+                ? "Search by property name, unit, or city..."
+                : activeTab === "bookings"
+                ? "Search by property or booking ID..."
                 : "Search site visits by property or status..."
             }
             value={search}
@@ -225,6 +339,103 @@ export default function CustomerPortalRealEstate() {
           <div className="cp-spinner" />
           <p>Loading real estate details...</p>
         </div>
+      ) : activeTab === "properties" ? (
+        filteredProperties.length === 0 ? (
+          <div className="cp-empty-state">
+            <div className="cp-empty-icon">
+              <BuildingIcon size={44} color="var(--cp-text-muted)" />
+            </div>
+            <h3>No Properties Found</h3>
+            <p>
+              {search
+                ? "No property records match your search criteria."
+                : "No properties are currently linked to your customer account portfolio."}
+            </p>
+          </div>
+        ) : (
+          <div className="cp-table-card">
+            <table className="cp-table">
+              <thead>
+                <tr>
+                  <th>Property & Project</th>
+                  <th>Unit & Type</th>
+                  <th>Location</th>
+                  <th>Contracted Value</th>
+                  <th>Verified Paid</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProperties.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <div style={{ fontWeight: 600, color: "var(--cp-text-main)" }}>
+                        {p.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--cp-text-muted)", marginTop: 2 }}>
+                        {[p.unitNumber && `Unit ${p.unitNumber}`, p.city].filter(Boolean).join(" • ") || "Portfolio Property"}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 500, color: "var(--cp-text-main)" }}>
+                        {p.unitNumber ? `Unit ${p.unitNumber}` : p.propertyType || "Property Unit"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--cp-text-muted)", marginTop: 2 }}>
+                        {p.propertyType || "Residential"}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 13, color: "var(--cp-text-muted)" }}>
+                      {[p.address, p.city].filter(Boolean).join(", ") || "Location On Record"}
+                    </td>
+                    <td style={{ fontWeight: 600, color: "var(--cp-text-main)" }}>
+                      {formatCurrency(p.agreedPrice, p.currency)}
+                    </td>
+                    <td style={{ fontWeight: 600, color: "#10b981" }}>
+                      {p.verifiedPaidAmount !== undefined
+                        ? formatCurrency(p.verifiedPaidAmount, p.currency)
+                        : "—"}
+                    </td>
+                    <td>
+                      {p.bookingStatus ? (
+                        getStatusBadge(p.bookingStatus)
+                      ) : (
+                        <span className="badge-status status-open">Listed</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {p.bookingId ? (
+                        <button
+                          type="button"
+                          className="btn-action"
+                          onClick={() => handleOpenBooking(p.bookingId!)}
+                          disabled={loadingBookingDetail}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "6px 12px",
+                            borderRadius: 6,
+                            border: "1px solid var(--cp-border)",
+                            background: "var(--cp-bg-surface)",
+                            color: "var(--cp-text-main)",
+                            fontSize: 13,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <EyeIcon size={14} />
+                          <span>Inspect</span>
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "var(--cp-text-muted)" }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : activeTab === "bookings" ? (
         filteredBookings.length === 0 ? (
           <div className="cp-empty-state">
@@ -353,9 +564,9 @@ export default function CustomerPortalRealEstate() {
                     <td style={{ fontSize: 13, color: "var(--cp-text-muted)" }}>
                       {v.scheduled_start
                         ? new Date(v.scheduled_start).toLocaleString([], {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
                         : "Scheduled"}
                       {v.scheduled_end && ` – ${new Date(v.scheduled_end).toLocaleTimeString([], { timeStyle: "short" })}`}
                     </td>
@@ -600,4 +811,3 @@ export default function CustomerPortalRealEstate() {
     </div>
   );
 }
-
