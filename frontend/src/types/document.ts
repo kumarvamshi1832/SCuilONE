@@ -22,6 +22,7 @@ export interface DocumentItem {
   description: string | null;
   version_number: number;
   is_confidential: boolean;
+  shared_with_customer?: boolean;
   expires_at: string | null;
   is_deleted: boolean;
   deleted_at: string | null;
@@ -53,10 +54,16 @@ export interface DocumentUploadParams {
   document_type?: string;
   description?: string;
   is_confidential?: boolean;
+  shared_with_customer?: boolean;
   lead_id?: string;
   contact_id?: string;
   account_id?: string;
   deal_id?: string;
+}
+
+export interface DocumentSharingResponse {
+  message: string;
+  document: DocumentItem;
 }
 
 export interface DocumentFilterParams {

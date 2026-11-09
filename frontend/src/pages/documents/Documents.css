@@ -782,6 +782,23 @@ body.dark .uploader-name,
   background: #ecfdf5;
 }
 
+.doc-action-btn.share-btn:hover {
+  color: #10b981;
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
+.doc-action-btn.share-btn.active-shared {
+  color: #10b981;
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.doc-table-btn.share:hover {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
 .doc-action-btn.delete-btn:hover {
   color: #dc2626;
   border-color: #fecaca;

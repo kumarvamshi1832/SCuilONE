@@ -8,6 +8,7 @@ import {
 } from "../../services/softwareTimeEntryService";
 import { getActivities } from "../../services/activityService";
 import { getSoftwareProjects } from "../../services/softwareProjectService";
+import { getSoftwareSprints } from "../../services/softwareSprintService";
 import { getUsers } from "../../services/userService";
 import { getSoftwarePermissions } from "../../utils/softwarePermissions";
 import {
@@ -25,9 +26,11 @@ import type {
 } from "../../types/softwareTimeEntry";
 import type { Activity } from "../../types/activity";
 import type { SoftwareProject } from "../../types/softwareProject";
+import type { SoftwareSprint } from "../../types/softwareSprint";
 import type { User } from "../../types/user";
 
 import "./SoftwareModules.css";
+import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
 import "./SoftwareTimeTracking.css";
 
 /**
@@ -124,6 +127,7 @@ export default function SoftwareTimeTracking() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [projects, setProjects] = useState<SoftwareProject[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [sprints, setSprints] = useState<SoftwareSprint[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +135,18 @@ export default function SoftwareTimeTracking() {
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
+  const [viewMode, setViewMode] = useState<SoftwareViewMode>(
+    () => (localStorage.getItem("software_time_tracking_view_mode") as SoftwareViewMode) || "grid"
+  );
+
+  const handleViewModeChange = (mode: SoftwareViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("software_time_tracking_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
   const [billingStatusFilter, setBillingStatusFilter] = useState<string>("");
   const [billableFilter, setBillableFilter] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
@@ -195,11 +211,12 @@ export default function SoftwareTimeTracking() {
     if (!isSilent) setLoading(true);
     setError(null);
     try {
-      const [entriesData, actsData, projsData, usersData] = await Promise.all([
+      const [entriesData, actsData, projsData, usersData, sprintsData] = await Promise.all([
         getTimeEntries(),
         getActivities().catch(() => []),
         getSoftwareProjects().catch(() => []),
         getUsers().catch(() => []),
+        getSoftwareSprints().catch(() => []),
       ]);
 
       const validEntries = Array.isArray(entriesData) ? entriesData : [];
@@ -207,6 +224,7 @@ export default function SoftwareTimeTracking() {
       setActivities(Array.isArray(actsData) ? actsData : []);
       setProjects(Array.isArray(projsData) ? projsData : []);
       setUsers(Array.isArray(usersData) ? usersData : []);
+      setSprints(Array.isArray(sprintsData) ? sprintsData : []);
 
       // If timer task is unselected, pre-select first task if available
       if (actsData.length > 0 && !timerTaskId) {
@@ -244,19 +262,30 @@ export default function SoftwareTimeTracking() {
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u.full_name])), [users]);
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
 
-  // Activity to Software Project map (extracted from related_records)
+  // Sprint to Software Project map
+  const sprintProjectMap = useMemo(
+    () => new Map(sprints.map((s) => [s.id, s.software_project_id])),
+    [sprints]
+  );
+
+  // Activity to Software Project map (extracted from related_records, supporting both direct project links and sprint-associated tasks)
   const activityProjectMap = useMemo(() => {
     const map = new Map<string, string>();
     activities.forEach((act) => {
       if (act.related_records && Array.isArray(act.related_records)) {
-        const link = act.related_records.find((r) => r.module === "software_project");
-        if (link && link.record_id) {
-          map.set(act.id, link.record_id);
+        const directLink = act.related_records.find((r) => r.module === "software_project");
+        if (directLink && directLink.record_id) {
+          map.set(act.id, directLink.record_id);
+          return;
+        }
+        const sprintLink = act.related_records.find((r) => r.module === "software_sprint");
+        if (sprintLink && sprintLink.record_id && sprintProjectMap.has(sprintLink.record_id)) {
+          map.set(act.id, sprintProjectMap.get(sprintLink.record_id)!);
         }
       }
     });
     return map;
-  }, [activities]);
+  }, [activities, sprintProjectMap]);
 
   // Active running timer entry (Authoritative state from backend database records)
   // An active timer is any record where source === 'timer' and stopped_at is null
@@ -651,7 +680,8 @@ export default function SoftwareTimeTracking() {
           </h1>
           <p>Real-time engineering timers, manual work logs, billable status, and client contract approvals.</p>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
           <button
             className="sw-btn-primary"
             onClick={() => {
@@ -1001,7 +1031,7 @@ export default function SoftwareTimeTracking() {
           <div style={{ padding: "40px", textAlign: "center", color: "#94a3b8" }}>
             No time entries found matching your criteria. Start the live timer or log manual work time.
           </div>
-        ) : (
+        ) : viewMode === "table" ? (
           <table className="sw-data-table">
             <thead>
               <tr>
@@ -1138,6 +1168,157 @@ export default function SoftwareTimeTracking() {
               })}
             </tbody>
           </table>
+        ) : (
+          <div className="sw-grid-cards" style={{ padding: "16px" }}>
+            {filteredEntries.map((entry) => {
+              const isActive = isEntryActiveTimer(entry);
+              const pId = activityProjectMap.get(entry.activity_id);
+              const projName = pId ? projectMap.get(pId) : null;
+              const billable = isEntryBillable(entry);
+              const status = normalizeBillingStatus(entry.billing_status);
+              const eligibility = getTimeEntryActionEligibility(
+                entry,
+                currentUserId,
+                true
+              );
+
+              return (
+                <div key={entry.id} className="sw-grid-card">
+                  <div className="sw-grid-card-header">
+                    <div className="sw-grid-card-title-group">
+                      <h3 className="sw-grid-card-title" title={activityMap.get(entry.activity_id) || entry.activity_title || "Development Task"}>
+                        {activityMap.get(entry.activity_id) || entry.activity_title || "Development Task"}
+                      </h3>
+                      {projName && (
+                        <div className="sw-grid-card-subtitle">
+                          <span>📁 {projName}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                      <span
+                        className={`sw-badge ${
+                          status === "Approved"
+                            ? "accepted"
+                            : status === "Rejected"
+                            ? "rejected"
+                            : "under-review"
+                        }`}
+                      >
+                        {entry.billing_status}
+                      </span>
+                      <span className={`sw-badge ${entry.source === "timer" ? "proposal" : "discovery"}`} style={{ fontSize: "0.65rem", padding: "1px 5px" }}>
+                        {entry.source === "timer" ? "Timer" : "Manual"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="sw-grid-card-body">
+                    <div className="sw-grid-fields-grid">
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Logged By</span>
+                        <span className="sw-grid-field-val">
+                          {userMap.get(entry.user_id) || entry.user_name || "Engineer"}
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Work Date</span>
+                        <span className="sw-grid-field-val">{entry.work_date}</span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Billing Type</span>
+                        <span className="sw-grid-field-val">
+                          <span className={`sw-badge ${billable ? "active" : "on-hold"}`}>
+                            {billable ? "Billable" : "Non-billable"}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Timer State</span>
+                        <span className="sw-grid-field-val">
+                          {isActive ? (
+                            <span style={{ color: "#ef4444", fontWeight: 700 }}>● Active</span>
+                          ) : (
+                            <span style={{ color: "#10b981", fontWeight: 600 }}>Completed</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="sw-grid-progress-box" style={{ background: isActive ? "rgba(239, 68, 68, 0.05)" : undefined, borderColor: isActive ? "rgba(239, 68, 68, 0.2)" : undefined }}>
+                      <div className="sw-grid-progress-header">
+                        <span>Duration</span>
+                        {isActive ? (
+                          <span className="sw-running-duration">
+                            <span className="dot" />
+                            Running ({formatDurationSeconds(activeTimerSeconds)})
+                          </span>
+                        ) : (
+                          <strong style={{ fontSize: "0.95rem", color: "#0ea5e9" }}>
+                            {formatEntryDuration(entry.duration_minutes, entry.started_at, entry.stopped_at)}
+                          </strong>
+                        )}
+                      </div>
+                    </div>
+
+                    {entry.notes && (
+                      <div
+                        style={{
+                          fontSize: "0.76rem",
+                          color: "#64748b",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                        title={entry.notes}
+                      >
+                        "{entry.notes}"
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="sw-grid-card-footer">
+                    <div>
+                      {isActive && eligibility.canStopTimer && (
+                        <button
+                          className="sw-btn-primary"
+                          style={{ padding: "4px 10px", fontSize: "0.75rem", background: "#ef4444" }}
+                          onClick={() => void handleStopTimer(entry.id)}
+                          disabled={timerStopping}
+                          title="Stop Active Timer"
+                        >
+                          {timerStopping ? "Stopping..." : "Stop Timer"}
+                        </button>
+                      )}
+                    </div>
+                    <div className="sw-row-actions">
+                      <button
+                        type="button"
+                        className={`sw-action-menu-btn ${openActionId === entry.id ? "active" : ""}`}
+                        ref={(el) => (triggerRefs.current[entry.id] = el)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleActions(entry);
+                        }}
+                        aria-label={`Actions for entry ${entry.id.slice(0, 8)}`}
+                        aria-haspopup="true"
+                        aria-expanded={openActionId === entry.id}
+                        title="Actions Menu"
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <circle cx="12" cy="12" r="1.5"></circle>
+                          <circle cx="12" cy="5" r="1.5"></circle>
+                          <circle cx="12" cy="19" r="1.5"></circle>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

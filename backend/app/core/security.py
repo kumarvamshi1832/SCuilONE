@@ -19,6 +19,7 @@ def verify_password(password: str, hashed_password: str):
 
 def create_access_token(data: dict):
     payload = data.copy()
+    payload.setdefault("token_type", "access")
 
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES

@@ -28,6 +28,10 @@ class PortalLoginRequest(BaseModel):
     tenant_id: UUID | None = None
 
 
+class PortalSwitchWorkspaceRequest(BaseModel):
+    tenant_id: UUID
+
+
 class PortalForgotPasswordRequest(BaseModel):
     email: EmailStr
     tenant_id: UUID | None = None
@@ -49,10 +53,6 @@ class PortalRefreshRequest(BaseModel):
 
 class PortalLogoutRequest(BaseModel):
     refresh_token: str = Field(min_length=20, max_length=500)
-
-
-class PortalSwitchWorkspaceRequest(BaseModel):
-    tenant_id: UUID
 
 
 class PortalProfileUpdateRequest(BaseModel):
@@ -106,7 +106,7 @@ class PortalCommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     ticket_id: UUID
-    author_type: str  # "customer" or "support"; staff ids are never exposed
+    author_type: str  # "customer" or "support"; never expose internal staff IDs to portal users
     body: str
     created_at: datetime
 
@@ -176,6 +176,7 @@ class PortalEstimateResponse(BaseModel):
     total_amount: Decimal
     status: str
     terms_and_conditions: str | None
+    notes: str | None
     created_at: datetime
     updated_at: datetime
     items: list[PortalEstimateItemResponse] = Field(default_factory=list)
@@ -221,6 +222,7 @@ class PortalContractResponse(BaseModel):
     payment_terms: str | None
     milestone_billing_mode: str
     terms_and_conditions: str | None
+    notes: str | None
     created_at: datetime
     updated_at: datetime
     payment_milestones: list[PortalContractMilestoneResponse] = Field(default_factory=list)
@@ -253,6 +255,7 @@ class PortalProjectResponse(BaseModel):
     deliverables: str
     status: str
     priority: str
+    budget: Decimal
     currency: str
     start_date: date | None
     target_end_date: date | None
@@ -285,6 +288,7 @@ class PortalInvoicePaymentResponse(BaseModel):
     transaction_reference: str | None
     payment_date: date
     status: str
+    notes: str | None
     created_at: datetime
 
 
@@ -315,6 +319,7 @@ class PortalInvoiceResponse(BaseModel):
     balance_due: Decimal
     is_overdue: bool
     days_overdue: int
+    notes: str | None
     sent_at: datetime | None
     created_at: datetime
     updated_at: datetime

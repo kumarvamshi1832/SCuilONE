@@ -474,10 +474,50 @@ def customer_payment_reminders(db: Session, today: date) -> dict:
     return result
 
 
+def subscription_lifecycle_job(db: Session, today: date) -> dict:
+    from datetime import datetime, time, timezone
+    from app.services.subscription_service import process_subscription_lifecycle_transitions
+    ref_dt = datetime.combine(today, time(12, 0), tzinfo=timezone.utc)
+    if db.info.get("dry_run"):
+        return {"dry_run": True, "trials_expired": 0}
+    return process_subscription_lifecycle_transitions(db, reference_time=ref_dt)
+
+
+def subscription_renewals_job(db: Session, today: date) -> dict:
+    from app.services.subscription_service import generate_upcoming_renewal_invoices
+    if db.info.get("dry_run"):
+        return {"dry_run": True, "generated": 0}
+    return generate_upcoming_renewal_invoices(db, today=today)
+
+
+def subscription_reminders_job(db: Session, today: date) -> dict:
+    from datetime import datetime, time, timezone
+    from app.services.subscription_service import process_trial_and_post_trial_reminders
+    ref_dt = datetime.combine(today, time(12, 0), tzinfo=timezone.utc)
+    if db.info.get("dry_run"):
+        return {"dry_run": True, "sent": 0}
+    return process_trial_and_post_trial_reminders(db, reference_time=ref_dt)
+
+
+def technical_monitoring_job(db: Session, today: date) -> dict:
+    from app.services.monitoring_service import run_all_health_checks_and_detect_incidents
+    if db.info.get("dry_run"):
+        return {"dry_run": True, "checked": 0}
+    res = run_all_health_checks_and_detect_incidents(db)
+    return {
+        "checked_services": len(res.get("services", [])),
+        "resource_status": res.get("resources", {}).get("status", "Healthy"),
+    }
+
+
 JOBS = {
     "expire_estimates": expire_sent_estimates,
     "overdue_invoices": overdue_invoice_alerts,
     "due_reminders": upcoming_due_reminders,
     "escalate_overdue": escalate_overdue_invoices,
     "customer_reminders": customer_payment_reminders,
+    "subscription_lifecycle": subscription_lifecycle_job,
+    "subscription_renewals": subscription_renewals_job,
+    "subscription_reminders": subscription_reminders_job,
+    "technical_monitoring": technical_monitoring_job,
 }

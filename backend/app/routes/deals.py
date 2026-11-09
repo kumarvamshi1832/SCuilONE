@@ -273,8 +273,10 @@ def create_deal(
     _=Depends(require_permission("deal.create")),
     db: Session = Depends(get_db)
 ):
+    from app.services.subscription_service import enforce_plan_record_limit
     tenant_id = UUID(str(current_user["tenant_id"]))
     user_id = UUID(str(current_user["user_id"]))
+    enforce_plan_record_limit(db, tenant_id, "deals")
 
     if (data.lead_id or data.contact_id) and not data.account_id:
         raise HTTPException(

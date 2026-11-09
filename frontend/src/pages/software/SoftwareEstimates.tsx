@@ -27,6 +27,7 @@ import {
 import type { SoftwareRequirement } from "../../types/softwareRequirement";
 import type { User } from "../../types/user";
 
+import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
 import "./SoftwareModules.css";
 
 const INR = new Intl.NumberFormat("en-IN", {
@@ -83,6 +84,18 @@ export default function SoftwareEstimates() {
     const fromState = (location.state as any)?.status;
     return resolveCanonicalStatus(fromParam || fromState);
   });
+  const [viewMode, setViewMode] = useState<SoftwareViewMode>(
+    () => (localStorage.getItem("software_estimates_view_mode") as SoftwareViewMode) || "grid"
+  );
+
+  const handleViewModeChange = (mode: SoftwareViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("software_estimates_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Sync with URL query parameter changes (supports Back / Forward navigation)
   useEffect(() => {
@@ -509,6 +522,9 @@ export default function SoftwareEstimates() {
 
         const updated = await updateSoftwareEstimate(editingItem.id, payload);
         setEstimates((prev) => prev.map((e) => (e.id === editingItem.id ? updated : e)));
+        if (updated.status === "Accepted") {
+          window.dispatchEvent(new CustomEvent("crm-deal-refresh", { detail: { estimateId: updated.id } }));
+        }
         setIsModalOpen(false);
       } else {
         const payload: SoftwareEstimateCreate = {
@@ -578,13 +594,16 @@ export default function SoftwareEstimates() {
           </h1>
           <p>Generate detailed quotes, dynamic cost breakdowns, milestones, and client pricing proposals.</p>
         </div>
-        <button className="sw-btn-primary" onClick={handleOpenCreate}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          New Estimate
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <button className="sw-btn-primary" onClick={handleOpenCreate}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New Estimate
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -675,7 +694,7 @@ export default function SoftwareEstimates() {
               </button>
             )}
           </div>
-        ) : (
+        ) : viewMode === "table" ? (
           <table className="sw-data-table">
             <thead>
               <tr>
@@ -775,6 +794,148 @@ export default function SoftwareEstimates() {
               })}
             </tbody>
           </table>
+        ) : (
+          <div className="sw-grid-cards" style={{ padding: "16px" }}>
+            {filteredList.map((est) => {
+              const canRevise = ["Sent", "Rejected", "Expired", "Withdrawn"].includes(est.status);
+              const relatedReq = reqMap.get(est.software_requirement_id) || "Custom Software";
+
+              return (
+                <div key={est.id} className="sw-grid-card">
+                  <div className="sw-grid-card-header">
+                    <div className="sw-grid-card-title-group">
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontWeight: 800, color: "#0ea5e9", fontSize: "0.85rem" }}>
+                          {est.estimate_number}
+                        </span>
+                        <span className="sw-badge discovery" style={{ fontSize: "0.68rem", padding: "1px 6px" }}>
+                          Rev {est.revision_number || 1}
+                        </span>
+                      </div>
+                      <h3 className="sw-grid-card-title" title={est.title}>
+                        {est.title}
+                      </h3>
+                    </div>
+                    <span className={`sw-badge ${est.status?.toLowerCase()}`}>
+                      {est.status}
+                    </span>
+                  </div>
+
+                  <div className="sw-grid-card-body">
+                    <div className="sw-grid-fields-grid">
+                      <div className="sw-grid-field full-width">
+                        <span className="sw-grid-field-label">Related Requirement</span>
+                        <span className="sw-grid-field-val highlight" title={relatedReq}>
+                          {relatedReq}
+                        </span>
+                      </div>
+
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Billing Type</span>
+                        <span className="sw-grid-field-val">
+                          {est.billing_type || "Fixed Price"}
+                        </span>
+                      </div>
+
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Rate / Scope</span>
+                        <span className="sw-grid-field-val">
+                          {est.billing_type === "Time & Material" && est.hourly_rate != null ? (
+                            <span style={{ color: "#0ea5e9", fontWeight: 600 }}>
+                              {formatCurrency(est.hourly_rate, est.currency)}/hr
+                            </span>
+                          ) : (
+                            <span>Fixed Scope</span>
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Estimated Total</span>
+                        <span className="sw-grid-field-val success" style={{ fontSize: "0.95rem" }}>
+                          {formatCurrency(est.total_amount, est.currency)}
+                        </span>
+                      </div>
+
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Currency</span>
+                        <span className="sw-grid-field-val">
+                          {est.currency || "INR"}
+                        </span>
+                      </div>
+
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Issue Date</span>
+                        <span className="sw-grid-field-val">{est.issue_date || "—"}</span>
+                      </div>
+
+                      <div className="sw-grid-field">
+                        <span className="sw-grid-field-label">Expiry Date</span>
+                        <span className="sw-grid-field-val">{est.expiry_date || "—"}</span>
+                      </div>
+                    </div>
+
+                    <div className="sw-grid-progress-box">
+                      <div className="sw-grid-progress-header">
+                        <span>Line Items</span>
+                        <strong>{est.items ? est.items.length : 1} Item(s)</strong>
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "#64748b" }}>
+                        Subtotal: {formatCurrency(est.subtotal, est.currency)} • Tax: {formatCurrency(est.tax_amount, est.currency)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sw-grid-card-footer">
+                    <div>
+                      {canRevise && (
+                        <button
+                          className="sw-btn-secondary"
+                          style={{ padding: "4px 8px", fontSize: "0.72rem", borderColor: "#0ea5e9", color: "#0ea5e9" }}
+                          title="Create Revision based on this estimate"
+                          onClick={() => handleCreateRevision(est.id)}
+                        >
+                          + Revise
+                        </button>
+                      )}
+                    </div>
+                    <div className="sw-row-actions">
+                      <button
+                        className="sw-btn-icon"
+                        title="View Details"
+                        onClick={() => setViewingItem(est)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                      <button
+                        className="sw-btn-icon"
+                        title="Edit Estimate"
+                        onClick={() => handleOpenEdit(est)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        className="sw-btn-icon danger"
+                        title="Delete Estimate"
+                        onClick={() => setDeletingItem(est)}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

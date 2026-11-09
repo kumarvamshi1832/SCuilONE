@@ -41,6 +41,9 @@ SOFTWARE_INDUSTRIES = {
     "software services / it consulting",
     "software_services",
     "it consulting",
+        "it & software",
+        "it and software",
+        "software companies",
 }
 
 

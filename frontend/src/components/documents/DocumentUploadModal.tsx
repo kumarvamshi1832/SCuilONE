@@ -38,6 +38,7 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
   const [category, setCategory] = useState("Contract");
   const [description, setDescription] = useState("");
   const [isConfidential, setIsConfidential] = useState(false);
+  const [sharedWithCustomer, setSharedWithCustomer] = useState(false);
   const [relatedType, setRelatedType] = useState<"lead" | "contact" | "account" | "deal">("lead");
   const [relatedId, setRelatedId] = useState("");
 
@@ -156,6 +157,10 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
           document_type: category,
           description: description.trim() || undefined,
           is_confidential: isConfidential,
+          shared_with_customer:
+            sharedWithCustomer &&
+            !isConfidential &&
+            (relatedType === "account" || relatedType === "contact"),
           lead_id: relatedType === "lead" ? relatedId : undefined,
           contact_id: relatedType === "contact" ? relatedId : undefined,
           account_id: relatedType === "account" ? relatedId : undefined,
@@ -360,12 +365,64 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
                 <input
                   type="checkbox"
                   checked={isConfidential}
-                  onChange={(e) => setIsConfidential(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsConfidential(checked);
+                    if (checked) setSharedWithCustomer(false);
+                  }}
                   disabled={uploading}
                 />
                 <span className="checkbox-custom" />
                 <span className="checkbox-label">
                   Mark as confidential (Restricts visibility to authorized personnel)
+                </span>
+              </label>
+            </div>
+
+            <div className="form-checkbox-row">
+              <label
+                className={`checkbox-container ${isConfidential || (relatedType !== "account" && relatedType !== "contact")
+                    ? "disabled"
+                    : ""
+                  }`}
+                title={
+                  isConfidential
+                    ? "Confidential documents cannot be shared with customers."
+                    : relatedType !== "account" && relatedType !== "contact"
+                      ? "Only documents linked to an Account or Contact can be shared with the customer portal."
+                      : "Make this document accessible in the Customer Portal."
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    sharedWithCustomer &&
+                    !isConfidential &&
+                    (relatedType === "account" || relatedType === "contact")
+                  }
+                  onChange={(e) => setSharedWithCustomer(e.target.checked)}
+                  disabled={
+                    uploading ||
+                    isConfidential ||
+                    (relatedType !== "account" && relatedType !== "contact")
+                  }
+                />
+                <span className="checkbox-custom" />
+                <span className="checkbox-label">
+                  Share with Customer Portal
+                  {isConfidential ? (
+                    <small style={{ display: "block", color: "var(--text-muted, #94a3b8)", fontSize: 11 }}>
+                      (Disabled: Confidential documents cannot be shared)
+                    </small>
+                  ) : relatedType !== "account" && relatedType !== "contact" ? (
+                    <small style={{ display: "block", color: "var(--text-muted, #94a3b8)", fontSize: 11 }}>
+                      (Requires Account or Contact link to share with portal)
+                    </small>
+                  ) : (
+                    <small style={{ display: "block", color: "var(--text-muted, #94a3b8)", fontSize: 11 }}>
+                      (Will be visible to client portal users for this {relatedType})
+                    </small>
+                  )}
                 </span>
               </label>
             </div>

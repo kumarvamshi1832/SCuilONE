@@ -305,46 +305,48 @@ role_permissions = {
 }
 
 
-db = SessionLocal()
 
-try:
-    for role_name, permission_names in role_permissions.items():
-        role = db.query(Role).filter(
-            Role.name == role_name
-        ).first()
+if __name__ == "__main__":
+    db = SessionLocal()
 
-        if not role:
-            print(f"Role not found: {role_name}")
-            continue
-
-        for permission_name in permission_names:
-            permission = db.query(Permission).filter(
-                Permission.name == permission_name
+    try:
+        for role_name, permission_names in role_permissions.items():
+            role = db.query(Role).filter(
+                Role.name == role_name
             ).first()
 
-            if not permission:
-                print(f"Permission not found: {permission_name}")
+            if not role:
+                print(f"Role not found: {role_name}")
                 continue
 
-            existing = db.query(RolePermission).filter(
-                RolePermission.role_id == role.id,
-                RolePermission.permission_id == permission.id
-            ).first()
+            for permission_name in permission_names:
+                permission = db.query(Permission).filter(
+                    Permission.name == permission_name
+                ).first()
 
-            if not existing:
-                db.add(
-                    RolePermission(
-                        role_id=role.id,
-                        permission_id=permission.id
+                if not permission:
+                    print(f"Permission not found: {permission_name}")
+                    continue
+
+                existing = db.query(RolePermission).filter(
+                    RolePermission.role_id == role.id,
+                    RolePermission.permission_id == permission.id
+                ).first()
+
+                if not existing:
+                    db.add(
+                        RolePermission(
+                            role_id=role.id,
+                            permission_id=permission.id
+                        )
                     )
-                )
 
-    db.commit()
-    print("Role permissions seeded successfully")
+        db.commit()
+        print("Role permissions seeded successfully")
 
-except Exception:
-    db.rollback()
-    raise
+    except Exception:
+        db.rollback()
+        raise
 
-finally:
-    db.close()
+    finally:
+        db.close()

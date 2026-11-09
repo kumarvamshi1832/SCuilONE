@@ -33,11 +33,12 @@ COMMON_PASSWORDS = {
 def validate_password(
     password: str,
     identifiers: list[str] | None = None,
+    min_length: int = MIN_PASSWORD_LENGTH,
 ) -> None:
-    if len(password) < MIN_PASSWORD_LENGTH:
+    if len(password) < min_length:
         raise ValueError(
             f"Password must contain at least "
-            f"{MIN_PASSWORD_LENGTH} characters"
+            f"{min_length} characters"
         )
 
     if len(password) > MAX_PASSWORD_LENGTH:
@@ -116,9 +117,10 @@ def validate_password(
 def ensure_password_policy(
     password: str,
     identifiers: list[str] | None = None,
+    min_length: int = MIN_PASSWORD_LENGTH,
 ) -> None:
     try:
-        validate_password(password, identifiers)
+        validate_password(password, identifiers, min_length=min_length)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,

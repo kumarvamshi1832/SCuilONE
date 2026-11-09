@@ -4,12 +4,23 @@ import type {
   PortalLoginRequest,
   PortalAuthResponse,
   PortalProfileResponse,
+  PortalForgotPasswordRequest,
+  PortalResetPasswordRequest,
+  PortalChangePasswordRequest,
+  PortalWorkspacesResponse,
+  PortalSwitchWorkspaceResponse,
+  PortalProfileUpdateRequest,
+  PortalDashboardResponse,
 } from "../types/customerPortal";
 
 export const PORTAL_ACCESS_TOKEN_KEY = "scuilone_portal_access_token";
 export const PORTAL_REFRESH_TOKEN_KEY = "scuilone_portal_refresh_token";
 export const PORTAL_CUSTOMER_KEY = "scuilone_portal_customer";
 export const PORTAL_TENANT_ID_KEY = "scuilone_portal_tenant_id";
+
+export function isPortalRememberMe(): boolean {
+  return Boolean(localStorage.getItem(PORTAL_ACCESS_TOKEN_KEY));
+}
 
 export function getPortalAccessToken(): string | null {
   return (
@@ -46,22 +57,42 @@ export function getPortalTenantId(): string | null {
 export function setPortalAuthSession(
   authData: PortalAuthResponse,
   tenantId?: string,
-  rememberMe: boolean = true
+  rememberMe?: boolean
 ): void {
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem(PORTAL_ACCESS_TOKEN_KEY, authData.access_token);
-  storage.setItem(PORTAL_REFRESH_TOKEN_KEY, authData.refresh_token);
+  // If rememberMe is omitted (e.g. during automatic token refresh), preserve the existing preference
+  const isRemembered =
+    rememberMe !== undefined ? rememberMe : isPortalRememberMe();
+  const targetStorage = isRemembered ? localStorage : sessionStorage;
+  const alternateStorage = isRemembered ? sessionStorage : localStorage;
+
+  // Clear from the alternate storage so tokens never exist concurrently in both
+  alternateStorage.removeItem(PORTAL_ACCESS_TOKEN_KEY);
+  alternateStorage.removeItem(PORTAL_REFRESH_TOKEN_KEY);
+  alternateStorage.removeItem(PORTAL_CUSTOMER_KEY);
+  alternateStorage.removeItem(PORTAL_TENANT_ID_KEY);
+
+  targetStorage.setItem(PORTAL_ACCESS_TOKEN_KEY, authData.access_token);
+  targetStorage.setItem(PORTAL_REFRESH_TOKEN_KEY, authData.refresh_token);
   if (authData.customer) {
-    storage.setItem(PORTAL_CUSTOMER_KEY, JSON.stringify(authData.customer));
+    targetStorage.setItem(PORTAL_CUSTOMER_KEY, JSON.stringify(authData.customer));
     if (authData.customer.tenant_id) {
-      storage.setItem(PORTAL_TENANT_ID_KEY, authData.customer.tenant_id);
+      targetStorage.setItem(PORTAL_TENANT_ID_KEY, authData.customer.tenant_id);
     }
   } else if (tenantId) {
-    storage.setItem(PORTAL_TENANT_ID_KEY, tenantId);
+    targetStorage.setItem(PORTAL_TENANT_ID_KEY, tenantId);
   }
 }
 
+let cachedProfile: PortalProfileResponse | null = null;
+let profileInFlightPromise: Promise<PortalProfileResponse> | null = null;
+
+export function clearPortalProfileCache(): void {
+  cachedProfile = null;
+  profileInFlightPromise = null;
+}
+
 export function clearPortalAuthSession(): void {
+  clearPortalProfileCache();
   sessionStorage.removeItem(PORTAL_ACCESS_TOKEN_KEY);
   sessionStorage.removeItem(PORTAL_REFRESH_TOKEN_KEY);
   sessionStorage.removeItem(PORTAL_CUSTOMER_KEY);
@@ -83,6 +114,8 @@ portalApiClient.interceptors.request.use(
     const isPublicAuth =
       url.includes("/api/v1/customer-portal/auth/login") ||
       url.includes("/api/v1/customer-portal/auth/activate") ||
+      url.includes("/api/v1/customer-portal/auth/forgot-password") ||
+      url.includes("/api/v1/customer-portal/auth/reset-password") ||
       url.includes("/api/v1/customer-portal/auth/refresh");
 
     if (!isPublicAuth) {
@@ -122,6 +155,8 @@ portalApiClient.interceptors.response.use(
       if (
         url.includes("/api/v1/customer-portal/auth/login") ||
         url.includes("/api/v1/customer-portal/auth/activate") ||
+        url.includes("/api/v1/customer-portal/auth/forgot-password") ||
+        url.includes("/api/v1/customer-portal/auth/reset-password") ||
         url.includes("/api/v1/customer-portal/auth/refresh")
       ) {
         return Promise.reject(error);
@@ -171,22 +206,34 @@ portalApiClient.interceptors.response.use(
           isPortalRefreshing = false;
           portalRefreshSubscribers = [];
           clearPortalAuthSession();
-          if (
-            window.location.pathname.startsWith("/portal") &&
-            window.location.pathname !== "/portal/login" &&
-            window.location.pathname !== "/portal/activate"
-          ) {
+          const isPortalApp =
+            window.location.pathname.startsWith("/portal") ||
+            window.location.pathname.startsWith("/customer_portal") ||
+            window.location.pathname.startsWith("/customer-portal");
+          const isPublicPortalRoute =
+            window.location.pathname.includes("/login") ||
+            window.location.pathname.includes("/activate") ||
+            window.location.pathname.includes("/forgot-password") ||
+            window.location.pathname.includes("/reset-password");
+
+          if (isPortalApp && !isPublicPortalRoute) {
             window.location.href = "/portal/login";
           }
           return Promise.reject(refreshErr);
         }
       } else {
         clearPortalAuthSession();
-        if (
-          window.location.pathname.startsWith("/portal") &&
-          window.location.pathname !== "/portal/login" &&
-          window.location.pathname !== "/portal/activate"
-        ) {
+        const isPortalApp =
+          window.location.pathname.startsWith("/portal") ||
+          window.location.pathname.startsWith("/customer_portal") ||
+          window.location.pathname.startsWith("/customer-portal");
+        const isPublicPortalRoute =
+          window.location.pathname.includes("/login") ||
+          window.location.pathname.includes("/activate") ||
+          window.location.pathname.includes("/forgot-password") ||
+          window.location.pathname.includes("/reset-password");
+
+        if (isPortalApp && !isPublicPortalRoute) {
           window.location.href = "/portal/login";
         }
       }
@@ -210,12 +257,54 @@ export const portalActivate = async (
 export const portalLogin = async (
   data: PortalLoginRequest,
   rememberMe: boolean = true
-): Promise<PortalAuthResponse> => {
+): Promise<PortalAuthResponse | any> => {
+  const payload: PortalLoginRequest = {
+    email: data.email.trim().toLowerCase(),
+    password: data.password,
+  };
+  if (data.tenant_id && data.tenant_id.trim()) {
+    payload.tenant_id = data.tenant_id.trim();
+  }
+
   const response = await portalApiClient.post<PortalAuthResponse>(
     "/api/v1/customer-portal/auth/login",
+    payload
+  );
+
+  if (response.data && response.data.access_token) {
+    setPortalAuthSession(response.data, payload.tenant_id, rememberMe);
+  }
+  return response.data;
+};
+
+export const portalForgotPassword = async (
+  data: PortalForgotPasswordRequest
+): Promise<{ message: string }> => {
+  const response = await portalApiClient.post<{ message: string }>(
+    "/api/v1/customer-portal/auth/forgot-password",
     data
   );
-  setPortalAuthSession(response.data, data.tenant_id, rememberMe);
+  return response.data;
+};
+
+export const portalResetPassword = async (
+  data: PortalResetPasswordRequest
+): Promise<{ message: string }> => {
+  const response = await portalApiClient.post<{ message: string }>(
+    "/api/v1/customer-portal/auth/reset-password",
+    data
+  );
+  return response.data;
+};
+
+export const portalChangePassword = async (
+  data: PortalChangePasswordRequest
+): Promise<{ message: string }> => {
+  const response = await portalApiClient.post<{ message: string }>(
+    "/api/v1/customer-portal/auth/change-password",
+    data
+  );
+  clearPortalAuthSession();
   return response.data;
 };
 
@@ -233,10 +322,120 @@ export const portalLogout = async (): Promise<void> => {
   clearPortalAuthSession();
 };
 
-export const getPortalProfile = async (): Promise<PortalProfileResponse> => {
-  const response = await portalApiClient.get<PortalProfileResponse>(
-    "/api/v1/customer-portal/me"
+export const getPortalWorkspaces = async (): Promise<PortalWorkspacesResponse> => {
+  const response = await portalApiClient.get<PortalWorkspacesResponse>(
+    "/api/v1/customer-portal/auth/workspaces"
   );
   return response.data;
 };
+
+export const portalSwitchWorkspace = async (
+  tenant_id: string
+): Promise<PortalSwitchWorkspaceResponse> => {
+  const response = await portalApiClient.post<PortalSwitchWorkspaceResponse>(
+    "/api/v1/customer-portal/auth/switch-workspace",
+    { tenant_id }
+  );
+  setPortalAuthSession(
+    {
+      access_token: response.data.access_token,
+      token_type: response.data.token_type,
+      refresh_token: response.data.refresh_token,
+      expires_in_minutes: response.data.expires_in_minutes,
+      customer: response.data.customer,
+      workspace: response.data.workspace,
+    },
+    tenant_id
+  );
+  clearPortalProfileCache();
+  return response.data;
+};
+
+export const getPortalProfile = async (
+  forceRefresh: boolean = false
+): Promise<PortalProfileResponse> => {
+  if (!forceRefresh && cachedProfile) {
+    return cachedProfile;
+  }
+  if (profileInFlightPromise) {
+    return profileInFlightPromise;
+  }
+  profileInFlightPromise = (async () => {
+    try {
+      const response = await portalApiClient.get<PortalProfileResponse>(
+        "/api/v1/customer-portal/me"
+      );
+      cachedProfile = response.data;
+      return response.data;
+    } finally {
+      profileInFlightPromise = null;
+    }
+  })();
+  return profileInFlightPromise;
+};
+
+export const updatePortalProfile = async (
+  data: PortalProfileUpdateRequest
+): Promise<{ message: string; contact: any }> => {
+  const response = await portalApiClient.patch<{ message: string; contact: any }>(
+    "/api/v1/customer-portal/me",
+    data
+  );
+  clearPortalProfileCache();
+  return response.data;
+};
+
+export const getPortalDashboard = async (): Promise<PortalDashboardResponse> => {
+  const response = await portalApiClient.get<PortalDashboardResponse>(
+    "/api/v1/customer-portal/dashboard"
+  );
+  return response.data;
+};
+
+/**
+ * Rate limit handling helper for Customer Portal Authentication & Actions
+ * Aligned with backend HTTP 429 responses and Retry-After headers
+ */
+export interface RateLimitInfo {
+  isRateLimited: boolean;
+  retryAfterSeconds: number | null;
+  message: string;
+}
+
+export function extractRateLimitInfo(error: unknown): RateLimitInfo {
+  const err = error as any;
+  if (err?.response && err.response.status === 429) {
+    const headers = err.response.headers || {};
+    const rawRetryAfter =
+      headers["retry-after"] ||
+      headers["Retry-After"] ||
+      headers["retry_after"];
+
+    let retryAfterSeconds: number | null = null;
+    if (rawRetryAfter !== undefined && rawRetryAfter !== null) {
+      const parsed = parseInt(String(rawRetryAfter), 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        retryAfterSeconds = parsed;
+      }
+    }
+
+    const detailMsg =
+      err.response.data?.detail ||
+      err.response.data?.message ||
+      "Too many attempts. Please try again later.";
+
+    return {
+      isRateLimited: true,
+      retryAfterSeconds,
+      message:
+        typeof detailMsg === "string" ? detailMsg : JSON.stringify(detailMsg),
+    };
+  }
+
+  return {
+    isRateLimited: false,
+    retryAfterSeconds: null,
+    message: "",
+  };
+}
 

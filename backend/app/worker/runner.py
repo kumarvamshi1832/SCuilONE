@@ -7,6 +7,7 @@ from datetime import date
 from sqlalchemy import text
 
 from app.database.connection import SessionLocal, engine
+from app.services.monitoring_service import record_worker_heartbeat
 from app.worker import load_all_models
 from app.worker.jobs import JOBS
 
@@ -22,6 +23,7 @@ def run_once(
     job_names: list[str] | None = None,
     dry_run: bool = False,
     today: date | None = None,
+    worker_name: str = "primary_worker",
 ) -> dict:
     """Run the selected jobs. Returns {"skipped": True} if another worker is running."""
     today = today or date.today()
@@ -44,6 +46,21 @@ def run_once(
 
         results: dict = {"skipped": False, "date": today.isoformat(), "dry_run": dry_run, "jobs": {}}
 
+        # Record worker heartbeat at cycle start
+        if not dry_run:
+            hb_db = SessionLocal()
+            try:
+                record_worker_heartbeat(
+                    hb_db,
+                    worker_name=worker_name,
+                    status="Active",
+                    metrics={"selected_jobs": selected, "cycle_date": today.isoformat()},
+                )
+            except Exception as hb_exc:
+                logger.warning("Could not record initial worker heartbeat: %s", hb_exc)
+            finally:
+                hb_db.close()
+
         for name in selected:
             db = SessionLocal()
             started = time.monotonic()
@@ -58,13 +75,41 @@ def run_once(
                 if dry_run:
                     db.rollback()
 
-                summary["seconds"] = round(time.monotonic() - started, 2)
+                elapsed = round(time.monotonic() - started, 2)
+                summary["seconds"] = elapsed
                 summary["ok"] = True
                 logger.info("job=%s %s", name, summary)
+
+                if not dry_run:
+                    try:
+                        record_worker_heartbeat(
+                            db,
+                            worker_name=worker_name,
+                            status="Active",
+                            job_name=name,
+                            job_status="Succeeded",
+                            metrics={"last_job_seconds": elapsed},
+                        )
+                    except Exception:
+                        db.rollback()
             except Exception as exc:
                 db.rollback()
-                summary = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                err_str = f"{type(exc).__name__}: {exc}"
+                summary = {"ok": False, "error": err_str}
                 logger.exception("job=%s failed", name)
+
+                if not dry_run:
+                    try:
+                        record_worker_heartbeat(
+                            db,
+                            worker_name=worker_name,
+                            status="Active",
+                            job_name=name,
+                            job_status="Failed",
+                            error_message=err_str,
+                        )
+                    except Exception:
+                        db.rollback()
             finally:
                 db.close()
 

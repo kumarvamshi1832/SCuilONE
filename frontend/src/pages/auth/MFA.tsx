@@ -87,6 +87,12 @@ export default function MFA() {
           temp_token: tempToken,
         });
 
+        if (email) {
+          try {
+            localStorage.setItem("scuilone_remember_email", email.trim().toLowerCase());
+          } catch {}
+        }
+
         sessionStorage.removeItem("mfa_email");
         sessionStorage.removeItem("mfa_temp_token");
         sessionStorage.removeItem("otp_flow");
@@ -134,11 +140,27 @@ export default function MFA() {
           otp,
         });
 
+        const verifiedEmail = (sessionStorage.getItem("verification_email") || email || "").trim().toLowerCase();
+        if (verifiedEmail) {
+          try {
+            localStorage.setItem("scuilone_remember_email", verifiedEmail);
+          } catch {}
+        }
+
         sessionStorage.removeItem("verification_email");
         sessionStorage.removeItem("otp_flow");
 
         setMessage("Email verified successfully!");
-        setTimeout(() => navigate("/login"), 800);
+        setTimeout(
+          () =>
+            navigate("/login", {
+              state: {
+                email: verifiedEmail,
+                message: "Email verified successfully! Please log in.",
+              },
+            }),
+          800
+        );
       }
     } catch (err) {
       const apiError = err as { message?: string };

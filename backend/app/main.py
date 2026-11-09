@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.auth import router as auth_router
-# from app.routes.test import router as test_router
 from app.routes.users import router as user_router
+from app.routes.tenants import router as tenants_router
 from app.routes.leads import router as lead_router
 from app.routes.contacts import router as contact_router
 from app.routes.accounts import router as account_router
@@ -52,10 +52,16 @@ from app.routes.support_tickets import router as support_tickets_router
 from app.routes.customer_portal import router as customer_portal_router
 from app.routes.platform_admin import router as platform_admin_router
 from app.routes.platform_operations import router as platform_operations_router
+from app.routes.subscriptions import (
+    router as subscription_router,
+    alias_router as subscription_alias_router,
+    billing_alias_router,
+)
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.core.monitoring_middleware import TechnicalMonitoringMiddleware
 from app.core.rate_limiter import limiter
 
 app = FastAPI(
@@ -122,17 +128,21 @@ origins = [
     "https://s-cuil-gg9u5e3ah-kumarvamshi1832-7668s-projects.vercel.app",
 ]
 
+app.add_middleware(TechnicalMonitoringMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Correlation-ID", "X-Request-ID"],
 )
 
 app.include_router(auth_router)
-# app.include_router(test_router)
 app.include_router(user_router)
+app.include_router(tenants_router)
+app.include_router(subscription_router)
+app.include_router(subscription_alias_router)
+app.include_router(billing_alias_router)
 app.include_router(lead_router)
 app.include_router(contact_router)
 app.include_router(account_router)

@@ -10,6 +10,7 @@ interface DocumentTableProps {
   onPreview: (doc: DocumentItem) => void;
   onDownload: (doc: DocumentItem) => void;
   onDelete: (doc: DocumentItem) => void;
+  onToggleShare?: (doc: DocumentItem) => void;
 }
 
 export const DocumentTable: React.FC<DocumentTableProps> = ({
@@ -20,6 +21,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
   onPreview,
   onDownload,
   onDelete,
+  onToggleShare,
 }) => {
   return (
     <div className="document-table-container">
@@ -32,6 +34,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
             <th>Uploaded By</th>
             <th>Uploaded On</th>
             <th>Size</th>
+            <th>Portal</th>
             <th style={{ textAlign: "right" }}>Actions</th>
           </tr>
         </thead>
@@ -110,8 +113,62 @@ export const DocumentTable: React.FC<DocumentTableProps> = ({
                   <span className="table-size">{formatFileSize(doc.file_size)}</span>
                 </td>
 
+                <td>
+                  {doc.shared_with_customer ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "2px 7px",
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: "rgba(16, 185, 129, 0.15)",
+                        color: "#10b981",
+                      }}
+                    >
+                      ● Shared
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: "var(--text-muted, #94a3b8)" }}>
+                      Internal
+                    </span>
+                  )}
+                </td>
+
                 <td style={{ textAlign: "right" }}>
                   <div className="table-actions" onClick={(e) => e.stopPropagation()}>
+                    {onToggleShare && (
+                      <button
+                        type="button"
+                        className="doc-table-btn share"
+                        title={
+                          doc.is_confidential
+                            ? "Confidential documents cannot be shared"
+                            : !doc.account_id && !doc.contact_id
+                            ? "Must be linked to Account or Contact"
+                            : doc.shared_with_customer
+                            ? "Unshare from Customer Portal"
+                            : "Share with Customer Portal"
+                        }
+                        disabled={doc.is_confidential || (!doc.account_id && !doc.contact_id)}
+                        onClick={() => onToggleShare(doc)}
+                        style={{
+                          opacity: doc.is_confidential || (!doc.account_id && !doc.contact_id) ? 0.4 : 1,
+                          color: doc.shared_with_customer ? "#10b981" : "inherit",
+                          marginRight: 4,
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                          <circle cx="18" cy="5" r="3" />
+                          <circle cx="6" cy="12" r="3" />
+                          <circle cx="18" cy="19" r="3" />
+                          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="doc-table-btn preview"

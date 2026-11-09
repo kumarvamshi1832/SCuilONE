@@ -11,6 +11,37 @@ export type SoftwareProjectPriority =
   | "High"
   | "Critical";
 
+export interface ProjectDeliverySummary {
+  total_tasks: number;
+  completed_tasks: number;
+  open_tasks: number;
+  task_completion_percentage: number;
+
+  total_sprints: number;
+  completed_sprints: number;
+  active_sprints: number;
+  sprint_completion_percentage: number;
+
+  total_milestones: number;
+  completed_milestones: number;
+  milestone_completion_percentage: number;
+}
+
+export interface ProjectTimeSummary {
+  total_tracked_minutes: number;
+  total_tracked_hours: number;
+  approved_billable_minutes: number;
+  approved_billable_hours: number;
+  non_billable_minutes: number;
+  non_billable_hours: number;
+}
+
+export interface ProjectTimeSummaryResponse extends ProjectTimeSummary {
+  project_id: string;
+  project_number: string;
+  name: string;
+}
+
 export interface SoftwareProject {
   id: string;
   tenant_id: string;
@@ -29,6 +60,20 @@ export interface SoftwareProject {
   priority: SoftwareProjectPriority | string;
   progress_percentage?: number;
 
+  // Breakdown of tasks, sprints, and contract milestones
+  total_tasks?: number;
+  completed_tasks?: number;
+  open_tasks?: number;
+  task_completion_percentage?: number;
+  total_sprints?: number;
+  completed_sprints?: number;
+  active_sprints?: number;
+  sprint_completion_percentage?: number;
+  total_milestones?: number;
+  completed_milestones?: number;
+  milestone_completion_percentage?: number;
+  delivery_summary?: ProjectDeliverySummary;
+
   budget: number;
   currency: string;
 
@@ -38,6 +83,15 @@ export interface SoftwareProject {
 
   contract_snapshot?: any;
   notes?: string | null;
+
+  // Project-level total time tracking summary
+  total_tracked_minutes?: number;
+  total_tracked_hours?: number;
+  approved_billable_minutes?: number;
+  approved_billable_hours?: number;
+  non_billable_minutes?: number;
+  non_billable_hours?: number;
+  time_summary?: ProjectTimeSummary;
 
   created_at: string;
   updated_at: string;

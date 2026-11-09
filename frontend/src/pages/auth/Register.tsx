@@ -132,6 +132,9 @@ export default function Register() {
       );
       sessionStorage.setItem("verification_email", email);
       sessionStorage.setItem("otp_flow", "email");
+      try {
+        localStorage.setItem("scuilone_remember_email", email);
+      } catch {}
 
       setTimeout(() => navigate("/mfa"), 1200);
     } catch (err) {

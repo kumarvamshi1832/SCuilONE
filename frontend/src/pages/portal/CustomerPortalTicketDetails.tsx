@@ -9,10 +9,13 @@ import {
   AlertCircleIcon,
   UserIcon,
   ShieldCheckIcon,
+  XIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalTicket,
   addPortalTicketComment,
+  closePortalTicket,
+  reopenPortalTicket,
 } from "../../services/customerPortalTicketService";
 import type { PortalTicketDetailResponse } from "../../types/customerPortal";
 import "./CustomerPortalTicketDetails.css";
@@ -27,6 +30,16 @@ export default function CustomerPortalTicketDetails() {
   // New Comment
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Close Ticket Modal
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
+  const [closeComment, setCloseComment] = useState("");
+  const [closingTicket, setClosingTicket] = useState(false);
+
+  // Reopen Ticket Modal
+  const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
+  const [reopenComment, setReopenComment] = useState("");
+  const [reopeningTicket, setReopeningTicket] = useState(false);
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -69,6 +82,45 @@ export default function CustomerPortalTicketDetails() {
       showToast(err?.response?.data?.detail || "Failed to post comment", "error");
     } finally {
       setSubmittingComment(false);
+    }
+  };
+
+  const handleCloseTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketId) return;
+    setClosingTicket(true);
+    try {
+      await closePortalTicket(ticketId, closeComment.trim() || null);
+      showToast("Ticket closed successfully.", "success");
+      setIsCloseModalOpen(false);
+      setCloseComment("");
+      const fullUpdated = await getPortalTicket(ticketId);
+      setTicket(fullUpdated);
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || "Failed to close ticket.", "error");
+    } finally {
+      setClosingTicket(false);
+    }
+  };
+
+  const handleReopenTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketId || !reopenComment.trim()) {
+      showToast("Please provide a reason for reopening this ticket.", "error");
+      return;
+    }
+    setReopeningTicket(true);
+    try {
+      await reopenPortalTicket(ticketId, reopenComment.trim());
+      showToast("Ticket reopened successfully.", "success");
+      setIsReopenModalOpen(false);
+      setReopenComment("");
+      const fullUpdated = await getPortalTicket(ticketId);
+      setTicket(fullUpdated);
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || "Failed to reopen ticket.", "error");
+    } finally {
+      setReopeningTicket(false);
     }
   };
 
@@ -118,6 +170,9 @@ export default function CustomerPortalTicketDetails() {
     );
   }
 
+  const canClose = ["Open", "In Progress", "Waiting on Customer", "Resolved"].includes(ticket.status);
+  const canReopen = ["Resolved", "Closed"].includes(ticket.status);
+
   return (
     <div className="cp-ticket-detail-page">
       {/* Toast */}
@@ -128,16 +183,38 @@ export default function CustomerPortalTicketDetails() {
         </div>
       )}
 
-      {/* Back Link */}
-      <div>
+      {/* Back Link and Action Buttons */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <Link to="/portal/tickets" className="cp-back-link">
           <ArrowLeftIcon size={16} />
           <span>Back to All Tickets</span>
         </Link>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          {canClose && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setIsCloseModalOpen(true)}
+              style={{ color: "#ef4444", borderColor: "#fca5a5" }}
+            >
+              <span>Close Ticket</span>
+            </button>
+          )}
+          {canReopen && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setIsReopenModalOpen(true)}
+            >
+              <span>Reopen Ticket</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Ticket Container */}
-      <div className="cp-ticket-card">
+      <div className="cp-ticket-card" style={{ marginTop: 16 }}>
         {/* Header */}
         <div className="cp-ticket-header">
           <div>
@@ -165,6 +242,12 @@ export default function CustomerPortalTicketDetails() {
             <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Status</div>
             <div style={{ fontWeight: 600 }}>{ticket.status}</div>
           </div>
+          {ticket.software_project_id && (
+            <div>
+              <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Software Project</div>
+              <div style={{ fontWeight: 600, color: "#2563eb" }}>Linked Delivery Project</div>
+            </div>
+          )}
           <div>
             <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Submitted Date</div>
             <div style={{ fontWeight: 600 }}>
@@ -228,28 +311,29 @@ export default function CustomerPortalTicketDetails() {
 
           {(!ticket.comments || ticket.comments.length === 0) ? (
             <div style={{ color: "#64748b", fontStyle: "italic", marginBottom: 20 }}>
-              No replies yet. Our support agents have received your ticket and will reply shortly.
+              No replies yet. Our support engineering team will reply shortly.
             </div>
           ) : (
-            <div className="comments-timeline" style={{ maxHeight: 500 }}>
+            <div className="comments-timeline" style={{ maxHeight: 500, overflowY: "auto" }}>
               {ticket.comments.map((comment) => {
-                const isClientReply = Boolean(comment.author_customer_portal_user_id);
+                const isCustomer = comment.author_type === "customer";
 
                 return (
                   <div
                     key={comment.id}
                     className="comment-card"
                     style={{
-                      borderLeft: isClientReply ? "4px solid #3b82f6" : "4px solid #10b981",
-                      background: isClientReply ? "rgba(59, 130, 246, 0.04)" : "rgba(16, 185, 129, 0.04)",
+                      borderLeft: isCustomer ? "4px solid #3b82f6" : "4px solid #10b981",
+                      background: isCustomer ? "rgba(59, 130, 246, 0.04)" : "rgba(16, 185, 129, 0.04)",
+                      marginBottom: 12,
                     }}
                   >
                     <div className="comment-header">
                       <span className="comment-author">
-                        {isClientReply ? (
+                        {isCustomer ? (
                           <>
                             <UserIcon size={14} color="#3b82f6" />
-                            <span>You (Client)</span>
+                            <span>You (Customer)</span>
                           </>
                         ) : (
                           <>
@@ -262,7 +346,9 @@ export default function CustomerPortalTicketDetails() {
                         {new Date(comment.created_at).toLocaleString()}
                       </span>
                     </div>
-                    <div className="comment-body">{comment.body}</div>
+                    <div className="comment-body" style={{ whiteSpace: "pre-wrap" }}>
+                      {comment.body}
+                    </div>
                   </div>
                 );
               })}
@@ -287,13 +373,13 @@ export default function CustomerPortalTicketDetails() {
               <LockIcon size={18} />
               <span>
                 This ticket has been marked as <strong>Closed</strong>. Further replies are disabled.
-                If you still need assistance, please submit a new ticket.
+                You may click <strong>Reopen Ticket</strong> above if your issue persists.
               </span>
             </div>
           ) : (
             <form onSubmit={handleCommentSubmit} style={{ marginTop: 24 }}>
               <div className="form-group">
-                <label>Post a Reply</label>
+                <label>Post a Public Reply</label>
                 <textarea
                   rows={4}
                   required
@@ -316,7 +402,110 @@ export default function CustomerPortalTicketDetails() {
           )}
         </div>
       </div>
+
+      {/* Close Ticket Modal */}
+      {isCloseModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h2>Close Support Ticket</h2>
+              <button
+                className="modal-close-btn"
+                onClick={() => setIsCloseModalOpen(false)}
+                disabled={closingTicket}
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCloseTicket}>
+              <div className="modal-body">
+                <p style={{ color: "#475569", fontSize: "0.875rem", margin: "0 0 16px 0" }}>
+                  Are you sure you want to mark this ticket as closed? You can optionally add a closing note.
+                </p>
+                <div className="form-group">
+                  <label>Closing Note (Optional)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="e.g. Verified resolution; issue resolved on our end. Thanks!"
+                    value={closeComment}
+                    onChange={(e) => setCloseComment(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsCloseModalOpen(false)}
+                  disabled={closingTicket}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={closingTicket}
+                  style={{ background: "#dc2626" }}
+                >
+                  <span>{closingTicket ? "Closing..." : "Confirm Close Ticket"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reopen Ticket Modal */}
+      {isReopenModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h2>Reopen Support Ticket</h2>
+              <button
+                className="modal-close-btn"
+                onClick={() => setIsReopenModalOpen(false)}
+                disabled={reopeningTicket}
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleReopenTicket}>
+              <div className="modal-body">
+                <p style={{ color: "#475569", fontSize: "0.875rem", margin: "0 0 16px 0" }}>
+                  Please describe why you need this ticket reopened so our team can follow up immediately.
+                </p>
+                <div className="form-group">
+                  <label>Reason for Reopening *</label>
+                  <textarea
+                    rows={4}
+                    required
+                    placeholder="Describe what still needs attention or why the issue has reoccurred..."
+                    value={reopenComment}
+                    onChange={(e) => setReopenComment(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsReopenModalOpen(false)}
+                  disabled={reopeningTicket}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={reopeningTicket || !reopenComment.trim()}
+                >
+                  <span>{reopeningTicket ? "Reopening..." : "Reopen Ticket"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

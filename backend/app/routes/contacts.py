@@ -131,8 +131,10 @@ def create_contact(
     _=Depends(require_permission("contact.create")),
     db: Session = Depends(get_db)
 ):
+    from app.services.subscription_service import enforce_plan_record_limit
     tenant_id = UUID(str(current_user["tenant_id"]))
     user_id = UUID(str(current_user["user_id"]))
+    enforce_plan_record_limit(db, tenant_id, "contacts")
 
     validate_assigned_user(
         data.assigned_to,

@@ -1,4 +1,3 @@
-
 import hashlib
 import io
 import secrets
@@ -12,9 +11,11 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
+from app.core.platform_rbac import ALL_PLATFORM_ROLE_NAMES
 from app.database.connection import SessionLocal
 from app.core.security import hash_password, verify_password
 from app.models.user import User
+from app.models.refresh_session import RefreshSession
 from app.models.role import Role
 from app.models.user_role import UserRole
 from app.models.user_invitation import UserInvitation
@@ -81,8 +82,11 @@ async def create_user(
     _=Depends(require_permission("user.create")),
     db: Session = Depends(get_db),
 ):
+    from app.services.subscription_service import enforce_plan_user_limit
+
     tenant_id = UUID(current_user["tenant_id"])
     actor_id = UUID(current_user["user_id"])
+    enforce_plan_user_limit(db, tenant_id)
     email = str(data.email).lower().strip()
 
     existing_user = db.query(User).filter(
@@ -93,6 +97,12 @@ async def create_user(
         raise HTTPException(
             status_code=400,
             detail="Email already registered",
+        )
+
+    if data.role in ALL_PLATFORM_ROLE_NAMES:
+        raise HTTPException(
+            status_code=403,
+            detail="Platform roles can only be assigned through platform administration.",
         )
 
     role = db.query(Role).filter(
@@ -488,6 +498,8 @@ def change_my_password(
         "must_change_password": user.must_change_password,
     }
 
+    from app.services.platform_config import enforce_configured_password_policy
+    enforce_configured_password_policy(db, data.new_password, [user.email, user.full_name])
     user.password = hash_password(data.new_password)
     user.must_change_password = False
 
@@ -569,6 +581,12 @@ def update_user(
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if data.role in ALL_PLATFORM_ROLE_NAMES:
+        raise HTTPException(
+            status_code=403,
+            detail="Platform roles can only be assigned through platform administration.",
+        )
 
     role = db.query(Role).filter(
         Role.name == data.role
@@ -661,6 +679,8 @@ def delete_user(
     before_data = user_audit_data(user, role_name)
 
     user.status = "Inactive"
+    db.query(RefreshSession).filter(RefreshSession.user_id == user.id, RefreshSession.revoked.is_(False)).update(
+        {RefreshSession.revoked: True}, synchronize_session=False)
 
     db.query(UserInvitation).filter(
         UserInvitation.user_id == user.id,

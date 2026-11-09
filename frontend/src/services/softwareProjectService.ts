@@ -3,6 +3,7 @@ import type {
   SoftwareProject,
   SoftwareProjectCreate,
   SoftwareProjectUpdate,
+  ProjectTimeSummaryResponse,
 } from "../types/softwareProject";
 import {
   executeSoftwareRequest,
@@ -72,6 +73,25 @@ export const getSoftwareProject = async (
     async () => {
       const response = await apiClient.get<any>(`${BASE_URL}/${id}`, { signal: options?.signal });
       return response.data?.data || response.data;
+    },
+    options
+  );
+};
+
+export const getSoftwareProjectTimeSummary = async (
+  projectId: string,
+  options?: SoftwareRequestOptions
+): Promise<ProjectTimeSummaryResponse> => {
+  const requestKey = `proj-time-summary:${projectId}`;
+  return executeSoftwareRequest(
+    "software_projects",
+    requestKey,
+    async () => {
+      const response = await apiClient.get<ProjectTimeSummaryResponse>(
+        `${BASE_URL}/${projectId}/time-summary`,
+        { signal: options?.signal }
+      );
+      return response.data;
     },
     options
   );

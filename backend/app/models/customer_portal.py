@@ -53,8 +53,7 @@ class CustomerPortalSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    # {portal_user_id: password fingerprint} for every workspace whose password was
-    # proven at login. Only these workspaces can be switched into without a password.
+    # Password fingerprints for verified workspaces; only proven workspaces may be switched without re-authentication.
     linked_workspaces: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
 

@@ -20,6 +20,7 @@ from app.core.mfa import (
     verify_totp_code,
 )
 from app.core.security import create_mfa_token
+from app.models.platform import PlatformEmployee, PlatformSecurityEvent
 from app.models.user_mfa import UserMFA
 from app.schemas.auth import (
     MFAEnrollmentStartRequest,
@@ -28,7 +29,11 @@ from app.schemas.auth import (
 )
 
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import (
+    ACTIVE_TENANT_STATUSES,
+    ensure_tenant_active,
+    get_current_user,
+)
 from app.core.rate_limiter import limiter
 from app.core.security import (
     create_access_token,
@@ -72,6 +77,13 @@ router = APIRouter(
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
+@router.get("/industries")
+def list_registration_industries():
+    """Return the authoritative official industry catalogue for registration clients."""
+    from app.core.industry_registry import list_industries
+    return {"items": list_industries(), "total": len(list_industries())}
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -91,7 +103,10 @@ def create_refresh_session(
     ).hexdigest()
 
     now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    from app.services.platform_config import get_platform_config
+    security_policy = get_platform_config(db, "platform.security_policy")
+    session_minutes = int(security_policy.get("session_timeout_minutes", REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60))
+    expires_at = now + timedelta(minutes=min(session_minutes, REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60))
 
     session = RefreshSession(
         family_id=family_id or uuid.uuid4(),
@@ -105,7 +120,7 @@ def create_refresh_session(
 
     db.add(session)
 
-    return raw_token, expires_at, token_hash
+    return raw_token, expires_at, token_hash, session.family_id
 
 
 def revoke_refresh_family(db: Session, family_id: uuid.UUID):
@@ -120,6 +135,8 @@ def revoke_all_user_refresh_sessions(
     db: Session,
     user_id: uuid.UUID,
 ):
+    # Use the same lock order as refresh: user row, then refresh-session rows.
+    db.query(User.id).filter(User.id == user_id).with_for_update().first()
     db.query(RefreshSession).filter(
         RefreshSession.user_id == user_id,
         RefreshSession.revoked.is_(False),
@@ -173,6 +190,8 @@ def get_mfa_token_user(
             detail="Your account is inactive.",
         )
 
+    ensure_tenant_active(db, user.tenant_id)
+
     return user
 
 
@@ -194,6 +213,25 @@ def complete_mfa_login(db: Session, user: User):
         Tenant.id == user.tenant_id
     ).first()
 
+    # Platform employees: a login only counts once MFA has been completed.
+    platform_emp = db.query(PlatformEmployee).filter(
+        PlatformEmployee.user_id == user.id
+    ).first()
+    if platform_emp:
+        platform_emp.last_login_at = datetime.utcnow()
+        db.add(
+            PlatformSecurityEvent(
+                event_type="login_success",
+                severity="Info",
+                status="Logged",
+                user_id=user.id,
+                email=user.email,
+                industry_key=platform_emp.industry_key,
+                title=f"Successful login by {user.full_name} ({platform_emp.role_name})",
+                description="Platform employee completed password and MFA verification.",
+            )
+        )
+
     permissions = []
 
     if role and not is_onboarding:
@@ -207,14 +245,6 @@ def complete_mfa_login(db: Session, user: User):
             ).all()
         ]
 
-    access_token = create_access_token({
-        "user_id": str(user.id),
-        "tenant_id": str(user.tenant_id),
-        "role": role.name if role else None,
-        "purpose": "onboarding" if is_onboarding else "access",
-        "mfa_verified": True,
-    })
-
     can_refresh = (
         not is_onboarding
         and user.status == "Active"
@@ -224,12 +254,18 @@ def complete_mfa_login(db: Session, user: User):
 
     refresh_token = None
     refresh_expires_at = None
-
+    created_refresh, created_expiry, _, session_id = create_refresh_session(db=db, user=user)
     if can_refresh:
-        refresh_token, refresh_expires_at, _ = create_refresh_session(
-            db=db,
-            user=user,
-        )
+        refresh_token, refresh_expires_at = created_refresh, created_expiry
+
+    access_token = create_access_token({
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id),
+        "role": role.name if role else None,
+        "purpose": "onboarding" if is_onboarding else "access",
+        "mfa_verified": True,
+        **({"sid": str(session_id)} if session_id else {}),
+    })
 
     return {
         "message": "MFA verification successful",
@@ -483,6 +519,16 @@ async def register(
             detail="Company already registered",
         )
 
+    from app.core.industry_registry import INDUSTRY_REGISTRY, normalize_industry_key
+    industry_key = normalize_industry_key(data.industry)
+    if industry_key not in INDUSTRY_REGISTRY:
+        raise HTTPException(status_code=422, detail={
+            "message": f"Unsupported industry '{data.industry}'.",
+            "supported_industries": [item["name"] for item in INDUSTRY_REGISTRY.values()],
+        })
+    canonical_industry_name = INDUSTRY_REGISTRY[industry_key]["name"]
+    from app.services.platform_config import enforce_configured_password_policy
+    enforce_configured_password_policy(db, data.password, [data.email, data.full_name])
     hashed_password = hash_password(data.password)
 
     existing_pending = db.query(PendingRegistration).filter(
@@ -505,7 +551,7 @@ async def register(
         company_name=data.company_name,
         company_email=data.company_email,
         phone=data.phone,
-        industry=data.industry,
+        industry=canonical_industry_name,
         full_name=data.full_name,
         email=data.email,
         password=hashed_password,
@@ -659,9 +705,21 @@ def verify_otp(
             detail="Registration data not found. Please register again.",
         )
 
+    from app.services.subscription_service import (
+        ensure_subscription_infrastructure_seeded,
+        provision_tenant_global_free_trial,
+        serialize_subscription,
+    )
+
+    ensure_subscription_infrastructure_seeded(db)
+
     new_tenant = Tenant(
         name=pending_registration.company_name,
         industry=pending_registration.industry,
+        billing_email=pending_registration.company_email,
+        billing_phone=pending_registration.phone,
+        status="Trial",
+        is_platform=False,
     )
 
     db.add(new_tenant)
@@ -673,7 +731,12 @@ def verify_otp(
             tenant_id=new_tenant.id,
             full_name=pending_registration.full_name,
             email=pending_registration.email,
+            phone=pending_registration.phone,
+            job_title="Tenant Owner",
             password=pending_registration.password,
+            status="Active",
+            must_change_password=False,
+            profile_completed=True,
         )
 
         db.add(new_user)
@@ -696,15 +759,26 @@ def verify_otp(
             )
         )
 
+        # PART 1: Automatically create the global 14-day free trial upon company registration
+        trial_sub = provision_tenant_global_free_trial(
+            db=db,
+            tenant=new_tenant,
+            actor_user_id=new_user.id,
+        )
+
         db.delete(pending_registration)
         db.delete(otp_record)
         db.commit()
+        db.refresh(trial_sub)
 
         return {
             "message": "Registration completed successfully",
             "company": new_tenant.name,
+            "tenant_id": str(new_tenant.id),
             "user": new_user.email,
+            "user_id": str(new_user.id),
             "role": tenant_owner_role.name,
+            "subscription": serialize_subscription(db, trial_sub),
         }
 
     except HTTPException:
@@ -783,6 +857,8 @@ def login(
             detail="User tenant was not found.",
         )
 
+    ensure_tenant_active(db, user.tenant_id)
+
     mfa = db.query(UserMFA).filter(
         UserMFA.user_id == user.id
     ).first()
@@ -847,15 +923,21 @@ def refresh_access_token(
         refresh_token.encode("utf-8")
     ).hexdigest()
 
-    session = db.query(RefreshSession).filter(
+    # Resolve ownership without locking, then lock user before session. This
+    # serializes refresh against administrative revocation and logout.
+    initial = db.query(RefreshSession.user_id, RefreshSession.tenant_id).filter(
         RefreshSession.token_hash == token_hash
+    ).first()
+    if not initial:
+        raise HTTPException(status_code=401, detail="Invalid refresh token. Please log in again.")
+    user = db.query(User).filter(User.id == initial.user_id, User.tenant_id == initial.tenant_id).with_for_update().first()
+    session = db.query(RefreshSession).filter(
+        RefreshSession.token_hash == token_hash,
+        RefreshSession.user_id == initial.user_id,
+        RefreshSession.tenant_id == initial.tenant_id,
     ).with_for_update().first()
-
     if not session:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid refresh token. Please log in again.",
-        )
+        raise HTTPException(status_code=401, detail="Invalid refresh token. Please log in again.")
 
     if session.revoked:
         revoke_refresh_family(db, session.family_id)
@@ -879,11 +961,6 @@ def refresh_access_token(
             detail="Refresh token expired. Please log in again.",
         )
 
-    user = db.query(User).filter(
-        User.id == session.user_id,
-        User.tenant_id == session.tenant_id,
-    ).with_for_update().first()
-
     if (
         not user
         or user.status != "Active"
@@ -895,6 +972,20 @@ def refresh_access_token(
         raise HTTPException(
             status_code=401,
             detail="Account is not eligible for token refresh. Please log in again.",
+        )
+
+    refresh_tenant = db.query(Tenant).filter(
+        Tenant.id == user.tenant_id
+    ).first()
+    if refresh_tenant is None or (
+        not refresh_tenant.is_platform
+        and refresh_tenant.status not in ACTIVE_TENANT_STATUSES
+    ):
+        revoke_refresh_family(db, session.family_id)
+        db.commit()
+        raise HTTPException(
+            status_code=401,
+            detail="Your organization's account is not active. Please contact support.",
         )
 
     mfa = db.query(UserMFA).filter(
@@ -916,7 +1007,7 @@ def refresh_access_token(
         UserRole.user_id == user.id
     ).first()
 
-    new_refresh_token, new_expires_at, new_token_hash = (
+    new_refresh_token, new_expires_at, new_token_hash, _new_session_id = (
         create_refresh_session(
             db=db,
             user=user,
@@ -933,6 +1024,7 @@ def refresh_access_token(
         "role": role.name if role else None,
         "purpose": "access",
         "mfa_verified": True,
+        "sid": str(session.family_id),
     })
 
     try:
@@ -965,12 +1057,17 @@ def logout(
         refresh_token.encode("utf-8")
     ).hexdigest()
 
-    session = db.query(RefreshSession).filter(
+    initial = db.query(RefreshSession.user_id, RefreshSession.tenant_id).filter(
         RefreshSession.token_hash == token_hash
-    ).with_for_update().first()
-
-    if session:
-        revoke_refresh_family(db, session.family_id)
+    ).first()
+    if initial:
+        db.query(User.id).filter(User.id == initial.user_id, User.tenant_id == initial.tenant_id).with_for_update().first()
+        session = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == token_hash,
+            RefreshSession.user_id == initial.user_id,
+        ).with_for_update().first()
+        if session:
+            revoke_refresh_family(db, session.family_id)
         db.commit()
 
     return {
@@ -1130,6 +1227,8 @@ def reset_password(
             detail="Unable to reset password with these details.",
         )
 
+    from app.services.platform_config import enforce_configured_password_policy
+    enforce_configured_password_policy(db, data.new_password, [user.email, user.full_name])
     user.password = hash_password(data.new_password)
 
     db.query(PasswordResetOTP).filter(
@@ -1186,6 +1285,8 @@ def change_temporary_password(
             detail="Current password is incorrect",
         )
 
+    from app.services.platform_config import enforce_configured_password_policy
+    enforce_configured_password_policy(db, data.new_password, [user.email, user.full_name])
     user.password = hash_password(data.new_password)
     user.must_change_password = False
     
@@ -1332,6 +1433,8 @@ def accept_invitation(
             detail="This account is not awaiting invitation setup",
         )
 
+    from app.services.platform_config import enforce_configured_password_policy
+    enforce_configured_password_policy(db, data.password, [user.email, user.full_name])
     user.password = hash_password(data.password)
     user.must_change_password = False
     invitation.used = True

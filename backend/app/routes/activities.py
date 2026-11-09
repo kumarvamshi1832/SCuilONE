@@ -57,6 +57,9 @@ SOFTWARE_INDUSTRIES = {
     "software services / it consulting",
     "software_services",
     "it consulting",
+        "it & software",
+        "it and software",
+        "software companies",
 }
 
 REAL_ESTATE_INDUSTRIES = {
@@ -98,21 +101,15 @@ def get_tenant_industry(db: Session, tenant_id: UUID) -> str:
 
 
 def classify_industry(industry: str) -> str | None:
-    normalized = industry.replace("_", " ").replace("-", " ").strip().lower()
-    if (
-        normalized in {
-            "software",
-            "software services",
-            "software services / it consulting",
-            "it consulting",
-        }
-        or "software" in normalized
-        or "it consulting" in normalized
-    ):
+    """Return an implemented activity-link module family for this tenant industry."""
+    from app.core.industry_registry import normalize_industry_key
+    key = normalize_industry_key(industry)
+    if key == "software_companies":
         return "software"
-    if "real estate" in normalized:
+    if key == "real_estate":
         return "real_estate"
     return None
+
 
 
 def activity_audit_data(activity: Activity):

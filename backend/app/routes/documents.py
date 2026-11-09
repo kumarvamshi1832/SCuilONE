@@ -240,6 +240,9 @@ async def upload_document(
             detail="File must be 5 MB or smaller",
         )
 
+    from app.services.subscription_service import enforce_plan_storage_limit
+    enforce_plan_storage_limit(db, tenant_id, additional_bytes=len(contents))
+
     content_type = file.content_type or "application/octet-stream"
 
     if extension in {".jpg", ".jpeg", ".png", ".webp"}:

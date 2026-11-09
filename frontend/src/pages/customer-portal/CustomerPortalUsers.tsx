@@ -18,18 +18,27 @@ import {
   getCustomerPortalUsers,
   inviteCustomerContact,
   updateCustomerPortalUserStatus,
+  resendCustomerPortalInvitation,
+  revokeCustomerPortalInvitation,
 } from "../../services/customerPortalAdminService";
 import { getContacts } from "../../services/contactService";
+import { getAccounts } from "../../services/accountService";
+import { getCustomerPortalPermissions } from "../../utils/customerPortalPermissions";
 import type { CustomerPortalUserRow, PortalInviteResponse } from "../../types/customerPortal";
 import type { Contact } from "../../types/contact";
+import type { Account } from "../../types/account";
 import "./CustomerPortalUsers.css";
 
 export default function CustomerPortalUsers() {
   const [users, setUsers] = useState<CustomerPortalUserRow[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // Permissions
+  const permissions = useMemo(() => getCustomerPortalPermissions(), []);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -41,7 +50,11 @@ export default function CustomerPortalUsers() {
   const [inviting, setInviting] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState<PortalInviteResponse | null>(null);
 
-  // Action state
+  // Action & Confirmation Dialog State
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "suspend" | "reactivate" | "resend" | "revoke";
+    user: CustomerPortalUserRow;
+  } | null>(null);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -55,7 +68,7 @@ export default function CustomerPortalUsers() {
     setError(null);
     try {
       const data = await getCustomerPortalUsers();
-      setUsers(data);
+      setUsers(data || []);
     } catch (err: any) {
       console.error("Failed to fetch customer portal users:", err);
       setError(err?.response?.data?.detail || err?.message || "Failed to load portal users.");
@@ -64,26 +77,39 @@ export default function CustomerPortalUsers() {
     }
   }, []);
 
-  // Fetch Contacts for Invitation Dropdown
+  // Fetch Contacts and Accounts for Invitation Dropdown
   useEffect(() => {
-    async function loadContacts() {
+    async function loadMetadata() {
       try {
-        const contactList = await getContacts();
-        setContacts(contactList);
+        const [contactList, accountList] = await Promise.all([
+          getContacts().catch(() => []),
+          getAccounts().catch(() => []),
+        ]);
+        setContacts(contactList || []);
+        setAccounts(accountList || []);
       } catch (err) {
-        console.warn("Failed to load contacts for portal invites:", err);
+        console.warn("Failed to load contacts or accounts for portal invites:", err);
       }
     }
-    loadContacts();
+    loadMetadata();
     fetchPortalUsers();
   }, [fetchPortalUsers]);
 
-  // KPI Calculations
+  // Account map for quick lookup
+  const accountMap = useMemo(() => {
+    const map = new Map<string, string>();
+    accounts.forEach((acc) => {
+      map.set(acc.id, acc.name);
+    });
+    return map;
+  }, [accounts]);
+
+  // Dynamic KPI Calculations strictly from actual Customer Portal Users API response
   const kpis = useMemo(() => {
     const total = users.length;
-    const active = users.filter((u) => u.status === "Active").length;
-    const invited = users.filter((u) => u.status === "Invited").length;
-    const suspended = users.filter((u) => u.status === "Suspended").length;
+    const active = users.filter((u) => u.status?.trim() === "Active").length;
+    const invited = users.filter((u) => u.status?.trim() === "Invited").length;
+    const suspended = users.filter((u) => u.status?.trim() === "Suspended").length;
     return { total, active, invited, suspended };
   }, [users]);
 
@@ -102,14 +128,21 @@ export default function CustomerPortalUsers() {
     });
   }, [users, statusFilter, searchTerm]);
 
-  // Eligible contacts for invitation (must have email)
+  // Eligible contacts for invitation: Backend strictly requires BOTH email AND account_id
   const eligibleContacts = useMemo(() => {
-    return contacts.filter((c) => c.email && c.email.trim().length > 0);
+    return contacts.filter(
+      (c) => Boolean(c.email && c.email.trim().length > 0) && Boolean(c.account_id)
+    );
   }, [contacts]);
 
   // Handle Invite Submit
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!permissions.canInvite) {
+      showToast("You do not have permission to invite customer portal users.", "error");
+      return;
+    }
+
     if (!selectedContactId) {
       showToast("Please select a customer contact to invite.", "error");
       return;
@@ -119,7 +152,7 @@ export default function CustomerPortalUsers() {
     try {
       const result = await inviteCustomerContact(selectedContactId);
       setInviteSuccess(result);
-      showToast(`Invitation sent to ${result.email}!`, "success");
+      showToast(`Invitation successfully sent to ${result.email}!`, "success");
       fetchPortalUsers();
     } catch (err: any) {
       showToast(err?.response?.data?.detail || "Failed to send portal invitation.", "error");
@@ -128,24 +161,104 @@ export default function CustomerPortalUsers() {
     }
   };
 
-  // Toggle user status Active <-> Suspended
-  const handleToggleStatus = async (user: CustomerPortalUserRow) => {
-    if (user.status === "Invited") {
-      showToast(
-        "This user is still in 'Invited' status. They must activate their account before you can enable or disable them.",
-        "error"
-      );
+  // Execute Action (Resend, Revoke, Suspend or Reactivate) with backend confirmation
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { type, user } = confirmAction;
+
+    if (type === "resend") {
+      if (!permissions.canInvite) {
+        showToast("You do not have permission to resend invitations.", "error");
+        setConfirmAction(null);
+        return;
+      }
+      setStatusUpdatingId(user.portal_user_id);
+      try {
+        const result = await resendCustomerPortalInvitation(user.portal_user_id);
+        const expiryStr = result.invitation_expires_at
+          ? new Date(result.invitation_expires_at).toLocaleString()
+          : "7 days";
+        showToast(
+          `Invitation successfully resent to ${result.email}! Valid until ${expiryStr}.`,
+          "success"
+        );
+        setConfirmAction(null);
+        await fetchPortalUsers();
+      } catch (err: any) {
+        const status = err?.response?.status;
+        let msg = err?.response?.data?.detail;
+        if (status === 403) {
+          msg = msg || "Permission denied. You require customer_portal.invite permission.";
+        } else if (status === 404) {
+          msg = msg || "Portal user or linked contact not found.";
+        } else if (status === 409) {
+          msg = msg || "This portal account is already active.";
+        } else if (status === 502) {
+          msg = msg || "Invitation could not be resent. Check the email service and try again.";
+        } else {
+          msg = msg || "Failed to resend portal invitation.";
+        }
+        showToast(msg, "error");
+      } finally {
+        setStatusUpdatingId(null);
+      }
       return;
     }
 
-    const newStatus = user.status === "Active" ? "Suspended" : "Active";
+    if (type === "revoke") {
+      if (!permissions.canManage) {
+        showToast("You do not have permission to revoke portal invitations.", "error");
+        setConfirmAction(null);
+        return;
+      }
+      setStatusUpdatingId(user.portal_user_id);
+      try {
+        const result = await revokeCustomerPortalInvitation(user.portal_user_id);
+        showToast(
+          result.message || `Pending invitation revoked for ${user.contact_name}. Status is now ${result.status}.`,
+          "success"
+        );
+        setConfirmAction(null);
+        await fetchPortalUsers();
+      } catch (err: any) {
+        showToast(err?.response?.data?.detail || "Failed to revoke invitation.", "error");
+      } finally {
+        setStatusUpdatingId(null);
+      }
+      return;
+    }
+
+    // Suspend or Reactivate (Active or Suspended users only)
+    if (!permissions.canManage) {
+      showToast("You do not have permission to change portal user status.", "error");
+      setConfirmAction(null);
+      return;
+    }
+
+    if (user.status === "Invited") {
+      showToast(
+        "This user is still in 'Invited' status. Please use Resend Invitation or Revoke Invitation.",
+        "error"
+      );
+      setConfirmAction(null);
+      return;
+    }
+
+    const targetStatus = type === "suspend" ? "Suspended" : "Active";
     setStatusUpdatingId(user.portal_user_id);
+
     try {
-      await updateCustomerPortalUserStatus(user.portal_user_id, newStatus);
-      showToast(`User status updated to ${newStatus}.`, "success");
-      fetchPortalUsers();
+      await updateCustomerPortalUserStatus(user.portal_user_id, targetStatus);
+      showToast(
+        targetStatus === "Suspended"
+          ? `Portal access suspended for ${user.contact_name}. Active sessions have been revoked.`
+          : `Portal access reactivated successfully for ${user.contact_name}.`,
+        "success"
+      );
+      setConfirmAction(null);
+      await fetchPortalUsers();
     } catch (err: any) {
-      showToast(err?.response?.data?.detail || "Failed to update user status.", "error");
+      showToast(err?.response?.data?.detail || `Failed to ${type} user access.`, "error");
     } finally {
       setStatusUpdatingId(null);
     }
@@ -168,7 +281,7 @@ export default function CustomerPortalUsers() {
     <div className="portal-admin-container">
       {/* Toast Notification */}
       {toast && (
-        <div className={`support-alert ${toast.type}`}>
+        <div className={`support-alert ${toast.type}`} role="alert">
           {toast.type === "success" ? <CheckCircleIcon size={18} /> : <AlertCircleIcon size={18} />}
           <span>{toast.message}</span>
         </div>
@@ -192,6 +305,8 @@ export default function CustomerPortalUsers() {
           </button>
           <button
             className="btn-primary"
+            disabled={!permissions.canInvite}
+            title={!permissions.canInvite ? "Requires customer_portal.invite permission" : undefined}
             onClick={() => {
               setSelectedContactId("");
               setInviteSuccess(null);
@@ -204,7 +319,7 @@ export default function CustomerPortalUsers() {
         </div>
       </div>
 
-      {/* KPI Stats */}
+      {/* KPI Stats (Dynamically derived from actual API responses) */}
       <div className="portal-kpis">
         <div className="portal-kpi-card">
           <div className="portal-kpi-icon blue">
@@ -244,10 +359,10 @@ export default function CustomerPortalUsers() {
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="support-filter-bar">
-        <div className="support-search-box">
-          <SearchIcon size={16} className="support-search-icon" />
+      {/* Search and Filters Toolbar (Clean Flexbox Layout, No Overlap) */}
+      <div className="portal-users-toolbar">
+        <div className="portal-search-wrapper">
+          <SearchIcon size={16} className="portal-search-icon" />
           <input
             type="text"
             placeholder="Search by contact, account, or email..."
@@ -256,9 +371,10 @@ export default function CustomerPortalUsers() {
           />
         </div>
         <select
-          className="support-select"
+          className="portal-status-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by portal status"
         >
           <option value="">All Statuses</option>
           <option value="Active">Active</option>
@@ -267,7 +383,8 @@ export default function CustomerPortalUsers() {
         </select>
         {(searchTerm || statusFilter) && (
           <button
-            className="btn-secondary"
+            type="button"
+            className="btn-secondary portal-clear-btn"
             onClick={() => {
               setSearchTerm("");
               setStatusFilter("");
@@ -353,44 +470,74 @@ export default function CustomerPortalUsers() {
                       {user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {user.status === "Invited" ? (
-                        <span
-                          style={{
-                            fontSize: "0.75rem",
-                            color: "#94a3b8",
-                            fontStyle: "italic",
-                          }}
-                          title="Contact has not activated account yet"
-                        >
-                          Pending Activation
-                        </span>
-                      ) : (
-                        <button
-                          className="btn-secondary"
-                          style={{
-                            padding: "6px 12px",
-                            fontSize: "0.8125rem",
-                            color: user.status === "Active" ? "#dc2626" : "#15803d",
-                            borderColor: user.status === "Active" ? "#fca5a5" : "#86efac",
-                          }}
-                          disabled={isUpdating}
-                          onClick={() => handleToggleStatus(user)}
-                        >
-                          {isUpdating ? (
-                            "Updating..."
-                          ) : user.status === "Active" ? (
-                            <>
-                              <ShieldAlertIcon size={14} />
-                              <span>Suspend Access</span>
-                            </>
-                          ) : (
-                            <>
-                              <ShieldCheckIcon size={14} />
-                              <span>Activate Access</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <div style={{ display: "inline-flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
+                        {user.status === "Invited" ? (
+                          <>
+                            {permissions.canInvite && (
+                              <button
+                                type="button"
+                                className="btn-action-resend"
+                                disabled={isUpdating}
+                                title="Resend invitation email with refreshed expiration"
+                                onClick={() => setConfirmAction({ type: "resend", user })}
+                              >
+                                <MailIcon size={14} />
+                                <span>{isUpdating ? "Resending..." : "Resend Invite"}</span>
+                              </button>
+                            )}
+                            {permissions.canManage && (
+                              <button
+                                type="button"
+                                className="btn-action-revoke"
+                                disabled={isUpdating}
+                                title="Revoke pending invitation and suspend access"
+                                onClick={() => setConfirmAction({ type: "revoke", user })}
+                              >
+                                <ShieldAlertIcon size={14} />
+                                <span>{isUpdating ? "Revoking..." : "Revoke"}</span>
+                              </button>
+                            )}
+                            {!permissions.canInvite && !permissions.canManage && (
+                              <span
+                                className="portal-pending-label"
+                                title="Contact has not activated account yet. Must activate via invitation email."
+                              >
+                                Pending Activation
+                              </span>
+                            )}
+                          </>
+                        ) : user.status === "Suspended" ? (
+                          <button
+                            type="button"
+                            className="btn-action-reactivate"
+                            disabled={isUpdating || !permissions.canManage}
+                            title={
+                              !permissions.canManage
+                                ? "Requires customer_portal.manage permission"
+                                : "Reactivate user account"
+                            }
+                            onClick={() => setConfirmAction({ type: "reactivate", user })}
+                          >
+                            <ShieldCheckIcon size={14} />
+                            <span>{isUpdating ? "Updating..." : "Reactivate Access"}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-action-suspend"
+                            disabled={isUpdating || !permissions.canManage}
+                            title={
+                              !permissions.canManage
+                                ? "Requires customer_portal.manage permission"
+                                : "Suspend user and revoke active sessions"
+                            }
+                            onClick={() => setConfirmAction({ type: "suspend", user })}
+                          >
+                            <ShieldAlertIcon size={14} />
+                            <span>{isUpdating ? "Updating..." : "Suspend Access"}</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -400,13 +547,196 @@ export default function CustomerPortalUsers() {
         )}
       </div>
 
+      {/* CONFIRM ACTION MODAL */}
+      {confirmAction && (
+        <div className="modal-overlay" onClick={() => !statusUpdatingId && setConfirmAction(null)}>
+          <div className="modal-content" style={{ maxWidth: 500 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>
+                {confirmAction.type === "resend"
+                  ? "Resend Portal Invitation"
+                  : confirmAction.type === "revoke"
+                  ? "Revoke Pending Invitation"
+                  : confirmAction.type === "suspend"
+                  ? "Suspend Customer Portal Access"
+                  : "Reactivate Customer Portal Access"}
+              </h2>
+              <button
+                type="button"
+                className="modal-close-btn"
+                disabled={Boolean(statusUpdatingId)}
+                onClick={() => setConfirmAction(null)}
+              >
+                <XIcon size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 14,
+                  padding: "16px",
+                  borderRadius: "8px",
+                  background:
+                    confirmAction.type === "resend"
+                      ? "rgba(37, 99, 235, 0.1)"
+                      : confirmAction.type === "revoke"
+                      ? "rgba(217, 119, 6, 0.1)"
+                      : confirmAction.type === "suspend"
+                      ? "rgba(239, 68, 68, 0.1)"
+                      : "rgba(16, 185, 129, 0.1)",
+                  border:
+                    confirmAction.type === "resend"
+                      ? "1px solid rgba(37, 99, 235, 0.25)"
+                      : confirmAction.type === "revoke"
+                      ? "1px solid rgba(217, 119, 6, 0.25)"
+                      : confirmAction.type === "suspend"
+                      ? "1px solid rgba(239, 68, 68, 0.25)"
+                      : "1px solid rgba(16, 185, 129, 0.25)",
+                  marginBottom: 16,
+                }}
+              >
+                {confirmAction.type === "resend" ? (
+                  <MailIcon size={24} color="#2563eb" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : confirmAction.type === "revoke" ? (
+                  <ShieldAlertIcon size={24} color="#d97706" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : confirmAction.type === "suspend" ? (
+                  <ShieldAlertIcon size={24} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : (
+                  <ShieldCheckIcon size={24} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
+                )}
+                <div style={{ fontSize: "0.875rem", lineHeight: 1.5 }}>
+                  <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>
+                    {confirmAction.type === "resend"
+                      ? `Resend invitation email to ${confirmAction.user.contact_name}?`
+                      : confirmAction.type === "revoke"
+                      ? `Revoke pending invitation for ${confirmAction.user.contact_name}?`
+                      : confirmAction.type === "suspend"
+                      ? `Are you sure you want to suspend portal access for ${confirmAction.user.contact_name}?`
+                      : `Are you sure you want to reactivate portal access for ${confirmAction.user.contact_name}?`}
+                  </p>
+                  <p style={{ margin: 0, color: "#64748b" }}>
+                    {confirmAction.type === "resend"
+                      ? `A new activation email with a refreshed expiration window will be delivered to ${confirmAction.user.email}. Previous links will be superseded.`
+                      : confirmAction.type === "revoke"
+                      ? "Revoking this invitation immediately invalidates any pending activation links and sets the portal account status to Suspended. The user will not be able to activate until re-invited. (This does not delete the user record)."
+                      : confirmAction.type === "suspend"
+                      ? "Suspending access will immediately revoke all active portal sessions and prevent this contact from logging in until reactivated."
+                      : "Reactivating access will restore this contact's ability to log in with their existing credentials."}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "var(--bg-secondary, rgba(0,0,0,0.03))",
+                  padding: "12px 14px",
+                  borderRadius: "8px",
+                  fontSize: "0.8125rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
+                <div>
+                  <strong>Customer Contact:</strong> {confirmAction.user.contact_name}
+                </div>
+                <div>
+                  <strong>Portal Email:</strong> {confirmAction.user.email}
+                </div>
+                <div>
+                  <strong>Company:</strong> {confirmAction.user.account_name}
+                </div>
+                <div>
+                  <strong>Current Status:</strong>{" "}
+                  <span style={{ fontWeight: 600 }}>{confirmAction.user.status}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={Boolean(statusUpdatingId)}
+                onClick={() => setConfirmAction(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: statusUpdatingId ? "not-allowed" : "pointer",
+                  border: "none",
+                  color: "#ffffff",
+                  background:
+                    confirmAction.type === "resend"
+                      ? "#2563eb"
+                      : confirmAction.type === "revoke"
+                      ? "#d97706"
+                      : confirmAction.type === "suspend"
+                      ? "#dc2626"
+                      : "#16a34a",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+                disabled={Boolean(statusUpdatingId)}
+                onClick={handleConfirmAction}
+              >
+                {statusUpdatingId ? (
+                  <>
+                    <RefreshIcon size={16} className="animate-spin" />
+                    <span>
+                      {confirmAction.type === "resend"
+                        ? "Resending..."
+                        : confirmAction.type === "revoke"
+                        ? "Revoking..."
+                        : confirmAction.type === "suspend"
+                        ? "Suspending..."
+                        : "Reactivating..."}
+                    </span>
+                  </>
+                ) : confirmAction.type === "resend" ? (
+                  <>
+                    <MailIcon size={16} />
+                    <span>Resend Invitation</span>
+                  </>
+                ) : confirmAction.type === "revoke" ? (
+                  <>
+                    <ShieldAlertIcon size={16} />
+                    <span>Revoke Invitation</span>
+                  </>
+                ) : confirmAction.type === "suspend" ? (
+                  <>
+                    <ShieldAlertIcon size={16} />
+                    <span>Suspend Access</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheckIcon size={16} />
+                    <span>Reactivate Access</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* INVITE CUSTOMER CONTACT MODAL */}
       {isInviteOpen && (
-        <div className="modal-overlay" onClick={() => setIsInviteOpen(false)}>
+        <div className="modal-overlay" onClick={() => !inviting && setIsInviteOpen(false)}>
           <div className="modal-content" style={{ maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Invite Customer to Client Portal</h2>
-              <button className="modal-close-btn" onClick={() => setIsInviteOpen(false)}>
+              <button className="modal-close-btn" disabled={inviting} onClick={() => setIsInviteOpen(false)}>
                 <XIcon size={20} />
               </button>
             </div>
@@ -430,23 +760,34 @@ export default function CustomerPortalUsers() {
                     borderRadius: "8px",
                     fontSize: "0.875rem",
                     marginBottom: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
                   }}
                 >
-                  <div style={{ marginBottom: 6 }}>
-                    <strong>Portal User ID:</strong> {inviteSuccess.portal_user_id}
+                  <div>
+                    <strong>Contact Email:</strong> {inviteSuccess.email}
                   </div>
-                  <div style={{ marginBottom: 6 }}>
+                  <div>
+                    <strong>Account ID:</strong>{" "}
+                    <span style={{ fontFamily: "monospace" }}>{inviteSuccess.account_id}</span>
+                  </div>
+                  <div>
+                    <strong>Portal User ID:</strong>{" "}
+                    <span style={{ fontFamily: "monospace" }}>{inviteSuccess.portal_user_id}</span>
+                  </div>
+                  <div>
                     <strong>Invitation Status:</strong> {inviteSuccess.status}
                   </div>
                   <div>
-                    <strong>Expires At:</strong>{" "}
+                    <strong>Invitation Expires At:</strong>{" "}
                     {new Date(inviteSuccess.invitation_expires_at).toLocaleString()}
                   </div>
                 </div>
 
                 <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                  The client can activate their portal account by visiting the portal activation link
-                  and choosing a secure password.
+                  The client can activate their portal account by clicking the secure link in their
+                  invitation email and setting their password.
                 </p>
 
                 <div className="modal-footer" style={{ padding: "16px 0 0 0" }}>
@@ -477,17 +818,26 @@ export default function CustomerPortalUsers() {
                       onChange={(e) => setSelectedContactId(e.target.value)}
                     >
                       <option value="">-- Choose Contact --</option>
-                      {eligibleContacts.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.full_name} ({c.email}) {c.company ? `— ${c.company}` : ""}
-                        </option>
-                      ))}
+                      {eligibleContacts.map((c) => {
+                        const accName =
+                          (c.account_id ? accountMap.get(c.account_id) : null) ||
+                          c.company ||
+                          "Linked Account";
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.full_name} ({c.email}) — Account: {accName}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
                   {eligibleContacts.length === 0 && (
                     <div className="support-alert info" style={{ marginTop: 12 }}>
-                      <span>No contacts with valid email addresses found in the CRM.</span>
+                      <span>
+                        No contacts with both a valid email address and an associated Account found in
+                        the CRM.
+                      </span>
                     </div>
                   )}
                 </div>
@@ -504,7 +854,8 @@ export default function CustomerPortalUsers() {
                   <button
                     type="submit"
                     className="btn-primary"
-                    disabled={inviting || !selectedContactId}
+                    disabled={inviting || !selectedContactId || !permissions.canInvite}
+                    title={!permissions.canInvite ? "Requires customer_portal.invite permission" : undefined}
                   >
                     {inviting ? "Sending Invitation..." : "Send Invitation"}
                   </button>
@@ -517,4 +868,3 @@ export default function CustomerPortalUsers() {
     </div>
   );
 }
-

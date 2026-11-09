@@ -159,28 +159,30 @@ permissions = [
 ]
 
 
-db = SessionLocal()
 
-try:
-    for name, description in permissions:
-        existing_permission = db.query(Permission).filter(
-            Permission.name == name
-        ).first()
+if __name__ == "__main__":
+    db = SessionLocal()
 
-        if not existing_permission:
-            db.add(
-                Permission(
-                    name=name,
-                    description=description
+    try:
+        for name, description in permissions:
+            existing_permission = db.query(Permission).filter(
+                Permission.name == name
+            ).first()
+
+            if not existing_permission:
+                db.add(
+                    Permission(
+                        name=name,
+                        description=description
+                    )
                 )
-            )
 
-    db.commit()
-    print("Permissions seeded successfully")
+        db.commit()
+        print("Permissions seeded successfully")
 
-except Exception:
-    db.rollback()
-    raise
+    except Exception:
+        db.rollback()
+        raise
 
-finally:
-    db.close()
+    finally:
+        db.close()

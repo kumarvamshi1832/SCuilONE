@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     MFA_ENCRYPTION_KEY: str
+    PLATFORM_BOOTSTRAP_TOKEN: str | None = None
 
     FRONTEND_URL: str
 

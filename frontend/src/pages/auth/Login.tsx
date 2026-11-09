@@ -1,4 +1,4 @@
-import { FormEvent, useState, useEffect } from "react";
+import { FormEvent, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { loginUser } from "../../services/authService";
 import { useTheme } from "../../context/ThemeContext";
@@ -7,18 +7,38 @@ import backdropDark from "../../assets/login-full-backdrop.jpg";
 import backdropLight from "../../assets/login-full-backdrop-light.jpg";
 import "./Login.css";
 
+const REMEMBERED_EMAIL_KEY = "scuilone_remember_email";
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  // Email field initializes with remembered email if rememberMe was active, otherwise empty
+  // Helper to retrieve remembered email from location state or localStorage
+  const getInitialEmail = (): string => {
+    try {
+      const locEmail = (location.state as any)?.email;
+      if (locEmail && typeof locEmail === "string" && locEmail.trim()) {
+        return locEmail.trim().toLowerCase();
+      }
+      const saved =
+        localStorage.getItem(REMEMBERED_EMAIL_KEY) ||
+        localStorage.getItem("scuilone_saved_email");
+      if (saved && typeof saved === "string" && saved.trim()) {
+        return saved.trim().toLowerCase();
+      }
+    } catch {}
+    return "";
+  };
+
+  const initialEmail = getInitialEmail();
+  const isSubmittingRef = useRef(false);
+
+  // Automatic email prefill state & read-only lock when remembered
+  const [email, setEmail] = useState<string>(initialEmail);
+  const [isEmailRemembered, setIsEmailRemembered] = useState<boolean>(() => Boolean(initialEmail));
   const [rememberMe, setRememberMe] = useState(() => {
-    return localStorage.getItem("scuilone_remember_me") === "true";
-  });
-  const [email, setEmail] = useState(() => {
-    const isRemembered = localStorage.getItem("scuilone_remember_me") === "true";
-    return isRemembered ? (localStorage.getItem("scuilone_remember_email") || "") : "";
+    return localStorage.getItem("scuilone_remember_me") !== "false";
   });
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
@@ -31,15 +51,52 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Clear router history state after reading message so refresh won't resurface stale banners
   useEffect(() => {
-    if (rememberMe && email) {
-      localStorage.setItem("scuilone_remember_email", email);
-      localStorage.setItem("scuilone_remember_me", "true");
-    } else if (!rememberMe) {
-      localStorage.removeItem("scuilone_remember_email");
-      localStorage.removeItem("scuilone_remember_me");
+    if (location.state && ((location.state as any)?.message || (location.state as any)?.successMessage)) {
+      window.history.replaceState({}, document.title);
     }
-  }, [rememberMe, email]);
+  }, []);
+
+  // Synchronize email if passed via navigation state (e.g. after registration or activation)
+  useEffect(() => {
+    const locEmail = (location.state as any)?.email;
+    if (locEmail && typeof locEmail === "string" && locEmail.trim()) {
+      const cleanEmail = locEmail.trim().toLowerCase();
+      setEmail(cleanEmail);
+      setIsEmailRemembered(true);
+      try {
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, cleanEmail);
+      } catch {}
+    }
+  }, [location.state]);
+
+  // When email is remembered and page opens, focus password field directly
+  useEffect(() => {
+    if (isEmailRemembered && email) {
+      const timer = setTimeout(() => {
+        document.getElementById("login-password-input")?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isEmailRemembered]);
+
+  // Change account option to clear remembered email and allow entering a different email
+  const handleChangeAccount = () => {
+    try {
+      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      localStorage.removeItem("scuilone_saved_email");
+      localStorage.removeItem("scuilone_remember_me");
+    } catch {}
+    setEmail("");
+    setIsEmailRemembered(false);
+    setFieldErrors((prev) => ({ ...prev, email: undefined }));
+    setError("");
+    setSuccessMessage(null);
+    setTimeout(() => {
+      document.getElementById("login-email-input")?.focus();
+    }, 50);
+  };
 
   const validateEmail = (val: string): string => {
     const trimmed = val.trim();
@@ -62,6 +119,7 @@ export default function Login() {
   const handleEmailChange = (val: string) => {
     setEmail(val);
     setError("");
+    setSuccessMessage(null);
     if (fieldErrors.email) {
       setFieldErrors((prev) => ({ ...prev, email: validateEmail(val) }));
     }
@@ -75,6 +133,7 @@ export default function Login() {
   const handlePasswordChange = (val: string) => {
     setPassword(val);
     setError("");
+    setSuccessMessage(null);
     if (fieldErrors.password) {
       setFieldErrors((prev) => ({ ...prev, password: validatePassword(val) }));
     }
@@ -87,9 +146,11 @@ export default function Login() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (isSubmittingRef.current || loading) return;
+    isSubmittingRef.current = true;
 
     setError("");
+    setSuccessMessage(null);
 
     const emailErr = validateEmail(email);
     const passwordErr = validatePassword(password);
@@ -97,6 +158,7 @@ export default function Login() {
     setTouched({ email: true, password: true });
 
     if (emailErr || passwordErr) {
+      isSubmittingRef.current = false;
       setFieldErrors({ email: emailErr, password: passwordErr });
       if (emailErr) {
         document.getElementById("login-email-input")?.focus();
@@ -110,10 +172,19 @@ export default function Login() {
 
     try {
       setLoading(true);
+      const cleanEmail = email.trim().toLowerCase();
       const response = await loginUser({
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         password,
       });
+
+      // Save user email to localStorage upon successful login
+      try {
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, cleanEmail);
+        if (rememberMe) {
+          localStorage.setItem("scuilone_remember_me", "true");
+        }
+      } catch {}
 
       if (response.requires_mfa || response.mfa_required) {
         const mfaToken = response.mfa_token || response.temp_token || "";
@@ -201,7 +272,7 @@ export default function Login() {
       } else if (apiError.status === 403) {
         setError(apiError.message || "Your account is inactive. Contact your administrator.");
       } else if (apiError.status && apiError.status >= 500) {
-        setError("Server error. Please try again later.");
+        setError("Server error (500). Please try again later or contact your administrator.");
       } else if (
         apiError.status === 0 ||
         (apiError.message &&
@@ -214,6 +285,7 @@ export default function Login() {
         setError(apiError.message || "Invalid email or password. Please check your credentials and try again.");
       }
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   };
@@ -368,14 +440,38 @@ export default function Login() {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="login-interactive-form" noValidate>
+              <form
+                onSubmit={(e) => {
+                  if (loading || isSubmittingRef.current) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleSubmit(e);
+                }}
+                className="login-interactive-form"
+                noValidate
+              >
                 <div className="form-fields-wrapper">
                   {/* Email Field */}
                   <div className="form-group-item">
-                    <label htmlFor="login-email-input" className="input-field-label">
-                      Email
-                    </label>
-                    <div className={`input-box-container ${fieldErrors.email ? "has-error" : ""}`}>
+                    <div className="input-label-header">
+                      <label htmlFor="login-email-input" className="input-field-label">
+                        Email
+                      </label>
+                      {isEmailRemembered && (
+                        <button
+                          type="button"
+                          className="change-account-action-btn"
+                          onClick={handleChangeAccount}
+                          disabled={loading || isSubmittingRef.current}
+                          aria-label="Change account"
+                          title="Sign in with a different account"
+                        >
+                          Change Account
+                        </button>
+                      )}
+                    </div>
+                    <div className={`input-box-container ${fieldErrors.email ? "has-error" : ""} ${isEmailRemembered ? "is-readonly-prefilled" : ""}`}>
                       <span className="input-leading-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect width="20" height="16" x="2" y="4" rx="2" />
@@ -385,18 +481,27 @@ export default function Login() {
                       <input
                         id="login-email-input"
                         type="email"
-                        className="styled-input-control"
+                        className={`styled-input-control ${isEmailRemembered ? "input-readonly-prefilled" : ""}`}
                         placeholder="name@company.com"
                         value={email}
+                        readOnly={isEmailRemembered}
                         onChange={(e) => handleEmailChange(e.target.value)}
                         onBlur={handleEmailBlur}
-                        disabled={loading}
+                        disabled={loading || isSubmittingRef.current}
                         autoComplete="username"
                         aria-required="true"
                         aria-invalid={Boolean(fieldErrors.email)}
                         aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
                         required
                       />
+                      {isEmailRemembered && (
+                        <span className="remembered-badge-pill" title="Saved email address">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="remembered-badge-icon" aria-hidden="true">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>Saved</span>
+                        </span>
+                      )}
                     </div>
                     {fieldErrors.email && (
                       <div id="login-email-error" className="field-inline-error" role="alert">
@@ -430,7 +535,7 @@ export default function Login() {
                         value={password}
                         onChange={(e) => handlePasswordChange(e.target.value)}
                         onBlur={handlePasswordBlur}
-                        disabled={loading}
+                        disabled={loading || isSubmittingRef.current}
                         autoComplete="current-password"
                         aria-required="true"
                         aria-invalid={Boolean(fieldErrors.password)}
@@ -441,7 +546,7 @@ export default function Login() {
                         type="button"
                         className="input-trailing-reveal-btn"
                         onClick={() => setShowPassword(!showPassword)}
-                        disabled={loading}
+                        disabled={loading || isSubmittingRef.current}
                         aria-label={showPassword ? "Hide password" : "Show password"}
                         aria-pressed={showPassword}
                         title={showPassword ? "Hide password" : "Show password"}
@@ -482,7 +587,7 @@ export default function Login() {
                         className="native-checkbox-hidden"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        disabled={loading}
+                        disabled={loading || isSubmittingRef.current}
                         aria-label="Remember me"
                       />
                       <span className="custom-checkbox-box" aria-hidden="true">
@@ -497,14 +602,14 @@ export default function Login() {
                       type="button"
                       onClick={() => navigate("/forgot-password")}
                       className="forgot-password-link"
-                      disabled={loading}
+                      disabled={loading || isSubmittingRef.current}
                     >
                       Forgot Password?
                     </button>
                   </div>
 
                   {/* Activation Success Banner */}
-                  {successMessage && (
+                  {!error && successMessage && (
                     <div
                       className="auth-alert-message auth-alert-success-banner"
                       role="status"
@@ -568,7 +673,7 @@ export default function Login() {
                   <button
                     type="submit"
                     className="login-submit-button"
-                    disabled={loading}
+                    disabled={loading || isSubmittingRef.current}
                     aria-busy={loading}
                   >
                     {loading ? (

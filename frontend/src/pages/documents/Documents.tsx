@@ -3,6 +3,7 @@ import {
   getDocuments,
   deleteDocument,
   downloadDocument,
+  updateDocumentSharing,
 } from "../../services/documentService";
 import { getLeads } from "../../services/leadService";
 import { getContacts } from "../../services/contactService";
@@ -46,6 +47,7 @@ export default function Documents() {
   const [categoryFilter, setCategoryFilter] = useState("All Types");
   const [moduleFilter, setModuleFilter] = useState("all");
   const [confidentialFilter, setConfidentialFilter] = useState<"all" | "confidential" | "standard">("all");
+  const [sharingFilter, setSharingFilter] = useState<"all" | "shared" | "internal">("all");
 
   // Modals
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -199,11 +201,13 @@ export default function Documents() {
     const confidentialCount = documents.filter((d) => d.is_confidential).length;
 
     const totalStorageBytes = documents.reduce((sum, d) => sum + (d.file_size || 0), 0);
+    const sharedCount = documents.filter((d) => d.shared_with_customer).length;
 
     return {
       total,
       recentlyAdded,
       confidentialCount,
+      sharedCount,
       storageFormatted: formatFileSize(totalStorageBytes),
     };
   }, [documents]);
@@ -238,9 +242,41 @@ export default function Documents() {
       if (confidentialFilter === "confidential" && !doc.is_confidential) return false;
       if (confidentialFilter === "standard" && doc.is_confidential) return false;
 
+      // Customer Portal sharing filter
+      if (sharingFilter === "shared" && !doc.shared_with_customer) return false;
+      if (sharingFilter === "internal" && doc.shared_with_customer) return false;
+
       return true;
     });
-  }, [documents, searchTerm, categoryFilter, moduleFilter, confidentialFilter]);
+  }, [documents, searchTerm, categoryFilter, moduleFilter, confidentialFilter, sharingFilter]);
+
+  // Customer Portal sharing toggle
+  const handleToggleSharing = async (doc: DocumentItem) => {
+    const nextState = !doc.shared_with_customer;
+    try {
+      showToast(
+        nextState
+          ? `Sharing "${doc.title}" with customer portal...`
+          : `Removing "${doc.title}" from customer portal...`
+      );
+      await updateDocumentSharing(doc.id, nextState);
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === doc.id ? { ...d, shared_with_customer: nextState } : d))
+      );
+      showToast(
+        nextState
+          ? `Document "${doc.title}" is now shared with customer portal.`
+          : `Document "${doc.title}" was unshared from customer portal.`
+      );
+    } catch (err: any) {
+      console.error("Toggle document sharing failed:", err);
+      const detail =
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Could not update document sharing.";
+      showToast(typeof detail === "string" ? detail : JSON.stringify(detail), "error");
+    }
+  };
 
   // Download action
   const handleDownload = async (doc: DocumentItem) => {
@@ -292,13 +328,14 @@ export default function Documents() {
     setCategoryFilter("All Types");
     setModuleFilter("all");
     setConfidentialFilter("all");
+    setSharingFilter("all");
   };
 
   const hasActiveFilters =
     searchTerm.trim() !== "" ||
     categoryFilter !== "All Types" ||
     moduleFilter !== "all" ||
-    confidentialFilter !== "all";
+    confidentialFilter !== "all" || sharingFilter !== "all";
 
   return (
     <div className="documents-page">
@@ -577,6 +614,7 @@ export default function Documents() {
                 onPreview={(d) => setPreviewDoc(d)}
                 onDownload={handleDownload}
                 onDelete={(d) => setDeletingDoc(d)}
+                onToggleShare={userPermissions.canCreate ? handleToggleSharing : undefined}
               />
             );
           })}

@@ -84,6 +84,9 @@ def require_software_industry(
         "software services / it consulting",
         "software_services",
         "it consulting",
+        "it & software",
+        "it and software",
+        "software companies",
     }
 
     if industry not in allowed_industries:

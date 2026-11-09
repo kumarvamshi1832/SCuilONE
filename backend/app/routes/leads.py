@@ -111,8 +111,10 @@ def create_lead(
     permission=Depends(require_permission("lead.create")),
     db: Session = Depends(get_db),
 ):
+    from app.services.subscription_service import enforce_plan_record_limit
     tenant_id = UUID(current_user["tenant_id"])
     user_id = UUID(current_user["user_id"])
+    enforce_plan_record_limit(db, tenant_id, "leads")
 
     validate_assigned_user(
         data.assigned_to,

@@ -53,12 +53,9 @@ def get_db():
 
 
 def classify_industry(value: str) -> str:
-    normalized = " ".join(value.strip().lower().replace("_", " ").replace("-", " ").split())
-    if "software" in normalized or "it consulting" in normalized:
-        return "software"
-    if "real estate" in normalized:
-        return "real_estate"
-    return "other"
+    # Industry identity and module-pack mapping are centralized in the registry.
+    from app.core.industry_modules import classify_industry as classify_registry_industry
+    return classify_registry_industry(value)
 
 
 @router.get("/config")

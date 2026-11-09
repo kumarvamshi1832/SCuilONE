@@ -81,8 +81,6 @@ export default function Leads() {
   // Toast
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Data Fetching ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -119,7 +117,6 @@ export default function Leads() {
     fetchData();
   }, [fetchData]);
 
-  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Helpers ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setNotification({ message, type });
@@ -131,7 +128,7 @@ export default function Leads() {
     const user = users.find((u) => u.id === userId);
     return user
       ? { name: user.full_name, role: user.role }
-      : { name: "├óΓé¼ΓÇ¥", role: "" };
+      : { name: "--", role: "" };
   };
 
   const clearFilters = () => {
@@ -144,7 +141,7 @@ export default function Leads() {
 
   const hasActiveFilters = search || statusFilter || sourceFilter || assignedFilter;
 
-  /* ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ Filtering (client-side) ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
+  /* Filtering (client-side) ├óΓÇ¥Γé¼├óΓÇ¥Γé¼├óΓÇ¥Γé¼ */
 
   const filteredLeads = leads.filter((lead) => {
     // Text search
@@ -397,130 +394,130 @@ export default function Leads() {
           <>
             <div className="leads-table-wrapper">
               <table className="leads-table">
-            <thead>
-              <tr>
-                <th>Lead Name</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Assigned To</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedLeads.map((lead) => {
-                const leadId = String(lead.id || (lead as any).lead_id || (lead as any)._id || (lead as any).uuid || "");
-                return (
-                <tr key={leadId || lead.full_name}>
-                  <td>
-                    <div className="lead-name-cell">
-                      <div className="lead-avatar">
-                        {(lead.full_name || "?").charAt(0).toUpperCase()}
-                      </div>
-                      <span className="lead-name-text">{lead.full_name}</span>
-                    </div>
-                  </td>
-                  <td className="text-dim">{lead.email || "---"}</td>
-                  <td className="text-dim">{lead.phone || "---"}</td>
-                  <td>
-                    {lead.source ? (
-                      <span className="lead-source-badge">{lead.source}</span>
-                    ) : (
-                      <span className="text-dim">---</span>
-                    )}
-                  </td>
-                  <td>
-                    <span className={`lead-status-badge ${getStatusClass(lead.status)}`}>
-                      {lead.status}
-                    </span>
-                  </td>
-                  <td>
-                    {(() => {
-                      const display = getUserDisplay(lead.assigned_to);
-                      return display.role ? (
-                        <div style={{ lineHeight: 1.3 }}>
-                          <span style={{ fontWeight: 500 }}>{display.name}</span>
-                          <br />
-                          <span className="text-dim" style={{ fontSize: '0.78rem' }}>{display.role}</span>
-                        </div>
-                      ) : (
-                        <span className="text-dim">{display.name}</span>
-                      );
-                    })()}
-                  </td>
-                  <td className="text-dim">{formatDateTime(lead.created_at)}</td>
-                  <td className="actions-cell">
-                    <div className="crm-inline-actions">
-                      <button
-                        type="button"
-                        className="crm-action-btn view-btn"
-                        title="View Lead"
-                        aria-label="View Lead"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleView(lead);
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                          <circle cx="12" cy="12" r="3"></circle>
-                        </svg>
-                      </button>
-                      {permissions.canEdit && (
-                        <button
-                          type="button"
-                          className="crm-action-btn edit-btn"
-                          title="Edit Lead"
-                          aria-label="Edit Lead"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(lead);
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
-                        </button>
-                      )}
-                      {permissions.canDelete && (
-                        <button
-                          type="button"
-                          className="crm-action-btn delete-btn"
-                          title="Delete Lead"
-                          aria-label="Delete Lead"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteClick(lead);
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            </tbody>
-          </table>
-          </div>
-          <Pagination
-            currentPage={safePage}
-            totalItems={filteredLeads.length}
-            pageSize={ITEMS_PER_PAGE}
-            onPageChange={setCurrentPage}
-            entityName="leads"
-          />
-        </>
-      )}
+                <thead>
+                  <tr>
+                    <th>Lead Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedLeads.map((lead) => {
+                    const leadId = String(lead.id || (lead as any).lead_id || (lead as any)._id || (lead as any).uuid || "");
+                    return (
+                      <tr key={leadId || lead.full_name}>
+                        <td>
+                          <div className="lead-name-cell">
+                            <div className="lead-avatar">
+                              {(lead.full_name || "?").charAt(0).toUpperCase()}
+                            </div>
+                            <span className="lead-name-text">{lead.full_name}</span>
+                          </div>
+                        </td>
+                        <td className="text-dim">{lead.email || "---"}</td>
+                        <td className="text-dim">{lead.phone || "---"}</td>
+                        <td>
+                          {lead.source ? (
+                            <span className="lead-source-badge">{lead.source}</span>
+                          ) : (
+                            <span className="text-dim">---</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className={`lead-status-badge ${getStatusClass(lead.status)}`}>
+                            {lead.status}
+                          </span>
+                        </td>
+                        <td>
+                          {(() => {
+                            const display = getUserDisplay(lead.assigned_to);
+                            return display.role ? (
+                              <div style={{ lineHeight: 1.3 }}>
+                                <span style={{ fontWeight: 500 }}>{display.name}</span>
+                                <br />
+                                <span className="text-dim" style={{ fontSize: '0.78rem' }}>{display.role}</span>
+                              </div>
+                            ) : (
+                              <span className="text-dim">{display.name}</span>
+                            );
+                          })()}
+                        </td>
+                        <td className="text-dim">{formatDateTime(lead.created_at)}</td>
+                        <td className="actions-cell">
+                          <div className="crm-inline-actions">
+                            <button
+                              type="button"
+                              className="crm-action-btn view-btn"
+                              title="View Lead"
+                              aria-label="View Lead"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleView(lead);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                              </svg>
+                            </button>
+                            {permissions.canEdit && (
+                              <button
+                                type="button"
+                                className="crm-action-btn edit-btn"
+                                title="Edit Lead"
+                                aria-label="Edit Lead"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEdit(lead);
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                              </button>
+                            )}
+                            {permissions.canDelete && (
+                              <button
+                                type="button"
+                                className="crm-action-btn delete-btn"
+                                title="Delete Lead"
+                                aria-label="Delete Lead"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteClick(lead);
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                                  <polyline points="3 6 5 6 21 6"></polyline>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={safePage}
+              totalItems={filteredLeads.length}
+              pageSize={ITEMS_PER_PAGE}
+              onPageChange={setCurrentPage}
+              entityName="leads"
+            />
+          </>
+        )}
       </div>
 
 

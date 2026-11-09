@@ -1,4 +1,3 @@
-
 from copy import deepcopy
 from uuid import UUID
 
@@ -10,6 +9,10 @@ from app.database.connection import SessionLocal
 from app.models.tenant import Tenant
 from app.models.industry_pack import IndustryPack
 from app.models.tenant_industry_config import TenantIndustryConfig
+from app.services.subscription_service import (
+    enforce_subscription_crm_access,
+    get_effective_plan_resources,
+)
 
 
 def get_db():
@@ -21,21 +24,12 @@ def get_db():
 
 
 def classify_industry(value: str) -> str:
-    normalized = " ".join(
-        value.strip()
-        .lower()
-        .replace("_", " ")
-        .replace("-", " ")
-        .split()
-    )
-
-    if "software" in normalized or "it consulting" in normalized:
-        return "software"
-
-    if "real estate" in normalized:
-        return "real_estate"
-
-    return "other"
+    from app.core.industry_registry import normalize_industry_key, INDUSTRY_REGISTRY
+    key = normalize_industry_key(value)
+    if key not in INDUSTRY_REGISTRY:
+        # Preserve unsupported historical values rather than silently assigning an unrelated pack.
+        return key or "unmapped"
+    return INDUSTRY_REGISTRY[key]["module_pack_key"]
 
 
 def require_enabled_module(module_key: str):
@@ -62,6 +56,25 @@ def require_enabled_module(module_key: str):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Tenant not found.",
             )
+
+        # PART 6 & PART 11 – Ensure subscription/trial is active before allowing any CRM business module
+        sub = enforce_subscription_crm_access(db, tenant_id)
+        if sub is not None:
+            plan_resources = get_effective_plan_resources(db, tenant_id)
+            if not plan_resources.get("crm_access_allowed"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=plan_resources.get(
+                        "reason",
+                        "Subscription is not active. Please subscribe to access CRM modules.",
+                    ),
+                )
+            plan_enabled_modules = plan_resources.get("enabled_modules")
+            if isinstance(plan_enabled_modules, list) and plan_enabled_modules and module_key not in plan_enabled_modules:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"The '{module_key}' module is not included in your current subscription plan.",
+                )
 
         industry_key = classify_industry(tenant.industry or "")
 
