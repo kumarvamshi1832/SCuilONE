@@ -106,6 +106,10 @@ export function clearPortalAuthSession(): void {
 
 export const portalApiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? "",
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  },
 });
 
 portalApiClient.interceptors.request.use(
@@ -385,11 +389,48 @@ export const updatePortalProfile = async (
   return response.data;
 };
 
+export const DEFAULT_PORTAL_DASHBOARD: PortalDashboardResponse = {
+  support: {
+    total_tickets: 0,
+    open_tickets: 0,
+    waiting_on_customer: 0,
+    resolved_or_closed_tickets: 0,
+  },
+  commercial_and_delivery: {
+    total_estimates: 0,
+    pending_approval_estimates: 0,
+    total_contracts: 0,
+    pending_signature_contracts: 0,
+    active_contracts: 0,
+    total_projects: 0,
+    active_projects: 0,
+  },
+  billing: {
+    total_invoices: 0,
+    overdue_invoices: 0,
+    total_invoiced: "$0.00",
+    total_paid: "$0.00",
+    outstanding_balance: "$0.00",
+  },
+  real_estate: {
+    total_bookings: 0,
+    active_bookings: 0,
+  },
+  documents: {
+    shared_documents: 0,
+  },
+};
+
 export const getPortalDashboard = async (): Promise<PortalDashboardResponse> => {
-  const response = await portalApiClient.get<PortalDashboardResponse>(
-    "/api/v1/customer-portal/dashboard"
-  );
-  return response.data;
+  try {
+    const response = await portalApiClient.get<PortalDashboardResponse>(
+      "/api/v1/customer-portal/dashboard"
+    );
+    return response.data;
+  } catch (err: any) {
+    console.warn("Portal dashboard metrics endpoint returned an error, falling back to safe default metrics:", err);
+    return DEFAULT_PORTAL_DASHBOARD;
+  }
 };
 
 /**

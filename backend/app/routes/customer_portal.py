@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
@@ -305,10 +305,6 @@ def _issue_portal_invitation(
     return invitation, raw_token
 
 
-# ==============================================================================
-# 1. STAFF INVITATION & PORTAL USER MANAGEMENT ENDPOINTS
-# ==============================================================================
-
 @router.post(
     "/invitations",
     response_model=PortalInviteResponse,
@@ -579,14 +575,11 @@ def update_portal_user_status(
     return {"id": str(portal_user.id), "status": portal_user.status}
 
 
-# ==============================================================================
-# 2. CUSTOMER PORTAL AUTHENTICATION & PASSWORD LIFECYCLE
-# ==============================================================================
-
 @router.post("/auth/activate", status_code=200)
 @limiter.limit("5/minute")
 def activate_customer_portal(
     request: Request,
+    response: Response,
     payload: PortalActivateRequest,
     db: Session = Depends(get_db),
 ):
@@ -641,6 +634,7 @@ def activate_customer_portal(
 @limiter.limit("5/minute")
 def customer_portal_login(
     request: Request,
+    response: Response,
     payload: PortalLoginRequest,
     db: Session = Depends(get_db),
 ):
@@ -652,7 +646,7 @@ def customer_portal_login(
         CustomerPortalUser.status == "Active",
         Tenant.status == ACTIVE_TENANT_STATUS,
     )
-    candidates = query.all()  # all workspaces for this email; tenant_id only picks the target
+    candidates = query.all()  
     matched_users = [
         u for u in candidates
         if u.password_hash and verify_password(payload.password, u.password_hash)
@@ -714,6 +708,7 @@ def customer_portal_login(
 @limiter.limit("10/minute")
 def customer_portal_refresh(
     request: Request,
+    response: Response,
     payload: PortalRefreshRequest,
     db: Session = Depends(get_db),
 ):
@@ -829,6 +824,7 @@ def customer_portal_workspaces(portal: dict = Depends(require_portal_user), db: 
 @limiter.limit("20/minute")
 def customer_portal_switch_workspace(
     request: Request,
+    response: Response,
     payload: PortalSwitchWorkspaceRequest,
     portal: dict = Depends(require_portal_user),
     db: Session = Depends(get_db),
@@ -893,6 +889,7 @@ def customer_portal_switch_workspace(
 @limiter.limit("3/hour")
 async def customer_portal_forgot_password(
     request: Request,
+    response: Response,
     payload: PortalForgotPasswordRequest,
     db: Session = Depends(get_db),
 ):
@@ -956,6 +953,7 @@ async def customer_portal_forgot_password(
 @limiter.limit("5/minute")
 def customer_portal_reset_password(
     request: Request,
+    response: Response,
     payload: PortalResetPasswordRequest,
     db: Session = Depends(get_db),
 ):
@@ -1007,6 +1005,7 @@ def customer_portal_reset_password(
 @limiter.limit("5/minute")
 def customer_portal_change_password(
     request: Request,
+    response: Response,
     payload: PortalChangePasswordRequest,
     portal: dict = Depends(require_portal_user),
     db: Session = Depends(get_db),
@@ -1042,10 +1041,6 @@ def customer_portal_change_password(
     db.commit()
     return {"message": "Password changed successfully. Please sign in again."}
 
-
-# ==============================================================================
-# 3. CUSTOMER PORTAL PROFILE & UNIFIED DASHBOARD
-# ==============================================================================
 
 @router.get("/me")
 def customer_portal_me(portal: dict = Depends(require_portal_user), db: Session = Depends(get_db)):
