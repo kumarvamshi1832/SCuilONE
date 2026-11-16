@@ -11,6 +11,7 @@ import { getLead, getLeads } from "../../services/leadService";
 import { getContact, getContacts } from "../../services/contactService";
 import { getDealPermissions } from "../../utils/dealPermissions";
 import { getLeadPermissions } from "../../utils/leadPermissions";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import { getContactPermissions } from "../../utils/contactPermissions";
 import DealViewModal from "../deals/DealViewModal";
 import DealFormModal from "../deals/DealFormModal";
@@ -838,7 +839,7 @@ export default function AccountViewModal({ account, users, onClose }: AccountVie
                                     </span>
                                   )}
                                   <span className="related-badge">
-                                    Status: {lead.status}
+                                    Status: {getLeadStatusLabel(lead.status)}
                                   </span>
                                 </div>
                               </div>

@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import CrmFormModal from "../common/CrmFormModal";
 import type { Account, AccountCreate, AccountUpdate } from "../../types/account";
 import type { User } from "../../types/user";
 import type { Lead } from "../../types/lead";
@@ -407,11 +408,11 @@ export default function AccountFormModal({
     };
 
     return (
-      <div className="account-form-group" key={field.field_key}>
+      <div className="crm-field" key={field.field_key}>
         <label>
           {field.field_label}
           {field.is_required && (
-            <span style={{ color: "#e53e3e" }}> *</span>
+            <span className="crm-required"> *</span>
           )}
         </label>
 
@@ -449,7 +450,6 @@ export default function AccountFormModal({
             onChange={(event) =>
               updateCustomValue(field.field_key, event.target.checked)
             }
-            style={{ width: "auto", minHeight: "auto" }}
           />
         ) : (
           <input
@@ -478,160 +478,57 @@ export default function AccountFormModal({
         )}
 
         {fieldError && (
-          <span className="field-error">{fieldError}</span>
+          <span className="crm-field-error">{fieldError}</span>
         )}
       </div>
     );
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <style>{`
-        .account-form-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .account-form-row-two-column {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-        }
-
-        .account-form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .account-form-group label {
-          font-weight: 500;
-          font-size: 0.875rem;
-          color: #4a5568;
-        }
-
-        .dashboard-wrapper.dark .account-form-group label {
-          color: #e2e8f0;
-        }
-
-        .account-form-group input,
-        .account-form-group select,
-        .account-form-group textarea {
-          box-sizing: border-box;
-          width: 100%;
-          padding: 10px 12px;
-          border: 1px solid #cbd5e0;
-          border-radius: 6px;
-          font-size: 0.95rem;
-          background: #fff;
-          color: inherit;
-          font-family: inherit;
-          min-height: 42px;
-          line-height: 1.5;
-        }
-
-        .account-form-group textarea {
-          resize: vertical;
-          min-height: 80px;
-        }
-
-        .dashboard-wrapper.dark .account-form-group input,
-        .dashboard-wrapper.dark .account-form-group select,
-        .dashboard-wrapper.dark .account-form-group textarea {
-          background: #2a2a2a;
-          border-color: #4a5568;
-        }
-
-        .account-form-group input:focus,
-        .account-form-group select:focus,
-        .account-form-group textarea:focus {
-          border-color: #4a90e2;
-          outline: none;
-        }
-
-        .account-form-group input.input-error,
-        .account-form-group select.input-error,
-        .account-form-group textarea.input-error {
-          border-color: #e53e3e !important;
-        }
-
-        .account-modal-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 12px;
-          margin-top: 24px;
-          padding-top: 16px;
-          border-top: 1px solid #eaeaea;
-        }
-
-        .dashboard-wrapper.dark .account-modal-footer {
-          border-top-color: #333;
-        }
-
-        @media (max-width: 600px) {
-          .account-form-row-two-column {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
-
-      <div
-        className="modal-content"
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          maxWidth: "680px",
-          width: "100%",
-          maxHeight: "90vh",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div className="modal-header">
-          <h2>{isEdit ? "Edit Account" : "Create Account"}</h2>
-
+    <CrmFormModal
+      title={isEdit ? "Edit Account" : "Create Account"}
+      description={
+        isEdit
+          ? "Update this account's details, location and assignment."
+          : "Add a new account and its contact, location and assignment details."
+      }
+      onClose={onClose}
+      closeDisabled={loading}
+      footer={
+        <>
           <button
-            className="btn-close"
+            type="button"
+            className="crm-btn crm-btn-secondary"
             onClick={onClose}
             disabled={loading}
-            type="button"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            Cancel
           </button>
-        </div>
-
-        <div
-          className="modal-body"
-          style={{ overflowY: "auto", flex: 1 }}
-        >
+          <button
+            type="button"
+            className="crm-btn crm-btn-primary"
+            onClick={handleSubmit}
+            disabled={loading || customLoading}
+          >
+            {loading
+                ? "Saving..."
+                : isEdit
+                  ? "Save Changes"
+                  : "Create Account"}
+          </button>
+        </>
+      }
+    >
           {error && (
-            <div
-              className="alert-box error"
-              style={{
-                padding: "10px 14px",
-                marginBottom: 20,
-                borderRadius: 6,
-                background: "#fcebea",
-                color: "#cc0000",
-                fontSize: "0.875rem",
-              }}
-            >
+            <div className="crm-alert crm-alert-error" role="alert">
               {error}
             </div>
           )}
 
-          <div className="account-form-grid">
-            <div className="account-form-group">
+          <div className="crm-stack">
+            <div className="crm-field">
               <label>
-                Account Name <span style={{ color: "#e53e3e" }}>*</span>
+                Account Name <span className="crm-required">*</span>
               </label>
 
               <input
@@ -651,12 +548,12 @@ export default function AccountFormModal({
               />
 
               {fieldErrors.name && (
-                <span className="field-error">{fieldErrors.name}</span>
+                <span className="crm-field-error">{fieldErrors.name}</span>
               )}
             </div>
 
-            <div className="account-form-row-two-column">
-              <div className="account-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Email</label>
 
                 <input
@@ -676,11 +573,11 @@ export default function AccountFormModal({
                 />
 
                 {fieldErrors.email && (
-                  <span className="field-error">{fieldErrors.email}</span>
+                  <span className="crm-field-error">{fieldErrors.email}</span>
                 )}
               </div>
 
-              <div className="account-form-group">
+              <div className="crm-field">
                 <label>Phone</label>
 
                 <input
@@ -693,8 +590,8 @@ export default function AccountFormModal({
               </div>
             </div>
 
-            <div className="account-form-row-two-column">
-              <div className="account-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Website</label>
 
                 <input
@@ -706,7 +603,7 @@ export default function AccountFormModal({
                 />
               </div>
 
-              <div className="account-form-group">
+              <div className="crm-field">
                 <label>Industry</label>
 
                 <input
@@ -719,8 +616,8 @@ export default function AccountFormModal({
               </div>
             </div>
 
-            <div className="account-form-row-two-column">
-              <div className="account-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Status</label>
 
                 <select
@@ -736,7 +633,7 @@ export default function AccountFormModal({
                 </select>
               </div>
 
-              <div className="account-form-group">
+              <div className="crm-field">
                 <label>Source</label>
 
                 <select
@@ -755,8 +652,8 @@ export default function AccountFormModal({
               </div>
             </div>
 
-            <div className="account-form-row-two-column">
-              <div className="account-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Assigned To</label>
 
                 <select
@@ -774,7 +671,7 @@ export default function AccountFormModal({
                 </select>
               </div>
 
-              <div className="account-form-group">
+              <div className="crm-field">
                 <label>Lead</label>
 
                 <select
@@ -804,8 +701,8 @@ export default function AccountFormModal({
               </div>
             </div>
 
-            <div className="account-form-row-two-column">
-              <div className="account-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>City</label>
 
                 <input
@@ -816,7 +713,7 @@ export default function AccountFormModal({
                 />
               </div>
 
-              <div className="account-form-group">
+              <div className="crm-field">
                 <label>State</label>
 
                 <input
@@ -828,8 +725,8 @@ export default function AccountFormModal({
               </div>
             </div>
 
-            <div className="account-form-row-two-column">
-              <div className="account-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Country</label>
 
                 <input
@@ -840,7 +737,7 @@ export default function AccountFormModal({
                 />
               </div>
 
-              <div className="account-form-group">
+              <div className="crm-field">
                 <label>Postal Code</label>
 
                 <input
@@ -852,7 +749,7 @@ export default function AccountFormModal({
               </div>
             </div>
 
-            <div className="account-form-group">
+            <div className="crm-field">
               <label>Address</label>
 
               <input
@@ -863,7 +760,7 @@ export default function AccountFormModal({
               />
             </div>
 
-            <div className="account-form-group">
+            <div className="crm-field">
               <label>Notes</label>
 
               <textarea
@@ -874,36 +771,23 @@ export default function AccountFormModal({
               />
             </div>
 
-            <div
-              style={{
-                borderTop: "1px solid #e2e8f0",
-                paddingTop: 20,
-                marginTop: 4,
-              }}
-            >
-              <h3 style={{ margin: "0 0 6px" }}>Custom Form</h3>
+            <div className="crm-subsection">
+              <h3 className="crm-subsection-title">Custom Form</h3>
 
-              <p
-                style={{
-                  margin: "0 0 14px",
-                  fontSize: "0.875rem",
-                  color: "#718096",
-                }}
-              >
+              <p className="crm-muted-text crm-subsection-desc">
                 Select an account form to enter additional custom fields.
               </p>
 
               {customLoading ? (
                 <p>Loading custom forms...</p>
               ) : templates.length === 0 ? (
-                <p className="text-muted">
+                <p className="crm-muted-text">
                   No active custom forms are configured for Accounts.
                 </p>
               ) : (
                 <>
                   <div
-                    className="account-form-group"
-                    style={{ marginBottom: 16 }}
+                    className="crm-field"
                   >
                     <label>Select Custom Form</label>
 
@@ -933,11 +817,11 @@ export default function AccountFormModal({
                   </div>
 
                   {selectedTemplate && (
-                    <div className="account-form-grid">
+                    <div className="crm-stack">
                       {selectedTemplate.fields?.length ? (
                         selectedTemplate.fields.map(renderCustomField)
                       ) : (
-                        <p className="text-muted">
+                        <p className="crm-muted-text">
                           This form has no configured fields.
                         </p>
                       )}
@@ -947,35 +831,6 @@ export default function AccountFormModal({
               )}
             </div>
           </div>
-        </div>
-
-        <div
-          className="account-modal-footer"
-          style={{ padding: "0 24px 24px" }}
-        >
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={handleSubmit}
-            disabled={loading || customLoading}
-          >
-            {loading
-              ? "Saving..."
-              : isEdit
-                ? "Save Changes"
-                : "Create Account"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </CrmFormModal>
   );
 }
