@@ -415,3 +415,58 @@ export const UploadIcon: React.FC<IconProps> = ({ size = 16, color = "currentCol
     <line x1="12" y1="3" x2="12" y2="15" />
   </svg>
 );
+
+export const DownloadIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+export const BellIcon: React.FC<IconProps> = ({ size = 18, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+
+export const CheckCheckIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <path d="M18 6 7 17l-5-5" />
+    <path d="m22 10-7.5 7.5L13 16" />
+  </svg>
+);
+
+export const InboxIcon: React.FC<IconProps> = ({ size = 20, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+  </svg>
+);
+
+export const FilterIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
+export const CoinsIcon: React.FC<IconProps> = ({ size = 18, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <ellipse cx="12" cy="6" rx="8" ry="3" />
+    <path d="M4 6v4c0 1.66 3.58 3 8 3s8-1.34 8-3V6" />
+    <path d="M4 10v4c0 1.66 3.58 3 8 3s8-1.34 8-3v-4" />
+    <path d="M4 14v4c0 1.66 3.58 3 8 3s8-1.34 8-3v-4" />
+  </svg>
+);
+
+export const TrendingUpIcon: React.FC<IconProps> = ({ size = 18, color = "currentColor", className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <path d="M4 20h16" />
+    <path d="M6 20v-4" />
+    <path d="M11 20v-7" />
+    <path d="M16 20v-10" />
+    <polyline points="4 11 10 6 14 9 20 3" />
+    <polyline points="16 3 20 3 20 7" />
+  </svg>
+);

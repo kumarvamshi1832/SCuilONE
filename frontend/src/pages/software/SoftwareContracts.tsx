@@ -26,6 +26,7 @@ import type { SoftwareEstimate } from "../../types/softwareEstimate";
 import type { User } from "../../types/user";
 
 import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import "./SoftwareModules.css";
 
 function formatCurrency(amount: number | string | undefined | null, currencyCode: string = "INR"): string {
@@ -652,6 +653,14 @@ export default function SoftwareContracts() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <ImportExportActions
+            moduleId="software-contracts"
+            records={filteredList}
+            fetchAllRecords={getSoftwareContracts}
+            onImportSuccess={() => loadData(true)}
+            canImport={perms.canCreateContracts}
+            canExport={perms.canViewContracts}
+          />
           {perms.canCreateContracts && (
             <button className="sw-btn-primary" onClick={handleOpenCreate}>
               <svg

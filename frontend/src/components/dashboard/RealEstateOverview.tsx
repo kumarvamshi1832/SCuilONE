@@ -1,6 +1,8 @@
 import { useNavigate, useParams } from "react-router-dom";
+import { motion, type Variants } from "motion/react";
 import { DashboardSummary } from "../../types/dashboard";
 import { normalizeIndustry } from "../../utils/industryUtils";
+import AnimatedCountUp from "../common/AnimatedCountUp";
 
 interface PrimaryKpiCardProps {
   title: string;
@@ -12,6 +14,29 @@ interface PrimaryKpiCardProps {
   ariaLabel?: string;
 }
 
+const cardItemVariants: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.42,
+      ease: [0.16, 1, 0.3, 1],
+    },
+  },
+};
+
+const rowContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.02,
+    },
+  },
+};
+
 function PrimaryKpiCard({
   title,
   value,
@@ -22,7 +47,8 @@ function PrimaryKpiCard({
   ariaLabel,
 }: PrimaryKpiCardProps) {
   return (
-    <div
+    <motion.div
+      variants={cardItemVariants}
       className={`kpi-card primary-kpi-card ${colorClass}`}
       onClick={onClick}
       role="button"
@@ -39,7 +65,9 @@ function PrimaryKpiCard({
         <div className="kpi-icon-wrapper">{icon}</div>
         <div className="kpi-info">
           <span className="kpi-title">{title}</span>
-          <div className="kpi-value">{value}</div>
+          <div className="kpi-value">
+            <AnimatedCountUp value={value} />
+          </div>
         </div>
       </div>
       {actionText && (
@@ -52,7 +80,7 @@ function PrimaryKpiCard({
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -77,7 +105,8 @@ function SecondaryKpiCard({
 }: SecondaryKpiCardProps) {
   const isRev = isRevenue || title.toLowerCase().includes("revenue");
   return (
-    <div
+    <motion.div
+      variants={cardItemVariants}
       className={`kpi-card secondary-kpi-card ${colorClass} ${isRev ? "kpi-card-revenue" : ""}`}
       onClick={onClick}
       role="button"
@@ -97,10 +126,10 @@ function SecondaryKpiCard({
           className={`kpi-value ${isRev ? "kpi-value-revenue" : ""}`}
           title={typeof value === "string" ? value : String(value)}
         >
-          {value}
+          <AnimatedCountUp value={value} />
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -346,19 +375,29 @@ export default function RealEstateOverview({
 
   return (
     <div className="kpi-section">
-      {/* Row 1: Six Primary KPI Cards */}
-      <div className="kpi-row kpi-row-6">
+      {/* Row 1: Six Primary KPI Cards with stagger */}
+      <motion.div
+        className="kpi-row kpi-row-6"
+        variants={rowContainerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {primaryKpis.map((kpi) => (
           <PrimaryKpiCard key={kpi.title} {...kpi} />
         ))}
-      </div>
+      </motion.div>
 
-      {/* Row 2: Seven Secondary Compact KPI Cards */}
-      <div className="kpi-row kpi-row-7">
+      {/* Row 2: Seven Secondary Compact KPI Cards with stagger */}
+      <motion.div
+        className="kpi-row kpi-row-7"
+        variants={rowContainerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {secondaryKpis.map((kpi) => (
           <SecondaryKpiCard key={kpi.title} {...kpi} />
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }

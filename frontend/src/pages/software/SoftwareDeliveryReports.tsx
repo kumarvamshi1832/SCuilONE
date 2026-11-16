@@ -34,6 +34,8 @@ import {
 } from "recharts";
 
 import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
+import { ExportFormatMenu } from "../../components/common/import-export/ExportFormatMenu";
+import { MODULE_CONFIGS } from "../../config/importExportConfig";
 import "./SoftwareModules.css";
 
 const COLORS = ["#0ea5e9", "#10b981", "#f59e0b", "#818cf8", "#ec4899", "#14b8a6"];
@@ -191,6 +193,26 @@ export default function SoftwareDeliveryReports() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <ExportFormatMenu
+            config={MODULE_CONFIGS["software-delivery-reports"]!}
+            records={
+              projectSummary
+                ? [
+                    {
+                      project_name: activeProject?.name || "All Projects",
+                      total_hours: projectSummary.total_hours || 0,
+                      billable_hours: projectSummary.billable_hours || 0,
+                      non_billable_hours: projectSummary.non_billable_hours || 0,
+                      utilization_rate: `${(projectSummary as any).billable_percentage ?? (projectSummary.total_hours ? Math.round((projectSummary.billable_hours / projectSummary.total_hours) * 100) : 0)}%`,
+                      billable_amount: (projectSummary as any).total_billable_amount
+                        ? `INR ${(projectSummary as any).total_billable_amount}`
+                        : "—",
+                    },
+                  ]
+                : []
+            }
+            disabled={!projectSummary || loading}
+          />
           <button className="sw-btn-secondary" onClick={loadReports} disabled={loading}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="23 4 23 10 17 10" />

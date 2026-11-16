@@ -35,6 +35,7 @@ import type { SoftwareProject } from "../../types/softwareProject";
 import type { SoftwareContract } from "../../types/softwareContract";
 
 import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import "./SoftwareModules.css";
 
 function formatCurrency(
@@ -873,6 +874,14 @@ export default function SoftwareInvoices() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <ImportExportActions
+            moduleId="software-invoices"
+            records={filteredList}
+            fetchAllRecords={getSoftwareInvoices}
+            onImportSuccess={() => loadData()}
+            canImport={perms.canCreateInvoices}
+            canExport={perms.canViewInvoices}
+          />
           {perms.canCreateInvoices && (
             <button className="sw-btn-primary" onClick={handleOpenCreate}>
               <svg

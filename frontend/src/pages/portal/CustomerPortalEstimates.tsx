@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   FileTextIcon,
   RefreshIcon,
@@ -7,6 +8,7 @@ import {
   XIcon,
   SearchIcon,
   ShieldCheckIcon,
+  PlusIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalEstimates,
@@ -16,10 +18,20 @@ import {
   ESTIMATE_STATUS_OPTIONS,
   isEstimatePendingApproval,
 } from "../../services/customerPortalCommercialService";
+import {
+  CustomerPortalNotificationService,
+  resolvePortalTenantId,
+} from "../../services/customerPortalNotificationService";
+import { createSoftwareEstimate } from "../../services/softwareEstimateService";
+import { getPortalTenantId } from "../../services/customerPortalAuthService";
 import type { PortalEstimate } from "../../types/customerPortal";
+import type { SoftwareBillingType, SoftwareEstimateItemCreate } from "../../types/softwareEstimate";
 import "./CustomerPortalTickets.css";
 
 export default function CustomerPortalEstimates() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetEstimateId = searchParams.get("id") || searchParams.get("estimateId");
+
   const [estimates, setEstimates] = useState<PortalEstimate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +47,34 @@ export default function CustomerPortalEstimates() {
   const [decisionType, setDecisionType] = useState<"accept" | "reject" | null>(null);
   const [decisionNotes, setDecisionNotes] = useState("");
   const [submittingDecision, setSubmittingDecision] = useState(false);
+
+  // Create Estimate Modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState<{
+    title: string;
+    description: string;
+    billing_type: SoftwareBillingType;
+    currency: string;
+    discount_amount: number;
+    items: SoftwareEstimateItemCreate[];
+  }>({
+    title: "",
+    description: "",
+    billing_type: "Fixed Price",
+    currency: "INR",
+    discount_amount: 0,
+    items: [
+      {
+        item_name: "Initial Discovery & Architecture",
+        description: "Requirements analysis, architecture design, and sprint roadmap",
+        quantity: 1,
+        unit_price: 50000,
+        tax_percent: 18,
+        discount_percent: 0,
+      },
+    ],
+  });
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -67,7 +107,7 @@ export default function CustomerPortalEstimates() {
     };
   }, [fetchEstimates]);
 
-  const handleOpenDetail = async (id: string) => {
+  const handleOpenDetail = useCallback(async (id: string) => {
     setLoadingDetail(true);
     try {
       const data = await getPortalEstimate(id);
@@ -77,6 +117,23 @@ export default function CustomerPortalEstimates() {
     } finally {
       setLoadingDetail(false);
     }
+  }, []);
+
+  // Handle deep linking by estimate ID
+  useEffect(() => {
+    if (targetEstimateId && !loading) {
+      handleOpenDetail(targetEstimateId);
+    }
+  }, [targetEstimateId, loading, handleOpenDetail]);
+
+  const handleCloseDetail = () => {
+    setSelectedEstimate(null);
+    if (searchParams.get("id") || searchParams.get("estimateId")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("id");
+      nextParams.delete("estimateId");
+      setSearchParams(nextParams);
+    }
   };
 
   const handleDecisionSubmit = async (e: React.FormEvent) => {
@@ -85,12 +142,15 @@ export default function CustomerPortalEstimates() {
     setSubmittingDecision(true);
     try {
       let updated: PortalEstimate;
+      const activeTenant = resolvePortalTenantId(getPortalTenantId() || undefined);
       if (decisionType === "accept") {
         updated = await acceptPortalEstimate(selectedEstimate.id, decisionNotes.trim() || null);
         showToast(`Estimate #${updated.estimate_number} accepted successfully!`, "success");
+        CustomerPortalNotificationService.notifyEstimateDecision(activeTenant, updated, "accepted");
       } else {
         updated = await rejectPortalEstimate(selectedEstimate.id, decisionNotes.trim() || null);
         showToast(`Estimate #${updated.estimate_number} rejected.`, "success");
+        CustomerPortalNotificationService.notifyEstimateDecision(activeTenant, updated, "rejected");
       }
       setSelectedEstimate(updated);
       setDecisionType(null);
@@ -102,6 +162,53 @@ export default function CustomerPortalEstimates() {
       showToast(err?.response?.data?.detail || "Unable to submit your decision on this proposal.", "error");
     } finally {
       setSubmittingDecision(false);
+    }
+  };
+
+  const handleCreateEstimateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.title.trim()) {
+      showToast("Please provide an estimate title.", "error");
+      return;
+    }
+    setCreating(true);
+    try {
+      const activeTenant = resolvePortalTenantId(getPortalTenantId() || undefined);
+      const created = await createSoftwareEstimate({
+        software_requirement_id: "00000000-0000-0000-0000-000000000000",
+        title: createForm.title.trim(),
+        description: createForm.description?.trim() || undefined,
+        billing_type: createForm.billing_type,
+        currency: createForm.currency,
+        discount_amount: createForm.discount_amount,
+        items: createForm.items,
+      });
+      showToast(`Estimate #${created.estimate_number || created.id} created successfully!`, "success");
+      CustomerPortalNotificationService.notifyEstimateCreated(activeTenant, created);
+      setShowCreateModal(false);
+      setCreateForm({
+        title: "",
+        description: "",
+        billing_type: "Fixed Price",
+        currency: "INR",
+        discount_amount: 0,
+        items: [
+          {
+            item_name: "Initial Discovery & Architecture",
+            description: "Requirements analysis, architecture design, and sprint roadmap",
+            quantity: 1,
+            unit_price: 50000,
+            tax_percent: 18,
+            discount_percent: 0,
+          },
+        ],
+      });
+      fetchEstimates();
+    } catch (err: any) {
+      console.error("Failed to create estimate:", err);
+      showToast(err?.response?.data?.detail || "Failed to create estimate.", "error");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -152,10 +259,16 @@ export default function CustomerPortalEstimates() {
             Review commercial proposals, inspect line items, and approve or reject revisions directly.
           </p>
         </div>
-        <button className="btn-secondary" onClick={fetchEstimates} title="Refresh estimates">
-          <RefreshIcon size={16} />
-          <span>Refresh</span>
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn-secondary" onClick={fetchEstimates} title="Refresh estimates">
+            <RefreshIcon size={16} />
+            <span>Refresh</span>
+          </button>
+          <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
+            <PlusIcon size={16} />
+            <span>Create Estimate</span>
+          </button>
+        </div>
       </div>
 
       <div className="cp-tickets-toolbar">
@@ -277,7 +390,7 @@ export default function CustomerPortalEstimates() {
                   {selectedEstimate.title} &bull; {getStatusBadge(selectedEstimate.status)}
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setSelectedEstimate(null)}>
+              <button className="modal-close-btn" onClick={handleCloseDetail}>
                 <XIcon size={18} />
               </button>
             </div>
@@ -385,7 +498,7 @@ export default function CustomerPortalEstimates() {
             </div>
 
             <div className="modal-footer" style={{ justifyContent: "space-between" }}>
-              <button type="button" className="btn-secondary" onClick={() => setSelectedEstimate(null)}>
+              <button type="button" className="btn-secondary" onClick={handleCloseDetail}>
                 Close
               </button>
 
@@ -472,6 +585,172 @@ export default function CustomerPortalEstimates() {
                         ? "Confirm Acceptance"
                         : "Confirm Rejection"}
                   </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Estimate Modal */}
+      {showCreateModal && (
+        <div className="modal-backdrop" style={{ zIndex: 1200 }}>
+          <div className="modal-dialog" style={{ maxWidth: 640 }}>
+            <div className="modal-header">
+              <h2>Create New Software Estimate</h2>
+              <button
+                className="modal-close-btn"
+                onClick={() => setShowCreateModal(false)}
+                disabled={creating}
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateEstimateSubmit}>
+              <div className="modal-body" style={{ maxHeight: "70vh", overflowY: "auto" }}>
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label>Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Mobile App Redesign Proposal"
+                    value={createForm.title}
+                    onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+                  <div className="form-group">
+                    <label>Billing Type</label>
+                    <select
+                      value={createForm.billing_type}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          billing_type: e.target.value as SoftwareBillingType,
+                        })
+                      }
+                      className="cp-select"
+                      style={{ width: "100%" }}
+                    >
+                      <option value="Fixed Price">Fixed Price</option>
+                      <option value="Time & Material">Time & Material</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Currency</label>
+                    <select
+                      value={createForm.currency || "INR"}
+                      onChange={(e) => setCreateForm({ ...createForm, currency: e.target.value })}
+                      className="cp-select"
+                      style={{ width: "100%" }}
+                    >
+                      <option value="INR">INR (₹)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="GBP">GBP (£)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label>Description & Scope Summary</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Brief description of the proposed project scope..."
+                    value={createForm.description || ""}
+                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  />
+                </div>
+
+                <h4 style={{ margin: "16px 0 8px 0", fontSize: "0.9375rem" }}>Line Items</h4>
+                {createForm.items?.map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: 12,
+                      background: "var(--cp-surface-2)",
+                      borderRadius: 6,
+                      border: "1px solid var(--cp-border)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 8 }}>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", display: "block", color: "var(--cp-text-muted)" }}>
+                          Item Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={item.item_name}
+                          onChange={(e) => {
+                            const newItems = [...createForm.items];
+                            const cur = newItems[idx];
+                            if (!cur) return;
+                            newItems[idx] = {
+                              ...cur,
+                              item_name: e.target.value,
+                            };
+                            setCreateForm({ ...createForm, items: newItems });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", display: "block", color: "var(--cp-text-muted)" }}>
+                          Qty
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const newItems = [...createForm.items];
+                            const cur = newItems[idx];
+                            if (!cur) return;
+                            newItems[idx] = {
+                              ...cur,
+                              quantity: Number(e.target.value) || 1,
+                            };
+                            setCreateForm({ ...createForm, items: newItems });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", display: "block", color: "var(--cp-text-muted)" }}>
+                          Unit Price
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.unit_price}
+                          onChange={(e) => {
+                            const newItems = [...createForm.items];
+                            const cur = newItems[idx];
+                            if (!cur) return;
+                            newItems[idx] = {
+                              ...cur,
+                              unit_price: Number(e.target.value) || 0,
+                            };
+                            setCreateForm({ ...createForm, items: newItems });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={creating}
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={creating}>
+                  <span>{creating ? "Submitting..." : "Create Estimate"}</span>
                 </button>
               </div>
             </form>

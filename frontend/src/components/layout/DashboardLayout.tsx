@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { motion, AnimatePresence, useReducedMotion, MotionConfig } from "motion/react";
 
 import { useTheme } from "../../context/ThemeContext";
 
@@ -27,6 +28,9 @@ import "./DashboardLayout.css";
 
 import { getIndustryConfig, normalizeIndustrySlug } from "../../config/industryConfig";
 import { getIndustryDisplayName } from "../../utils/industryUtils";
+import { useVerifiedAuth } from "./ProtectedRoute";
+import { signOutAndRedirect } from "../../services/authSession";
+import { classifyCrmRole } from "../../utils/authRouting";
 import GlobalSearch from "../search/GlobalSearch";
 
 interface DashboardLayoutProps {
@@ -135,6 +139,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
       "/customer-portal-users",
       "/roles",
       "/permissions",
+      "/subscription",
       "/settings",
       "/form-builder",
       "/audit-logs",
@@ -156,11 +161,18 @@ export default function DashboardLayout({
 
   const { industry } = useParams();
 
+  const verifiedAuth = useVerifiedAuth();
+
+  const verifiedIndustry =
+    verifiedAuth?.kind === "crm" && verifiedAuth.industrySlug
+      ? verifiedAuth.industrySlug
+      : "";
+
   const tenantStr = sessionStorage.getItem("tenant");
 
-  let tenantIndustry = "";
+  let tenantIndustry = verifiedIndustry;
 
-  if (tenantStr) {
+  if (!tenantIndustry && tenantStr) {
     try {
       const tenantData = JSON.parse(tenantStr);
       if (typeof tenantData?.industry === "string" && tenantData.industry.trim()) {
@@ -202,25 +214,37 @@ export default function DashboardLayout({
     location.pathname.startsWith("/real-estate") ||
     location.pathname.startsWith("/buyer-requirements");
 
-  const currentIndustry = isSoftwareRoute
-    ? "software-company"
-    : isRealEstateRoute
-    ? "real-estate"
-    : industry
-    ? normalizeIndustrySlug(industry)
-    : tenantIndustry
-    ? normalizeIndustrySlug(tenantIndustry)
-    : "real-estate";
+  const currentIndustry =
+    verifiedIndustry ||
+    (isSoftwareRoute
+      ? "software-company"
+      : isRealEstateRoute
+      ? "real-estate"
+      : industry
+      ? normalizeIndustrySlug(industry)
+      : tenantIndustry);
 
   const industryConfig = getIndustryConfig(currentIndustry);
 
   const basePath = `/${currentIndustry}`;
 
   const isSoftware = currentIndustry === "software-company" || currentIndustry === "software_company";
+  const prefersReduced = useReducedMotion();
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isBellRinging, setIsBellRinging] = useState(false);
+  const prevUnreadCountRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (prevUnreadCountRef.current !== null && unreadCount > prevUnreadCountRef.current) {
+      setIsBellRinging(true);
+      const timer = setTimeout(() => setIsBellRinging(false), 850);
+      return () => clearTimeout(timer);
+    }
+    prevUnreadCountRef.current = unreadCount;
+  }, [unreadCount]);
 
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isNotificationLoading, setIsNotificationLoading] = useState(false);
@@ -456,11 +480,13 @@ export default function DashboardLayout({
 
             role:
 
+              verifiedAuth?.role ||
+
               profile.role ||
 
               previousUser?.role ||
 
-              "Tenant Admin",
+              "",
 
           }));
 
@@ -536,7 +562,9 @@ export default function DashboardLayout({
 
             parsed.role_name ||
 
-            "Tenant Admin";
+            verifiedAuth?.role ||
+
+            "";
 
         setUser({
 
@@ -560,7 +588,7 @@ export default function DashboardLayout({
 
           name: "User",
 
-          role: "Tenant Admin",
+          role: verifiedAuth?.role || "",
 
         });
 
@@ -572,17 +600,17 @@ export default function DashboardLayout({
 
         name: "User",
 
-        role: "Tenant Admin",
+        role: verifiedAuth?.role || "",
 
       });
 
     }
 
-  }, []);
+  }, [verifiedAuth]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
 
-    sessionStorage.clear();
+    await signOutAndRedirect();
 
     setNotifications([]);
 
@@ -590,7 +618,7 @@ export default function DashboardLayout({
 
     setIsNotificationOpen(false);
 
-    navigate("/login");
+    navigate("/login", { replace: true });
 
   };
 
@@ -724,98 +752,91 @@ export default function DashboardLayout({
 
   };
 
-  const role = (user?.role || "").toUpperCase();
+  const authoritativeRole = verifiedAuth?.role || user?.role || "";
+  const crmRole = classifyCrmRole(authoritativeRole);
 
-  const isManager = role.includes("MANAGER");
-
-  const isSales =
-
-    role === "SALES_USER" ||
-
-    role === "SALES USER" ||
-
-    role.includes("SALES");
-
-  const isOps =
-
-    role === "OPERATIONS_USER" ||
-
-    role === "OPERATIONS USER" ||
-
-    role.includes("OPERATIONS");
-
-  const isSupport =
-
-    role === "SUPPORT_USER" ||
-
-    role === "SUPPORT USER" ||
-
-    role.includes("SUPPORT");
-
-  const isAuditor =
-
-    role === "READ_ONLY" ||
-
-    role === "AUDITOR" ||
-
-    role === "READ ONLY" ||
-
-    role === "READ-ONLY" ||
-
-    role === "READ-ONLY / AUDITOR" ||
-
-    role === "READ ONLY / AUDITOR" ||
-
-    role === "READ_ONLY / AUDITOR" ||
-
-    role.includes("AUDITOR");
+  const isManager = crmRole === "MANAGER";
+  const isSales = crmRole === "SALES_USER";
+  const isOps = crmRole === "OPERATIONS_USER";
+  const isSupport = crmRole === "SUPPORT_USER";
+  const isAuditor = crmRole === "AUDITOR";
 
   const hasPermission = (permission: string): boolean => {
-    const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
-    if (!userStr) {
-      return false;
-    }
-    try {
-      const storedUser = JSON.parse(userStr);
-      const rawRole = typeof storedUser.role === "string" ? storedUser.role : storedUser?.role?.name || storedUser?.role_name || "";
-      const role = String(rawRole).trim().toUpperCase();
+    const targetUser: Record<string, unknown> | null =
+      verifiedAuth?.kind === "crm" ? verifiedAuth.user : null;
+
+    if (verifiedAuth?.kind === "crm") {
+      if (verifiedAuth.crmRole === "TENANT_ADMIN") {
+        return true;
+      }
       if (
-        storedUser.is_superuser === true ||
-        storedUser.is_admin === true ||
-        role === "ADMIN" ||
-        role === "SUPERADMIN" ||
-        role === "TENANT_ADMIN" ||
-        role === "TENANT ADMIN" ||
-        role === "TENANT_OWNER" ||
-        role === "TENANT OWNER" ||
-        role === "OWNER" ||
-        role.includes("OWNER") ||
-        role.includes("ADMIN")
+        targetUser &&
+        (targetUser.is_superuser === true || targetUser.is_admin === true)
       ) {
         return true;
       }
-      let permissions: any[] = [];
-      if (Array.isArray(storedUser.permissions)) {
-        permissions = storedUser.permissions;
-      } else if (storedUser.role && Array.isArray(storedUser.role.permissions)) {
-        permissions = storedUser.role.permissions;
-      } else if (Array.isArray(storedUser.role_permissions)) {
-        permissions = storedUser.role_permissions;
+    } else {
+      const userStr =
+        sessionStorage.getItem("user") || localStorage.getItem("user");
+      if (!userStr) {
+        return false;
       }
-      return permissions.some((item) => {
-        const pName = typeof item === "string" ? item : item?.name || "";
-        const lower = pName.toLowerCase().trim();
-        const target = permission.toLowerCase().trim();
-        return (
-          lower === target ||
-          lower === "all" ||
-          lower === "*" ||
-          lower.startsWith(target.split(".")[0] + ".*")
-        );
-      });
-    } catch {
+      try {
+        const storedUser = JSON.parse(userStr);
+        const rawRole =
+          typeof storedUser.role === "string"
+            ? storedUser.role
+            : storedUser?.role?.name || storedUser?.role_name || "";
+        if (
+          storedUser.is_superuser === true ||
+          storedUser.is_admin === true ||
+          classifyCrmRole(rawRole) === "TENANT_ADMIN"
+        ) {
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    }
+
+    const sourceUser = targetUser ?? (() => {
+      try {
+        const userStr =
+          sessionStorage.getItem("user") || localStorage.getItem("user");
+        return userStr ? (JSON.parse(userStr) as Record<string, unknown>) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!sourceUser) {
       return false;
     }
+
+    let permissions: any[] = [];
+    if (Array.isArray(sourceUser.permissions)) {
+      permissions = sourceUser.permissions;
+    } else if (
+      sourceUser.role &&
+      typeof sourceUser.role === "object" &&
+      Array.isArray((sourceUser.role as Record<string, unknown>).permissions)
+    ) {
+      permissions = (sourceUser.role as Record<string, unknown>)
+        .permissions as any[];
+    } else if (Array.isArray(sourceUser.role_permissions)) {
+      permissions = sourceUser.role_permissions;
+    }
+    return permissions.some((item) => {
+      const pName = typeof item === "string" ? item : item?.name || "";
+      const lower = pName.toLowerCase().trim();
+      const target = permission.toLowerCase().trim();
+      return (
+        lower === target ||
+        lower === "all" ||
+        lower === "*" ||
+        lower.startsWith(target.split(".")[0] + ".*")
+      );
+    });
   };
 
   const getNavItems = (): NavItem[] => {
@@ -1211,6 +1232,11 @@ export default function DashboardLayout({
         },
         { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
         {
+          label: "Subscription & Billing",
+          path: `${basePath}/subscription`,
+          icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z",
+        },
+        {
           label: "Form Builder",
           path: `${basePath}/form-builder`,
           icon: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
@@ -1277,6 +1303,11 @@ export default function DashboardLayout({
         icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
       },
       { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
+      {
+        label: "Subscription & Billing",
+        path: `${basePath}/subscription`,
+        icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z",
+      },
       {
         label: "Form Builder",
         path: `${basePath}/form-builder`,
@@ -1370,6 +1401,7 @@ export default function DashboardLayout({
             "/customer-portal-users",
             "/roles",
             "/permissions",
+            "/subscription",
             "/settings",
             "/form-builder",
             "/audit-logs",
@@ -1410,12 +1442,9 @@ export default function DashboardLayout({
     });
   }, [navItems, menuGroups, isSoftware]);
 
-  // Collapsible dropdown state - auto-expanded for the active group
+  // Collapsible dropdown state - auto-expanded only for the active group
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {
-      "sales-crm": true,
-      "software-delivery": true,
-    };
+    const initial: Record<string, boolean> = {};
     menuGroups.forEach((group) => {
       const hasActive = group.routes.some(
         (r) =>
@@ -1522,39 +1551,52 @@ const renderGroupSection = (group: MenuGroupConfig, items: NavItem[]) => {
         )}
       </button>
 
-      {isOpen && (
-        <div className="nav-group-children">
-          {items.map((item) => {
-            const active = isActiveNavItem(item.path);
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`nav-subitem ${active ? "active" : ""}`}
-                onClick={() => setIsSidebarOpen(false)}
-              >
-                <svg
-                  className="nav-subitem-icon"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            className="nav-group-children"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+              duration: prefersReduced ? 0 : 0.22,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            style={{ overflow: "hidden" }}
+          >
+            {items.map((item) => {
+              const active = isActiveNavItem(item.path);
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`nav-subitem ${active ? "active" : ""}`}
+                  onClick={() => setIsSidebarOpen(false)}
                 >
-                  <path d={item.icon} />
-                </svg>
-                <span className="nav-subitem-label">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+                  <svg
+                    className="nav-subitem-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d={item.icon} />
+                  </svg>
+                  <span className="nav-subitem-label">{item.label}</span>
+                </Link>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 return (
+  <MotionConfig reducedMotion="never">
     <div className={`dashboard-wrapper ${theme}`}>
 
       {isSidebarOpen && (
@@ -1914,7 +1956,7 @@ return (
             <div className="notification-wrapper" ref={notificationWrapperRef}>
               <button
                 type="button"
-                className="notification-btn"
+                className={`notification-btn ${isBellRinging ? "bell-ringing" : ""}`}
                 aria-label={`Notifications${
                   unreadCount ? `, ${unreadCount} unread` : ""
                 }`}
@@ -1946,12 +1988,17 @@ return (
                 )}
               </button>
 
-              {isNotificationOpen && (
-                <div
-                  className="notification-panel"
-                  role="dialog"
-                  aria-label="Notifications panel"
-                >
+              <AnimatePresence>
+                {isNotificationOpen && (
+                  <motion.div
+                    className="notification-panel"
+                    role="dialog"
+                    aria-label="Notifications panel"
+                    initial={{ opacity: 0, y: prefersReduced ? 0 : -10, scale: prefersReduced ? 1 : 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: prefersReduced ? 0 : -8, scale: prefersReduced ? 1 : 0.97 }}
+                    transition={{ duration: prefersReduced ? 0 : 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  >
                   <div className="notification-panel-header">
                     <div className="notification-header-row">
                       <h3 className="notification-heading">Notifications</h3>
@@ -2058,8 +2105,9 @@ return (
                       ))}
                     </div>
                   )}
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <button
@@ -2100,17 +2148,28 @@ return (
                 <span className="user-name">{user?.name || "User"}</span>
                 <span className="user-role">
 
-                  {user?.role || "Tenant Admin"}
+                  {verifiedAuth?.role || user?.role || ""}
                 </span>
               </div>
             </button>
           </div>
         </header>
 
-        <div className="dashboard-content">{children}</div>
+        <div className="dashboard-content">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: prefersReduced ? 0 : 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: prefersReduced ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="dashboard-page-transition-wrapper"
+            style={{ width: "100%", minWidth: 0 }}
+          >
+            {children}
+          </motion.div>
+        </div>
       </main>
     </div >
-
-  );
+  </MotionConfig>
+);
 
 }

@@ -2,7 +2,7 @@ import { FormEvent, useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { loginUser } from "../../services/authService";
 import { useTheme } from "../../context/ThemeContext";
-import { normalizeIndustry } from "../../utils/industryUtils";
+import { completeAuthenticatedLogin } from "../../services/authSession";
 import backdropDark from "../../assets/login-full-backdrop.jpg";
 import backdropLight from "../../assets/login-full-backdrop-light.jpg";
 import "./Login.css";
@@ -208,62 +208,12 @@ export default function Login() {
           navigate("/mfa");
         }
       } else {
-        // Clear previous session data to ensure account switching is clean
-        sessionStorage.clear();
-
-        if (response.access_token) {
-          sessionStorage.setItem("access_token", response.access_token);
+        const authResult = await completeAuthenticatedLogin(response);
+        if (!authResult.ok) {
+          setError(authResult.message);
+          return;
         }
-        if (response.refresh_token) {
-          sessionStorage.setItem("refresh_token", response.refresh_token);
-        }
-        if (response.tenant) {
-          sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
-        }
-
-        const userObj = {
-          ...(response.user || {}),
-          role: response.role,
-          permissions: response.permissions || [],
-        };
-        sessionStorage.setItem("user", JSON.stringify(userObj));
-
-        const userRole = (response.role || "").toUpperCase();
-        if (userRole === "MANAGER" || userRole.includes("MANAGER")) {
-          navigate("/manager/dashboard");
-        } else if (
-          userRole === "SALES_USER" ||
-          userRole === "SALES USER" ||
-          userRole.includes("SALES")
-        ) {
-          navigate("/sales/dashboard");
-        } else if (
-          userRole === "OPERATIONS_USER" ||
-          userRole === "OPERATIONS USER" ||
-          userRole.includes("OPERATIONS")
-        ) {
-          navigate("/operations/dashboard");
-        } else if (
-          userRole === "SUPPORT_USER" ||
-          userRole === "SUPPORT USER" ||
-          userRole.includes("SUPPORT")
-        ) {
-          navigate("/support/dashboard");
-        } else if (
-          userRole === "READ_ONLY" ||
-          userRole === "AUDITOR" ||
-          userRole === "READ ONLY" ||
-          userRole === "READ-ONLY" ||
-          userRole === "READ-ONLY / AUDITOR" ||
-          userRole === "READ ONLY / AUDITOR" ||
-          userRole === "READ_ONLY / AUDITOR" ||
-          userRole.includes("AUDITOR")
-        ) {
-          navigate("/auditor/dashboard");
-        } else {
-          const industrySlug = normalizeIndustry(response.tenant?.industry);
-          navigate(`/${industrySlug}/dashboard`);
-        }
+        navigate(authResult.session.destination, { replace: true });
       }
     } catch (err) {
       const apiError = err as { message?: string; status?: number };

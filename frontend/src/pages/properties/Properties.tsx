@@ -7,6 +7,7 @@ import {
   getPropertyImages,
   uploadPropertyImages,
   updatePropertyImage,
+  reorderPropertyImages,
   deletePropertyImage,
 } from "../../services/propertyService";
 import { getBuildings } from "../../services/buildingService";
@@ -819,6 +820,51 @@ export default function Properties() {
       showToast("Primary image updated!");
     } catch (err: any) {
       showToast(formatApiError(err, "Failed to set primary image."), "error");
+    }
+  };
+
+  // Reorder Images
+  const handleMoveImage = async (index: number, direction: -1 | 1) => {
+    if (!viewingProperty) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= propertyImages.length) return;
+    const nextList = [...propertyImages];
+    const [moved] = nextList.splice(index, 1);
+    if (!moved) return;
+    nextList.splice(targetIndex, 0, moved);
+    const payload = nextList.map((img, idx) => ({ id: img.id, sort_order: idx }));
+    try {
+      const reordered = await reorderPropertyImages(viewingProperty.id, payload);
+      const resultList = reordered.length ? reordered : nextList.map((img, idx) => ({ ...img, sort_order: idx }));
+      setPropertyImages(resultList);
+      const sorted = [...resultList].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setPropertyImagesMap((p) => ({
+        ...p,
+        [viewingProperty.id]: sorted,
+      }));
+      showToast("Image order updated!");
+    } catch (err: any) {
+      showToast(formatApiError(err, "Failed to reorder images."), "error");
+    }
+  };
+
+  // Update Image Category
+  const handleImageCategoryChange = async (imageId: string, category: PropertyImageCategory) => {
+    if (!viewingProperty) return;
+    try {
+      const updatedImg = await updatePropertyImage(viewingProperty.id, imageId, { image_type: category });
+      setPropertyImages((prev) => {
+        const next = prev.map((img) => (img.id === imageId ? { ...img, image_type: updatedImg.image_type || category } : img));
+        setPropertyImagesMap((p) => ({ ...p, [viewingProperty.id]: next }));
+        return next;
+      });
+      showToast("Image category updated!");
+    } catch (err: any) {
+      showToast(formatApiError(err, "Failed to update image category."), "error");
     }
   };
 
@@ -2002,7 +2048,7 @@ export default function Properties() {
                     </div>
                   ) : (
                     <div className="images-grid">
-                      {propertyImages.map((img) => (
+                      {propertyImages.map((img, idx) => (
                         <div key={img.id} className="image-card">
                           {img.is_primary && <div className="primary-badge">Cover</div>}
                           <img
@@ -2012,8 +2058,49 @@ export default function Properties() {
                             onClick={() => setPreviewImage(resolveImageUrl(img.image_url))}
                           />
                           <div className="image-card-info">
-                            <span className="category-tag">{img.image_type}</span>
+                            {userPermissions.canUpdate ? (
+                              <select
+                                className="category-tag"
+                                value={img.image_type}
+                                aria-label="Image category"
+                                onChange={(e) =>
+                                  handleImageCategoryChange(img.id, e.target.value as PropertyImageCategory)
+                                }
+                              >
+                                {PROPERTY_IMAGE_CATEGORIES.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="category-tag">{img.image_type}</span>
+                            )}
                             <div className="image-actions">
+                              {userPermissions.canUpdate && propertyImages.length > 1 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn-action-icon"
+                                    style={{ padding: "3px 6px", fontSize: "0.75rem", width: "auto", height: "auto" }}
+                                    title="Move Earlier"
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoveImage(idx, -1)}
+                                  >
+                                    ←
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-action-icon"
+                                    style={{ padding: "3px 6px", fontSize: "0.75rem", width: "auto", height: "auto" }}
+                                    title="Move Later"
+                                    disabled={idx === propertyImages.length - 1}
+                                    onClick={() => handleMoveImage(idx, 1)}
+                                  >
+                                    →
+                                  </button>
+                                </>
+                              )}
                               {!img.is_primary && userPermissions.canUpdate && (
                                 <button
                                   className="btn-action-icon"

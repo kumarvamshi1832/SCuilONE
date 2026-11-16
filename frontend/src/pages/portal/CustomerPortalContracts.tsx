@@ -13,6 +13,11 @@ import {
   getPortalContract,
   signPortalContract,
 } from "../../services/customerPortalCommercialService";
+import {
+  CustomerPortalNotificationService,
+  resolvePortalTenantId,
+} from "../../services/customerPortalNotificationService";
+import { getPortalTenantId } from "../../services/customerPortalAuthService";
 import type { PortalContract } from "../../types/customerPortal";
 import "./CustomerPortalTickets.css";
 
@@ -95,6 +100,12 @@ export default function CustomerPortalContracts() {
         notes: signNotes.trim() || null,
       });
       showToast(`Contract #${updated.contract_number} has been signed successfully!`, "success");
+      try {
+        const activeTenant = resolvePortalTenantId(getPortalTenantId() || undefined);
+        CustomerPortalNotificationService.notifyContractSigned(activeTenant, updated);
+      } catch (e) {
+        console.warn("Failed to dispatch portal contract signed notification:", e);
+      }
       setSelectedContract(updated);
       setIsSignModalOpen(false);
       setSignerName("");

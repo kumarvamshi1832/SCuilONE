@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 
 import Login from "../pages/auth/Login";
@@ -9,7 +10,7 @@ import ResetPassword from "../pages/auth/ResetPassword";
 import CompleteProfile from "../pages/auth/CompleteProfile";
 import AcceptInvitation from "../pages/auth/AcceptInvitation";
 import Workflows from "../pages/workflows/Workflows";
-import ProtectedRoute from "../components/layout/ProtectedRoute";
+import ProtectedRoute, { useVerifiedAuth } from "../components/layout/ProtectedRoute";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import MFASetup from "../pages/auth/MFASetup";
 import RealEstateDashboard from "../pages/dashboard/RealEstateDashboard";
@@ -19,7 +20,13 @@ import TrainingInstituteDashboard from "../pages/dashboard/TrainingInstituteDash
 import DigitalMarketingAgencyDashboard from "../pages/dashboard/DigitalMarketingAgencyDashboard";
 import InsuranceAgencyDashboard from "../pages/dashboard/InsuranceAgencyDashboard";
 import IndustryDashboard from "../pages/dashboard/IndustryDashboard";
-import { normalizeIndustry } from "../utils/industryUtils";
+import { tryNormalizeIndustry } from "../utils/industryUtils";
+import {
+  getSynchronouslyValidCachedSession,
+  verifyExistingSession,
+} from "../services/authSession";
+import { getPlatformAccessToken } from "../services/platformApiClient";
+import AuthErrorState from "../components/common/AuthErrorState";
 import ManagerDashboard from "../pages/dashboard/ManagerDashboard";
 import SalesDashboard from "../pages/dashboard/SalesDashboard";
 import OperationsDashboard from "../pages/dashboard/OperationsDashboard";
@@ -87,10 +94,35 @@ import CustomerPortalTickets from "../pages/portal/CustomerPortalTickets";
 import CustomerPortalTicketDetails from "../pages/portal/CustomerPortalTicketDetails";
 import CustomerPortalRealEstate from "../pages/portal/CustomerPortalRealEstate";
 import CustomerPortalProfile from "../pages/portal/CustomerPortalProfile";
+import CustomerPortalNotificationsPage from "../pages/portal/CustomerPortalNotificationsPage";
+import SubscriptionBilling from "../pages/billing/SubscriptionBilling";
+import UnsubscribeReminder from "../pages/billing/UnsubscribeReminder";
+import PlatformProtectedRoute from "../components/platform/PlatformProtectedRoute";
+import PlatformLayout from "../components/platform/PlatformLayout";
+import PlatformLogin from "../pages/platform/PlatformLogin";
+import PlatformDashboardPage from "../pages/platform/PlatformDashboardPage";
+import PlatformTenantsPage from "../pages/platform/PlatformTenantsPage";
+import PlatformEmployeesTeamsPage from "../pages/platform/PlatformEmployeesTeamsPage";
+import PlatformRolesPermissionsPage from "../pages/platform/PlatformRolesPermissionsPage";
+import PlatformSupportKbPage from "../pages/platform/PlatformSupportKbPage";
+import PlatformBillingSubsPage from "../pages/platform/PlatformBillingSubsPage";
+import PlatformSalesFinancePage from "../pages/platform/PlatformSalesFinancePage";
+import PlatformTechSecurityAuditPage from "../pages/platform/PlatformTechSecurityAuditPage";
+import PlatformAnalyticsSettingsPage from "../pages/platform/PlatformAnalyticsSettingsPage";
+import PlatformProfilePage from "../pages/platform/PlatformProfilePage";
 
 function DashboardResolver() {
   const { industry } = useParams();
-  const normalized = normalizeIndustry(industry);
+  const normalized = tryNormalizeIndustry(industry);
+
+  if (!normalized) {
+    return (
+      <AuthErrorState
+        title="Unsupported Industry"
+        message={`The workspace industry "${industry || ""}" is not recognized. Please sign in again or contact support.`}
+      />
+    );
+  }
 
   switch (normalized) {
     case "software-company":
@@ -111,16 +143,17 @@ function DashboardResolver() {
 }
 
 function ModuleRedirect({ target }: { target: string }) {
-  const token = sessionStorage.getItem("access_token");
-  if (!token) return <Navigate to="/login" replace />;
+  const verifiedAuth = useVerifiedAuth();
+  if (!verifiedAuth) {
+    return <Navigate to="/login" replace />;
+  }
+  if (verifiedAuth.kind === "platform") {
+    return <Navigate to={verifiedAuth.destination} replace />;
+  }
 
-  const tenantStr = sessionStorage.getItem("tenant");
-  let slug = "real-estate";
-  if (tenantStr) {
-    try {
-      const tenant = JSON.parse(tenantStr);
-      if (tenant?.industry) slug = normalizeIndustry(tenant.industry);
-    } catch {}
+  const slug = verifiedAuth.industrySlug;
+  if (!slug) {
+    return <Navigate to={verifiedAuth.destination} replace />;
   }
 
   let finalTarget = target;
@@ -142,7 +175,7 @@ function ModuleRedirect({ target }: { target: string }) {
 
 function ProjectsResolver() {
   const { industry } = useParams();
-  const normalized = normalizeIndustry(industry);
+  const normalized = tryNormalizeIndustry(industry);
   if (normalized === "software-company") {
     return <Navigate to={`/software-company/software-projects`} replace />;
   }
@@ -155,7 +188,7 @@ function ProjectsResolver() {
 
 function RequirementsResolver() {
   const { industry } = useParams();
-  const normalized = normalizeIndustry(industry);
+  const normalized = tryNormalizeIndustry(industry);
   if (normalized === "software-company") {
     return <Navigate to={`/software-company/software-requirements`} replace />;
   }
@@ -168,9 +201,9 @@ function RequirementsResolver() {
 
 function EstimatesResolver() {
   const { industry } = useParams();
-  const normalized = normalizeIndustry(industry);
+  const normalized = tryNormalizeIndustry(industry);
   if (normalized === "software-company") {
-    return <Navigate to={`/${industry}/software-estimates`} replace />;
+    return <Navigate to={`/software-company/software-estimates`} replace />;
   }
   return (
     <DashboardLayout>
@@ -181,9 +214,9 @@ function EstimatesResolver() {
 
 function ContractsResolver() {
   const { industry } = useParams();
-  const normalized = normalizeIndustry(industry);
+  const normalized = tryNormalizeIndustry(industry);
   if (normalized === "software-company") {
-    return <Navigate to={`/${industry}/software-contracts`} replace />;
+    return <Navigate to={`/software-company/software-contracts`} replace />;
   }
   return (
     <DashboardLayout>
@@ -194,9 +227,9 @@ function ContractsResolver() {
 
 function SprintsResolver() {
   const { industry } = useParams();
-  const normalized = normalizeIndustry(industry);
+  const normalized = tryNormalizeIndustry(industry);
   if (normalized === "software-company") {
-    return <Navigate to={`/${industry}/software-sprints`} replace />;
+    return <Navigate to={`/software-company/software-sprints`} replace />;
   }
   return (
     <DashboardLayout>
@@ -206,62 +239,83 @@ function SprintsResolver() {
 }
 
 function RootRedirect() {
-  const token = sessionStorage.getItem("access_token");
-  const tenantStr = sessionStorage.getItem("tenant");
-  const userStr = sessionStorage.getItem("user");
+  const hasToken = Boolean(
+    sessionStorage.getItem("access_token") ||
+      localStorage.getItem("access_token") ||
+      getPlatformAccessToken()
+  );
 
-  if (token && tenantStr) {
-    try {
-      const user = userStr ? JSON.parse(userStr) : null;
-      const rawRole =
-        typeof user?.role === "string"
-          ? user.role
-          : user?.role?.name || user?.role_name || "";
-      const role = String(rawRole).trim().toUpperCase();
+  const initialCached = hasToken ? getSynchronouslyValidCachedSession() : null;
+  const [status, setStatus] = useState<
+    "loading" | "redirect" | "unauthenticated" | "error"
+  >(() => {
+    if (!hasToken) return "unauthenticated";
+    if (initialCached) return "redirect";
+    return "loading";
+  });
+  const [destination, setDestination] = useState<string>(
+    initialCached?.destination ?? "/login"
+  );
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
-      if (role === "MANAGER" || role.includes("MANAGER")) {
-        return <Navigate to="/manager/dashboard" replace />;
-      }
-      if (
-        role === "SALES_USER" ||
-        role === "SALES USER" ||
-        role.includes("SALES")
-      ) {
-        return <Navigate to="/sales/dashboard" replace />;
-      }
-      if (
-        role === "OPERATIONS_USER" ||
-        role === "OPERATIONS USER" ||
-        role.includes("OPERATIONS")
-      ) {
-        return <Navigate to="/operations/dashboard" replace />;
-      }
-      if (
-        role === "SUPPORT_USER" ||
-        role === "SUPPORT USER" ||
-        role.includes("SUPPORT")
-      ) {
-        return <Navigate to="/support/dashboard" replace />;
-      }
-      if (
-        role === "READ_ONLY" ||
-        role === "AUDITOR" ||
-        role === "READ ONLY" ||
-        role === "READ-ONLY" ||
-        role === "READ-ONLY / AUDITOR" ||
-        role === "READ ONLY / AUDITOR" ||
-        role === "READ_ONLY / AUDITOR" ||
-        role.includes("AUDITOR")
-      ) {
-        return <Navigate to="/auditor/dashboard" replace />;
-      }
-
-      const tenant = JSON.parse(tenantStr);
-      const slug = tenant?.industry ? normalizeIndustry(tenant.industry) : "real-estate";
-      return <Navigate to={`/${slug}/dashboard`} replace />;
-    } catch (error) {
-      console.error("Failed to redirect authenticated user:", error);
+  useEffect(() => {
+    if (!hasToken) {
+      setStatus("unauthenticated");
+      return;
     }
+
+    let active = true;
+    const resolve = async () => {
+      const result = await verifyExistingSession();
+      if (!active) return;
+
+      if (result.status === "authenticated") {
+        setDestination(result.session.destination);
+        setStatus("redirect");
+      } else if (result.status === "unauthenticated") {
+        setStatus("unauthenticated");
+      } else {
+        setErrorMessage(result.message);
+        setStatus("error");
+      }
+    };
+
+    void resolve();
+    return () => {
+      active = false;
+    };
+  }, [hasToken]);
+
+  if (status === "loading") {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#0b1120",
+          color: "#f8fafc",
+          fontSize: "14px",
+        }}
+      >
+        Redirecting to your workspace...
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <AuthErrorState
+        title="Access Denied"
+        message={errorMessage}
+        loginPath="/login"
+      />
+    );
+  }
+
+  if (status === "redirect") {
+    return <Navigate to={destination} replace />;
   }
 
   return <Navigate to="/login" replace />;
@@ -282,6 +336,7 @@ export default function AppRoutes() {
         <Route path="/accept-invitation" element={<AcceptInvitation />} />
         <Route path="/set-password" element={<AcceptInvitation />} />
         <Route path="/complete-profile" element={<CompleteProfile />} />
+        <Route path="/unsubscribe" element={<UnsubscribeReminder />} />
 
         {/* Customer Portal Public Auth Routes */}
         <Route path="/portal/login" element={<CustomerPortalLogin />} />
@@ -317,6 +372,7 @@ export default function AppRoutes() {
             <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
+            <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
           </Route>
         </Route>
 
@@ -337,6 +393,7 @@ export default function AppRoutes() {
             <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
+            <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
           </Route>
         </Route>
         <Route path="/customer_portal" element={<CustomerPortalProtectedRoute />}>
@@ -355,6 +412,38 @@ export default function AppRoutes() {
             <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
+            <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
+          </Route>
+        </Route>
+
+        {/* Platform Staff Public & Protected Portal (Isolated from Tenant CRM) */}
+        <Route path="/platform/login" element={<PlatformLogin />} />
+        <Route element={<PlatformProtectedRoute />}>
+          <Route
+            path="/platform/change-password"
+            element={<PlatformLogin initialStep="change_password" />}
+          />
+        </Route>
+        <Route path="/platform" element={<PlatformProtectedRoute />}>
+          <Route element={<PlatformLayout />}>
+            <Route index element={<Navigate to="/platform/dashboard" replace />} />
+            <Route path="dashboard" element={<PlatformDashboardPage />} />
+            <Route
+              path="dashboards/:scope/:roleKey/:industryKey?"
+              element={<PlatformDashboardPage />}
+            />
+            <Route path="tenants" element={<PlatformTenantsPage />} />
+            <Route path="employees" element={<PlatformEmployeesTeamsPage />} />
+            <Route path="roles" element={<PlatformRolesPermissionsPage />} />
+            <Route path="support" element={<PlatformSupportKbPage />} />
+            <Route path="billing" element={<PlatformBillingSubsPage />} />
+            <Route path="finance" element={<PlatformSalesFinancePage />} />
+            <Route path="operations" element={<PlatformTechSecurityAuditPage />} />
+            <Route path="audit" element={<Navigate to="/platform/operations?tab=audit" replace />} />
+            <Route path="audit-trail" element={<Navigate to="/platform/operations?tab=audit" replace />} />
+            <Route path="audit-logs" element={<Navigate to="/platform/operations?tab=audit" replace />} />
+            <Route path="analytics" element={<PlatformAnalyticsSettingsPage />} />
+            <Route path="profile" element={<PlatformProfilePage />} />
           </Route>
         </Route>
 
@@ -775,6 +864,22 @@ export default function AppRoutes() {
               </DashboardLayout>
             }
           />
+          <Route
+            path="/:industry/subscription"
+            element={
+              <DashboardLayout>
+                <SubscriptionBilling />
+              </DashboardLayout>
+            }
+          />
+          <Route
+            path="/:industry/billing"
+            element={
+              <DashboardLayout>
+                <SubscriptionBilling />
+              </DashboardLayout>
+            }
+          />
 
           {/* Naked Module Routes (auto-redirect to active industry slug) */}
           <Route path="/leads" element={<ModuleRedirect target="leads" />} />
@@ -820,6 +925,8 @@ export default function AppRoutes() {
           <Route path="/profile" element={<ModuleRedirect target="profile" />} />
           <Route path="/company" element={<ModuleRedirect target="company" />} />
           <Route path="/mystore" element={<ModuleRedirect target="mystore" />} />
+          <Route path="/subscription" element={<ModuleRedirect target="subscription" />} />
+          <Route path="/billing" element={<ModuleRedirect target="subscription" />} />
         </Route>
 
         {/* Empty Route */}

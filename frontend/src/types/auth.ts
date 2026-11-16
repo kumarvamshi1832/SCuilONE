@@ -108,6 +108,9 @@ export interface TokenResponse {
   temp_token?: string;
 
   user?: User & {
+    user_id?: string;
+    tenant_id?: string;
+    role?: string | null;
     status?: string;
     must_change_password?: boolean;
     profile_completed?: boolean;
@@ -116,10 +119,12 @@ export interface TokenResponse {
   tenant?: {
     id: string;
     name: string;
-    industry?: string;
+    industry?: string | null;
+    is_platform?: boolean;
   };
 
-  role?: string;
+  account_type?: "platform" | "tenant" | string;
+  role?: string | null;
   permissions?: string[];
 
   requires_mfa?: boolean;

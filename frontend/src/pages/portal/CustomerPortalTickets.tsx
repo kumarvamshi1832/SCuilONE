@@ -18,6 +18,11 @@ import {
   createPortalTicket,
 } from "../../services/customerPortalTicketService";
 import { getPortalProjects } from "../../services/customerPortalCommercialService";
+import {
+  CustomerPortalNotificationService,
+  resolvePortalTenantId,
+} from "../../services/customerPortalNotificationService";
+import { getPortalTenantId } from "../../services/customerPortalAuthService";
 import type {
   PortalTicket,
   PortalTicketCreate,
@@ -166,6 +171,12 @@ export default function CustomerPortalTickets() {
         software_project_id: createForm.software_project_id || null,
       });
       showToast(`Ticket #${newTicket.ticket_number} created successfully!`, "success");
+      try {
+        const activeTenant = resolvePortalTenantId(getPortalTenantId() || undefined);
+        CustomerPortalNotificationService.notifyTicketCreated(activeTenant, newTicket);
+      } catch (e) {
+        console.warn("Failed to dispatch portal ticket notification:", e);
+      }
       setCreateForm({
         subject: "",
         description: "",

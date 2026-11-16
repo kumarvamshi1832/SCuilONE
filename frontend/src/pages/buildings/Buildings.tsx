@@ -7,6 +7,7 @@ import {
   getBuildingImages,
   uploadBuildingImages,
   updateBuildingImage,
+  reorderBuildingImages,
   deleteBuildingImage,
 } from "../../services/buildingService";
 import { getProjects } from "../../services/projectService";
@@ -191,7 +192,7 @@ export default function Buildings() {
               }
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       });
     } catch (err: any) {
       console.error("Failed to load buildings:", err);
@@ -672,6 +673,56 @@ export default function Buildings() {
     }
   };
 
+  // Reorder Images
+  const handleMoveImage = async (index: number, direction: -1 | 1) => {
+    if (!viewingBuilding) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= buildingImages.length) return;
+    const nextList = [...buildingImages];
+    const [moved] = nextList.splice(index, 1);
+    if (!moved) return;
+    nextList.splice(targetIndex, 0, moved);
+    try {
+      const reordered = await reorderBuildingImages(
+        viewingBuilding.id,
+        nextList.map((img) => img.id)
+      );
+      const resultList = reordered.length ? reordered : nextList.map((img, idx) => ({ ...img, sort_order: idx }));
+      setBuildingImages(resultList);
+      const sorted = [...resultList].sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [viewingBuilding.id]: sorted,
+      }));
+      showToast("Image order updated!");
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || "Failed to reorder images.", "error");
+    }
+  };
+
+  // Update Image Category
+  const handleImageCategoryChange = async (imageId: string, category: BuildingImageCategory) => {
+    if (!viewingBuilding) return;
+    try {
+      const updatedImg = await updateBuildingImage(viewingBuilding.id, imageId, { image_type: category });
+      const next = buildingImages.map((img) =>
+        img.id === imageId ? { ...img, image_type: updatedImg.image_type || category } : img
+      );
+      setBuildingImages(next);
+      setBuildingImagesMap((prev) => ({
+        ...prev,
+        [viewingBuilding.id]: next,
+      }));
+      showToast("Image category updated!");
+    } catch (err: any) {
+      showToast(err?.response?.data?.detail || "Failed to update image category.", "error");
+    }
+  };
+
   // Delete Image
   const handleDeleteImage = async (imageId: string) => {
     if (!viewingBuilding) return;
@@ -1015,8 +1066,8 @@ export default function Buildings() {
               b.construction_status === "Planning"
                 ? "badge-planning"
                 : b.construction_status === "Under Construction"
-                ? "badge-underconstruction"
-                : "badge-completed";
+                  ? "badge-underconstruction"
+                  : "badge-completed";
 
             const statusClass =
               b.status === "Active" ? "badge-active" : "badge-inactive";
@@ -1066,8 +1117,8 @@ export default function Buildings() {
                   b.construction_status === "Planning"
                     ? "badge-planning"
                     : b.construction_status === "Under Construction"
-                    ? "badge-underconstruction"
-                    : "badge-completed";
+                      ? "badge-underconstruction"
+                      : "badge-completed";
 
                 const statusClass =
                   b.status === "Active" ? "badge-active" : "badge-inactive";
@@ -1770,7 +1821,7 @@ export default function Buildings() {
                     </div>
                   ) : (
                     <div className="images-grid">
-                      {buildingImages.map((img) => (
+                      {buildingImages.map((img, idx) => (
                         <div key={img.id} className="image-card">
                           {img.is_primary && <div className="primary-badge">Cover</div>}
                           <img
@@ -1780,8 +1831,49 @@ export default function Buildings() {
                             onClick={() => setPreviewImage(resolveImageUrl(img.image_url))}
                           />
                           <div className="image-card-info">
-                            <span className="category-tag">{img.image_type}</span>
+                            {userPermissions.canUpdate ? (
+                              <select
+                                className="category-tag"
+                                value={img.image_type}
+                                aria-label="Image category"
+                                onChange={(e) =>
+                                  handleImageCategoryChange(img.id, e.target.value as BuildingImageCategory)
+                                }
+                              >
+                                {BUILDING_IMAGE_CATEGORIES.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="category-tag">{img.image_type}</span>
+                            )}
                             <div className="image-actions">
+                              {userPermissions.canUpdate && buildingImages.length > 1 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn-action-icon"
+                                    style={{ padding: "3px 6px", fontSize: "0.75rem", width: "auto", height: "auto" }}
+                                    title="Move Earlier"
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoveImage(idx, -1)}
+                                  >
+                                    ←
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-action-icon"
+                                    style={{ padding: "3px 6px", fontSize: "0.75rem", width: "auto", height: "auto" }}
+                                    title="Move Later"
+                                    disabled={idx === buildingImages.length - 1}
+                                    onClick={() => handleMoveImage(idx, 1)}
+                                  >
+                                    →
+                                  </button>
+                                </>
+                              )}
                               {!img.is_primary && userPermissions.canUpdate && (
                                 <button
                                   className="btn-action-icon"

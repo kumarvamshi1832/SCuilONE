@@ -28,6 +28,7 @@ import type {
 } from "../../types/customerPortal";
 import { normalizeIndustry, getIndustryDisplayName } from "../../utils/industryUtils";
 import CustomerPortalSidebar from "./CustomerPortalSidebar";
+import CustomerPortalNotifications from "./CustomerPortalNotifications";
 import "./CustomerPortalLayout.css";
 
 const SIDEBAR_STORAGE_KEY = "scuilone_cp_sidebar_collapsed";
@@ -386,8 +387,10 @@ export default function CustomerPortalLayout() {
           )}
         </div>
 
-        {/* Right Section: Theme Toggle, User Profile, Logout */}
+        {/* Right Section: Notifications, Theme Toggle, User Profile, Logout */}
         <div className="cp-nav-right">
+          <CustomerPortalNotifications currentTenantId={activeTenantId || "default"} />
+
           <button
             type="button"
             className="cp-theme-toggle-btn"

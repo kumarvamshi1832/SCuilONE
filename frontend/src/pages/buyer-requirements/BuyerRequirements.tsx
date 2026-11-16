@@ -28,6 +28,7 @@ import {
   REQUIREMENT_TYPES,
   BUYER_REQUIREMENT_STATUSES,
 } from "../../types/buyerRequirement";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import { PROPERTY_TYPES, AREA_UNITS } from "../../types/property";
 import type { PropertyMatch, PropertyMatchCreate } from "../../types/propertyMatch";
 import type { Property, PropertyImage } from "../../types/property";
@@ -185,6 +186,7 @@ export default function BuyerRequirements() {
         });
 
       return {
+        canView: has("buyer_requirement.view") || isSuperOrAdmin,
         canCreate: has("buyer_requirement.create"),
         canUpdate: has("buyer_requirement.update"),
         canDelete: has("buyer_requirement.delete"),
@@ -193,6 +195,7 @@ export default function BuyerRequirements() {
       };
     } catch {
       return {
+        canView: true,
         canCreate: true,
         canUpdate: true,
         canDelete: true,
@@ -881,6 +884,15 @@ export default function BuyerRequirements() {
             </button>
           </div>
 
+          <ImportExportActions
+            moduleId="buyer-requirements"
+            records={filteredRequirements}
+            fetchAllRecords={getBuyerRequirements}
+            onImportSuccess={fetchRequirementsList}
+            canImport={userPermissions.canCreate}
+            canExport={userPermissions.canView}
+          />
+
           {userPermissions.canCreate && (
             <button
               className="btn-add-requirement"
@@ -1095,6 +1107,15 @@ export default function BuyerRequirements() {
               ? "No buyer requirements match your filter criteria. Try resetting filters."
               : "Create your first buyer requirement to start matching leads with properties."}
           </p>
+          <ImportExportActions
+            moduleId="buyer-requirements"
+            records={filteredRequirements}
+            fetchAllRecords={getBuyerRequirements}
+            onImportSuccess={fetchRequirementsList}
+            canImport={userPermissions.canCreate}
+            canExport={userPermissions.canView}
+          />
+
           {userPermissions.canCreate && (
             <button
               className="btn-add-requirement"

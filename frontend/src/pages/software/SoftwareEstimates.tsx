@@ -10,6 +10,10 @@ import {
 import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareRequirements } from "../../services/softwareRequirementService";
 import { getUsers } from "../../services/userService";
+import {
+  CustomerPortalNotificationService,
+  resolvePortalTenantId,
+} from "../../services/customerPortalNotificationService";
 
 import type {
   SoftwareEstimate,
@@ -28,6 +32,7 @@ import type { SoftwareRequirement } from "../../types/softwareRequirement";
 import type { User } from "../../types/user";
 
 import SoftwareViewToggle, { SoftwareViewMode } from "./SoftwareViewToggle";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import "./SoftwareModules.css";
 
 const INR = new Intl.NumberFormat("en-IN", {
@@ -545,6 +550,12 @@ export default function SoftwareEstimates() {
         };
         const created = await createSoftwareEstimate(payload);
         setEstimates((prev) => [created, ...prev]);
+        try {
+          const targetTenant = created.tenant_id || resolvePortalTenantId();
+          CustomerPortalNotificationService.notifyEstimateCreated(targetTenant, created);
+        } catch (notifErr) {
+          console.warn("Could not dispatch customer portal notification:", notifErr);
+        }
         setIsModalOpen(false);
       }
     } catch (err: any) {
@@ -575,6 +586,12 @@ export default function SoftwareEstimates() {
     try {
       const revision = await createEstimateRevision(id);
       setEstimates((prev) => [revision, ...prev]);
+      try {
+        const targetTenant = revision.tenant_id || resolvePortalTenantId();
+        CustomerPortalNotificationService.notifyEstimateCreated(targetTenant, revision);
+      } catch (notifErr) {
+        console.warn("Could not dispatch customer portal notification:", notifErr);
+      }
       handleOpenEdit(revision);
     } catch (err: any) {
       alert(err?.response?.data?.detail || err?.message || "Failed to create estimate revision");
@@ -596,6 +613,14 @@ export default function SoftwareEstimates() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+          <ImportExportActions
+            moduleId="software-estimates"
+            records={filteredList}
+            fetchAllRecords={getSoftwareEstimates}
+            onImportSuccess={() => loadData(true)}
+            canImport={true}
+            canExport={true}
+          />
           <button className="sw-btn-primary" onClick={handleOpenCreate}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19" />

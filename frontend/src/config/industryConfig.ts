@@ -1,4 +1,4 @@
-import { normalizeIndustry } from "../utils/industryUtils";
+import { tryNormalizeIndustry } from "../utils/industryUtils";
 
 export type IndustryConfig = {
   name: string;
@@ -264,6 +264,19 @@ const industries: IndustryConfig[] = [
   },
 ];
 
+const DEFAULT_UNKNOWN_INDUSTRY_CONFIG: IndustryConfig = {
+  name: "Unsupported Industry",
+  slug: "",
+  dashboardTitle: "Industry Unavailable",
+  leadLabel: "Leads",
+  contactLabel: "Contacts",
+  accountLabel: "Accounts",
+  dealLabel: "Deals",
+  pipelineLabel: "Sales Pipeline",
+  primaryEntity: "Records",
+  modules: ["dashboard"],
+};
+
 export const INDUSTRY_CONFIGS: Record<string, IndustryConfig> =
   Object.fromEntries(
     industries.map((industry) => [industry.slug, industry])
@@ -272,11 +285,14 @@ export const INDUSTRY_CONFIGS: Record<string, IndustryConfig> =
 export const normalizeIndustrySlug = (
   industry?: string | null
 ): string => {
-  const norm = normalizeIndustry(industry);
-  if (INDUSTRY_CONFIGS[norm]) {
+  const norm = tryNormalizeIndustry(industry);
+  if (norm && INDUSTRY_CONFIGS[norm]) {
     return norm;
   }
-  const value = (industry || "real-estate").trim().toLowerCase();
+  const value = (industry ?? "").trim().toLowerCase();
+  if (!value) {
+    return "";
+  }
 
   const existing = Object.values(INDUSTRY_CONFIGS).find(
     (config) =>
@@ -284,7 +300,7 @@ export const normalizeIndustrySlug = (
       config.name.toLowerCase() === value
   );
 
-  return existing?.slug || value.replace(/\s+/g, "-");
+  return existing?.slug ?? "";
 };
 
 export const getIndustryConfig = (
@@ -293,7 +309,7 @@ export const getIndustryConfig = (
   const slug = normalizeIndustrySlug(industry);
 
   return (
-    INDUSTRY_CONFIGS[slug] ??
-    INDUSTRY_CONFIGS["software-company"]!
+    (slug ? INDUSTRY_CONFIGS[slug] : undefined) ??
+    DEFAULT_UNKNOWN_INDUSTRY_CONFIG
   );
 };

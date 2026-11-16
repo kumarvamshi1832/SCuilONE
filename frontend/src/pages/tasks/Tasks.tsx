@@ -25,6 +25,7 @@ import {
 import ActivityFormModal from "../../components/activities/ActivityFormModal";
 import ActivityViewModal from "../../components/activities/ActivityViewModal";
 import ActivityDeleteConfirm from "../../components/activities/ActivityDeleteConfirm";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import { formatDateTime } from "../../utils/dateFormatter";
 import {
@@ -346,6 +347,14 @@ export default function Tasks() {
               </button>
             </div>
           )}
+
+          <ImportExportActions
+            moduleId="tasks"
+            records={filteredTasks}
+            onImportSuccess={fetchData}
+            canImport={permissions.create}
+            canExport={permissions.view}
+          />
 
           {permissions.create && (
             <button

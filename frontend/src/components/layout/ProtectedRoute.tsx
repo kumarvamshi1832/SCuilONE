@@ -1,123 +1,220 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { normalizeIndustry } from "../../utils/industryUtils";
+import AuthErrorState from "../common/AuthErrorState";
+import {
+  getSynchronouslyValidCachedSession,
+  isAuthStorageModifiedSinceVerification,
+  verifyExistingSession,
+  type VerifiedAuthSession,
+} from "../../services/authSession";
+import { getPlatformAccessToken } from "../../services/platformApiClient";
+import {
+  CRM_ADMIN_ONLY_SUFFIXES,
+  CRM_GLOBAL_ROUTES,
+  CRM_NAKED_MODULE_ROOTS,
+  isKnownIndustrySegment,
+} from "../../utils/authRouting";
+
+export const VerifiedAuthContext = createContext<VerifiedAuthSession | null>(
+  null
+);
+
+export function useVerifiedAuth(): VerifiedAuthSession | null {
+  return useContext(VerifiedAuthContext);
+}
+
+type RouteVerifyState =
+  | { status: "loading" }
+  | { status: "unauthenticated" }
+  | { status: "error"; message: string }
+  | { status: "authenticated"; session: VerifiedAuthSession };
+
+const SOFTWARE_ONLY_SEGMENTS = new Set<string>([
+  "software-requirements",
+  "software-estimates",
+  "software-contracts",
+  "software-projects",
+  "software-sprints",
+  "software-time-tracking",
+  "software-delivery-reports",
+  "software-invoices",
+]);
+
+function hasAnyToken(): boolean {
+  return Boolean(
+    sessionStorage.getItem("access_token") ||
+      localStorage.getItem("access_token") ||
+      getPlatformAccessToken()
+  );
+}
+
+function getInitialRouteState(): RouteVerifyState {
+  if (!hasAnyToken()) {
+    return { status: "unauthenticated" };
+  }
+  const cached = getSynchronouslyValidCachedSession();
+  if (cached) {
+    return { status: "authenticated", session: cached };
+  }
+  return { status: "loading" };
+}
 
 export default function ProtectedRoute() {
-  const token = sessionStorage.getItem("access_token") || localStorage.getItem("access_token");
   const location = useLocation();
+  const [state, setState] = useState<RouteVerifyState>(getInitialRouteState);
 
-  if (!token) {
-    // Redirect to login if there is no token, saving the current location
+  const syncVerification = useCallback(async (force = false) => {
+    if (!hasAnyToken()) {
+      setState({ status: "unauthenticated" });
+      return;
+    }
+
+    const storageModified = isAuthStorageModifiedSinceVerification();
+    if (force || storageModified) {
+      setState((prev) =>
+        prev.status === "authenticated" && !storageModified
+          ? prev
+          : { status: "loading" }
+      );
+    }
+
+    const result = await verifyExistingSession({
+      force: force || storageModified,
+    });
+
+    if (result.status === "authenticated") {
+      setState({ status: "authenticated", session: result.session });
+    } else if (result.status === "unauthenticated") {
+      setState({ status: "unauthenticated" });
+    } else {
+      setState({ status: "error", message: result.message });
+    }
+  }, []);
+
+  useEffect(() => {
+    void syncVerification(false);
+  }, [location.pathname, syncVerification]);
+
+  useEffect(() => {
+    const handleStorageOrFocus = () => {
+      if (!hasAnyToken()) {
+        setState({ status: "unauthenticated" });
+        return;
+      }
+      if (isAuthStorageModifiedSinceVerification()) {
+        void syncVerification(true);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageOrFocus);
+    window.addEventListener("focus", handleStorageOrFocus);
+    return () => {
+      window.removeEventListener("storage", handleStorageOrFocus);
+      window.removeEventListener("focus", handleStorageOrFocus);
+    };
+  }, [syncVerification]);
+
+  if (!hasAnyToken() || state.status === "unauthenticated") {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Read authenticated user role safely (supports string or role object)
-  const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
-  let userRole = "";
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      const rawRole =
-        typeof user.role === "string"
-          ? user.role
-          : user.role?.name || user.role_name || "";
-      userRole = String(rawRole).trim().toUpperCase();
-    } catch (e) {}
+  const storageTamperedNow = isAuthStorageModifiedSinceVerification();
+  if (state.status === "loading" || (storageTamperedNow && state.status === "authenticated")) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--bg-primary, #0b1120)",
+          color: "var(--text-primary, #f8fafc)",
+          fontFamily: "inherit",
+        }}
+      >
+        <div style={{ textAlign: "center", fontSize: "14px", opacity: 0.85 }}>
+          Verifying workspace session...
+        </div>
+      </div>
+    );
   }
-  const isManager = userRole === "MANAGER" || userRole.includes("MANAGER");
-  const isSales = userRole === "SALES_USER" || userRole === "SALES USER" || userRole.includes("SALES");
-  const isOps = userRole === "OPERATIONS_USER" || userRole === "OPERATIONS USER" || userRole.includes("OPERATIONS");
-  const isSupport = userRole === "SUPPORT_USER" || userRole === "SUPPORT USER" || userRole.includes("SUPPORT");
-  const isAuditor = userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR");
-  const isTenantAdmin = !isManager && !isSales && !isOps && !isSupport && !isAuditor;
 
-  const getExpectedDashboard = (): string | null => {
-    if (isManager) return "/manager/dashboard";
-    if (isSales) return "/sales/dashboard";
-    if (isOps) return "/operations/dashboard";
-    if (isSupport) return "/support/dashboard";
-    if (isAuditor) return "/auditor/dashboard";
+  if (state.status === "error") {
+    return (
+      <AuthErrorState
+        title="Access Denied"
+        message={state.message}
+        loginPath="/login"
+        primaryActionLabel="Retry Verification"
+        onPrimaryAction={() => void syncVerification(true)}
+      />
+    );
+  }
 
-    const tenantStr = sessionStorage.getItem("tenant") || localStorage.getItem("tenant");
-    if (tenantStr) {
-      try {
-        const tenant = JSON.parse(tenantStr);
-        if (tenant && tenant.industry) {
-          const expectedSlug = normalizeIndustry(tenant.industry);
-          return `/${expectedSlug}/dashboard`;
-        }
-      } catch (e) {}
-    }
+  const { session } = state;
 
-    const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        if (user?.tenant?.industry) {
-          const expectedSlug = normalizeIndustry(user.tenant.industry);
-          return `/${expectedSlug}/dashboard`;
-        }
-        if (user?.industry) {
-          const expectedSlug = normalizeIndustry(user.industry);
-          return `/${expectedSlug}/dashboard`;
-        }
-      } catch (e) {}
-    }
+  // Never allow Platform staff/admin accounts into Customer Tenant CRM routes
+  if (session.kind === "platform") {
+    return <Navigate to={session.destination} replace />;
+  }
 
-    return "/real-estate/dashboard";
-  };
-
-  const expectedDashboard = getExpectedDashboard();
   const path = location.pathname;
+  const segments = path.split("/").filter(Boolean);
+  const urlFirstSegment = segments[0] || "";
 
-  // For role-based users, enforce role dashboard
-  if (!isTenantAdmin && expectedDashboard) {
-    if (path.endsWith("/dashboard") && path !== expectedDashboard) {
-      return <Navigate to={expectedDashboard} replace />;
+  // Enforce role-specific dashboards for all CRM roles
+  if (
+    (path === "/dashboard" || path.endsWith("/dashboard")) &&
+    path !== session.destination
+  ) {
+    return <Navigate to={session.destination} replace />;
+  }
+
+  // Non-admin CRM roles cannot access admin-only administration routes
+  if (session.crmRole !== "TENANT_ADMIN") {
+    const isAdminOnlyRoute = CRM_ADMIN_ONLY_SUFFIXES.some(
+      (suffix) => path === suffix || path.endsWith(suffix)
+    );
+    if (isAdminOnlyRoute) {
+      return <Navigate to={session.destination} replace />;
     }
+  }
+
+  // Enforce industry boundary for industry-prefixed routes and reject unknown industry slugs
+  if (
+    !CRM_GLOBAL_ROUTES.has(path) &&
+    urlFirstSegment &&
+    !CRM_NAKED_MODULE_ROOTS.has(urlFirstSegment)
+  ) {
+    if (session.industrySlug) {
+      if (urlFirstSegment !== session.industrySlug) {
+        return <Navigate to={session.destination} replace />;
+      }
+    } else if (!isKnownIndustrySegment(urlFirstSegment)) {
+      return <Navigate to={session.destination} replace />;
+    }
+  }
+
+  // Block software-company-only module routes for non-software industries
+  if (session.industrySlug !== "software-company") {
+    const checkSeg = segments[1] || urlFirstSegment;
     if (
-      path.endsWith("/users") ||
-      path.endsWith("/roles") ||
-      path.endsWith("/permissions") ||
-      path.endsWith("/settings")
+      SOFTWARE_ONLY_SEGMENTS.has(urlFirstSegment) ||
+      SOFTWARE_ONLY_SEGMENTS.has(checkSeg)
     ) {
-      return <Navigate to={expectedDashboard} replace />;
+      return <Navigate to={session.destination} replace />;
     }
   }
 
-  // For tenant admin, enforce correct industry dashboard and routes
-  if (isTenantAdmin && expectedDashboard) {
-    if (path.endsWith("/dashboard") && path !== expectedDashboard) {
-      return <Navigate to={expectedDashboard} replace />;
-    }
-
-    const segments = path.split("/").filter(Boolean);
-    const urlFirstSegment = segments[0] || "";
-    const expectedSlug = expectedDashboard.split("/")[1];
-
-    const knownIndustries = [
-      "real-estate",
-      "software-company",
-      "education-consulting",
-      "training-institute",
-      "digital-marketing-agency",
-      "insurance-agency",
-    ];
-
-    if (knownIndustries.includes(urlFirstSegment) && urlFirstSegment !== expectedSlug) {
-      return <Navigate to={expectedDashboard} replace />;
-    }
-
-    const softwareOnlyRoutes = [
-      "software-requirements",
-      "software-estimates",
-      "software-contracts",
-      "software-projects",
-      "software-sprints",
-    ];
-    if (expectedSlug !== "software-company" && softwareOnlyRoutes.includes(urlFirstSegment)) {
-      return <Navigate to={expectedDashboard} replace />;
-    }
-  }
-
-  return <Outlet />;
+  return (
+    <VerifiedAuthContext.Provider value={session}>
+      <Outlet />
+    </VerifiedAuthContext.Provider>
+  );
 }

@@ -49,6 +49,7 @@ import type { Deal } from "../../types/deal";
 
 import "./SoftwareModules.css";
 import SoftwareViewToggle from "./SoftwareViewToggle";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import "./SoftwareSprints.css";
 
 function formatDate(dateStr?: string | null): string {
@@ -758,6 +759,15 @@ export default function SoftwareSprints() {
 
         <div className="sprint-header-actions">
           <SoftwareViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+
+          <ImportExportActions
+            moduleId="software-sprints"
+            records={sprints}
+            fetchAllRecords={getSoftwareSprints}
+            onImportSuccess={() => loadData(true)}
+            canImport={true}
+            canExport={true}
+          />
 
           <button
             type="button"

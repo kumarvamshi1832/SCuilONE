@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { getRoles as getRolesDetails } from "../../services/roleService";
 import RoleModal from "../../components/roles/RoleModal";
+import { ExportFormatMenu } from "../../components/common/import-export/ExportFormatMenu";
+import { MODULE_CONFIGS } from "../../config/importExportConfig";
 import "../users/Users.css";
 import "./Roles.css";
 
@@ -97,6 +99,15 @@ export default function Roles() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <ExportFormatMenu
+            config={MODULE_CONFIGS.roles!}
+            records={filteredRoles.map((r) => ({
+              name: r.name,
+              description: `${r.name} system role`,
+              users_count: r.users,
+              permissions_count: r.name === "Admin" ? 71 : 25,
+            }))}
+          />
         </div>
       </div>
 

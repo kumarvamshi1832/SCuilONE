@@ -16,6 +16,8 @@ import { getReportsSummary } from "../../services/reportService";
 import type { ReportsSummary } from "../../types/report";
 import type { ReportFilters } from "../../services/reportService";
 import { useTheme } from "../../context/ThemeContext";
+import { ExportFormatMenu } from "../../components/common/import-export/ExportFormatMenu";
+import { MODULE_CONFIGS } from "../../config/importExportConfig";
 import "./Reports.css";
 
 const CHART_COLORS = [
@@ -37,9 +39,6 @@ const formatCurrency = (amount: number) =>
 
 const formatNumber = (value: number) =>
   new Intl.NumberFormat("en-IN").format(value);
-
-const escapeCsv = (value: string | number) =>
-  `"${String(value).replace(/"/g, '""')}"`;
 
 export default function Reports() {
   const [report, setReport] = useState<ReportsSummary | null>(null);
@@ -192,74 +191,6 @@ export default function Reports() {
     setAppliedFilters(filters);
   };
 
-  const exportCsv = () => {
-    if (!report) return;
-
-    const rows: (string | number)[][] = [
-      ["SCuilONE CRM Reports"],
-      ["Start Date", report.filters.start_date || "All time"],
-      ["End Date", report.filters.end_date || "All time"],
-      [],
-      ["Sales Report"],
-      ["Metric", "Value"],
-      ["Total Deals", report.sales.total_deals],
-      ["Won Deals", report.sales.won_deals],
-      ["Lost Deals", report.sales.lost_deals],
-      ["Open Deals", report.sales.open_deals],
-      ["Won Revenue", report.sales.won_revenue],
-      [],
-      ["Lead Report"],
-      ["Metric", "Value"],
-      ["Total Leads", report.leads.total_leads],
-      ["Qualified Leads", report.leads.qualified_leads],
-      ["Qualified Lead Rate (%)", report.leads.conversion_rate],
-      [],
-      ["Lead Status", "Count"],
-      ...report.leads.status_breakdown.map((item) => [
-        item.status,
-        item.count,
-      ]),
-      [],
-      ["Pipeline Report"],
-      ["Pipeline", "Stage", "Deals"],
-      ...report.pipeline.map((item) => [
-        item.pipeline_name,
-        item.stage_name,
-        item.count,
-      ]),
-      [],
-      ["Task Report"],
-      ["Metric", "Value"],
-      ["Total Tasks", report.tasks.total_tasks],
-      ["Pending Tasks", report.tasks.pending_tasks],
-      ["Completed Tasks", report.tasks.completed_tasks],
-      ["Overdue Tasks", report.tasks.overdue_tasks],
-      [],
-      ["Task Status", "Count"],
-      ...report.tasks.status_breakdown.map((item) => [
-        item.status,
-        item.count,
-      ]),
-    ];
-
-    const csv = "\uFEFF" + rows.map((row) =>
-      row.map((value) => escapeCsv(value ?? "")).join(",")
-    ).join("\r\n");
-
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "scuilone-crm-reports.csv";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-
   const leadChartData = report?.leads.status_breakdown ?? [];
   const activeLeadChartData = leadChartData.filter((item) => item.count > 0);
 
@@ -287,19 +218,31 @@ export default function Reports() {
           <p>Track sales performance, leads, pipelines and tasks.</p>
         </div>
 
-        <button
-          className="reports-export-button"
-          onClick={exportCsv}
-          disabled={!report || loading}
-          title="Download report data as CSV"
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          <span>Export CSV</span>
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <ExportFormatMenu
+            config={MODULE_CONFIGS.reports!}
+            records={
+              report
+                ? [
+                    { metric: "Deals & Sales", label: "Total Deals", value: report.sales.total_deals, percentage: "" },
+                    { metric: "Deals & Sales", label: "Won Deals", value: report.sales.won_deals, percentage: "" },
+                    { metric: "Deals & Sales", label: "Lost Deals", value: report.sales.lost_deals, percentage: "" },
+                    { metric: "Deals & Sales", label: "Open Deals", value: report.sales.open_deals, percentage: "" },
+                    { metric: "Deals & Sales", label: "Won Revenue", value: report.sales.won_revenue, percentage: "" },
+                    { metric: "Leads", label: "Total Leads", value: report.leads.total_leads, percentage: "" },
+                    { metric: "Leads", label: "Qualified Leads", value: report.leads.qualified_leads, percentage: `${report.leads.conversion_rate}%` },
+                    ...report.leads.status_breakdown.map((s) => ({ metric: "Lead Status", label: s.status, value: s.count, percentage: "" })),
+                    { metric: "Tasks", label: "Total Tasks", value: report.tasks.total_tasks, percentage: "" },
+                    { metric: "Tasks", label: "Pending Tasks", value: report.tasks.pending_tasks, percentage: "" },
+                    { metric: "Tasks", label: "Completed Tasks", value: report.tasks.completed_tasks, percentage: "" },
+                    { metric: "Tasks", label: "Overdue Tasks", value: report.tasks.overdue_tasks, percentage: "" },
+                    ...report.tasks.status_breakdown.map((t) => ({ metric: "Task Status", label: t.status, value: t.count, percentage: "" })),
+                  ]
+                : []
+            }
+            disabled={!report || loading}
+          />
+        </div>
       </div>
 
       {/* ─── Compact Date Filter Card ─── */}

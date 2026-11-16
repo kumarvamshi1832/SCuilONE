@@ -6,6 +6,7 @@ import type {
   SoftwareTimeEntryFilterParams,
 } from "../types/softwareTimeEntry";
 import {
+  executeSoftwareRequest,
   extractBackendDetail,
   notifySoftwareDataChanged,
   type SoftwareRequestOptions,
@@ -21,28 +22,37 @@ export const getTimeEntries = async (
   params?: SoftwareTimeEntryFilterParams,
   options?: SoftwareRequestOptions
 ): Promise<SoftwareTimeEntry[]> => {
-  try {
-    const query = new URLSearchParams();
-    if (params?.activity_id) query.append("activity_id", params.activity_id);
-    if (params?.project_id) query.append("project_id", params.project_id);
-    if (params?.sprint_id) query.append("sprint_id", params.sprint_id);
-    if (params?.user_id) query.append("user_id", params.user_id);
-    if (params?.from_date) query.append("from_date", params.from_date);
-    if (params?.to_date) query.append("to_date", params.to_date);
+  const query = new URLSearchParams();
+  if (params?.activity_id) query.append("activity_id", params.activity_id);
+  if (params?.project_id) query.append("project_id", params.project_id);
+  if (params?.sprint_id) query.append("sprint_id", params.sprint_id);
+  if (params?.user_id) query.append("user_id", params.user_id);
+  if (params?.from_date) query.append("from_date", params.from_date);
+  if (params?.to_date) query.append("to_date", params.to_date);
 
-    const qs = query.toString();
-    const url = qs ? `${BASE_URL}/?${qs}` : `${BASE_URL}/`;
-    const response = await apiClient.get<any>(url, { signal: options?.signal });
-    const d = response.data;
-    if (Array.isArray(d)) return d;
-    if (d && Array.isArray(d.data)) return d.data;
-    if (d && Array.isArray(d.items)) return d.items;
-    if (d && Array.isArray(d.results)) return d.results;
-    if (d && Array.isArray(d.entries)) return d.entries;
-    return [];
-  } catch (err: any) {
-    throw new Error(extractErrorMessage(err));
-  }
+  const qs = query.toString();
+  const url = qs ? `${BASE_URL}/?${qs}` : `${BASE_URL}/`;
+  const requestKey = `time-entries:${url}`;
+
+  return executeSoftwareRequest(
+    "software_time_entries",
+    requestKey,
+    async () => {
+      try {
+        const response = await apiClient.get<any>(url, { signal: options?.signal });
+        const d = response.data;
+        if (Array.isArray(d)) return d;
+        if (d && Array.isArray(d.data)) return d.data;
+        if (d && Array.isArray(d.items)) return d.items;
+        if (d && Array.isArray(d.results)) return d.results;
+        if (d && Array.isArray(d.entries)) return d.entries;
+        return [];
+      } catch (err: any) {
+        throw new Error(extractErrorMessage(err));
+      }
+    },
+    options
+  );
 };
 
 export const createManualTimeEntry = async (

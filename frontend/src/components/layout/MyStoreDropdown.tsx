@@ -130,9 +130,9 @@ export default function MyStoreDropdown({
   const location = useLocation();
 
   // Resolve active industry and base path
-  const activeIndustry = currentIndustry || tenant?.industry || "real-estate";
+  const activeIndustry = currentIndustry || tenant?.industry || "";
   const normalized = normalizeIndustry(activeIndustry);
-  const basePath = `/${normalized}`;
+  const basePath = normalized ? `/${normalized}` : "";
 
   // Check if current route is company view
   const isActive =
@@ -178,8 +178,8 @@ export default function MyStoreDropdown({
     const display = getIndustryDisplayName(activeIndustry);
     if (display && display.trim()) return display;
     const config = getIndustryConfig(activeIndustry);
-    if (config?.name && config.name.trim()) return config.name;
-    return "Real Estate";
+    if (config?.name && config.slug && config.name.trim()) return config.name;
+    return "Workspace";
   }, [activeIndustry]);
 
   // Final displayed name: Actual registered company name OR verified industry display name

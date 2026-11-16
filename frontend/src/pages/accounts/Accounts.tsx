@@ -8,6 +8,7 @@ import { getAccountPermissions } from "../../utils/accountPermissions";
 import AccountFormModal from "../../components/accounts/AccountFormModal";
 import AccountViewModal from "../../components/accounts/AccountViewModal";
 import AccountDeleteConfirm from "../../components/accounts/AccountDeleteConfirm";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
@@ -256,6 +257,14 @@ export default function Accounts() {
           <p className="text-muted">Manage and maintain customer/company account information.</p>
         </div>
         <div className="header-actions">
+          <ImportExportActions
+            moduleId="accounts"
+            records={filteredAccounts}
+            fetchAllRecords={getAccounts}
+            onImportSuccess={fetchData}
+            canImport={permissions.create}
+            canExport={permissions.view}
+          />
           {permissions.create && (
             <button className="btn-primary" onClick={handleCreate}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

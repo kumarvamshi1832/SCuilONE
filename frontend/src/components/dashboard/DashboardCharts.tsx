@@ -13,6 +13,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useNavigate, useParams } from "react-router-dom";
+import { motion, useReducedMotion } from "motion/react";
 import type { DashboardSummary } from "../../types/dashboard";
 import type { Account } from "../../types/account";
 import { getAccounts } from "../../services/accountService";
@@ -51,6 +52,8 @@ export default function DashboardCharts({
   const navigate = useNavigate();
   const { industry } = useParams();
   const industryPath = industry || "real-estate";
+  const prefersReduced = useReducedMotion();
+  const isAnimationActive = !prefersReduced;
 
   /* ─── Accounts State & Data Fetching ─── */
   const [fetchedAccounts, setFetchedAccounts] = useState<Account[]>([]);
@@ -249,6 +252,7 @@ export default function DashboardCharts({
   const renderAccountLegend = () => {
     return (
       <div
+        className="account-status-legend"
         style={{
           display: "flex",
           justifyContent: "center",
@@ -261,6 +265,7 @@ export default function DashboardCharts({
         {accountStatusData.map((item) => (
           <span
             key={item.status}
+            className="account-legend-item"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -274,6 +279,7 @@ export default function DashboardCharts({
             title={`View ${item.status} accounts`}
           >
             <span
+              className="account-legend-dot"
               style={{
                 width: 8,
                 height: 8,
@@ -295,7 +301,12 @@ export default function DashboardCharts({
   return (
     <div className="dashboard-charts">
       {/* ─── 1. Lead Status (Donut Chart) ─── */}
-      <section className="dashboard-chart-card lead-status-card">
+      <motion.section
+        className="dashboard-chart-card lead-status-card"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.04, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="dashboard-chart-header">
           <h3 className="dashboard-chart-title">Lead Status</h3>
         </div>
@@ -317,6 +328,10 @@ export default function DashboardCharts({
                   paddingAngle={activeLeadData.length > 1 ? 3 : 0}
                   stroke={isDark ? "#1E293B" : "#E1EAF4"}
                   strokeWidth={2}
+                  isAnimationActive={isAnimationActive}
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                  animationBegin={120}
                   label={renderPieLabel}
                   labelLine={{
                     stroke: isDark ? "#94A3B8" : "#64748B",
@@ -395,10 +410,15 @@ export default function DashboardCharts({
         <p className="dashboard-chart-hint">
           Click a slice to view leads with that status.
         </p>
-      </section>
+      </motion.section>
 
       {/* ─── 2. Deals by Stage (Bar Chart) ─── */}
-      <section className="dashboard-chart-card deals-stage-card">
+      <motion.section
+        className="dashboard-chart-card deals-stage-card"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="dashboard-chart-header">
           <h3 className="dashboard-chart-title">Deals by Stage</h3>
         </div>
@@ -457,6 +477,10 @@ export default function DashboardCharts({
                   radius={[6, 6, 0, 0]}
                   maxBarSize={48}
                   cursor="pointer"
+                  isAnimationActive={isAnimationActive}
+                  animationDuration={850}
+                  animationEasing="ease-out"
+                  animationBegin={100}
                   onClick={(_, index) => {
                     const stage = dealData[index]?.stage;
                     if (stage) {
@@ -479,10 +503,15 @@ export default function DashboardCharts({
         <p className="dashboard-chart-hint">
           Click a bar to view deals at that stage.
         </p>
-      </section>
+      </motion.section>
 
       {/* ─── 3. Account Status (Donut Chart - placed immediately below Deals by Stage) ─── */}
-      <section className="dashboard-chart-card account-status-card">
+      <motion.section
+        className="dashboard-chart-card account-status-card"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="dashboard-chart-header">
           <h3 className="dashboard-chart-title">Account Status</h3>
         </div>
@@ -520,6 +549,10 @@ export default function DashboardCharts({
                   paddingAngle={activeAccountStatusData.length > 1 ? 3 : 0}
                   stroke={isDark ? "#1E293B" : "#E1EAF4"}
                   strokeWidth={2}
+                  isAnimationActive={isAnimationActive}
+                  animationDuration={900}
+                  animationEasing="ease-out"
+                  animationBegin={150}
                   label={renderPieLabel}
                   labelLine={{
                     stroke: isDark ? "#94A3B8" : "#64748B",
@@ -581,10 +614,15 @@ export default function DashboardCharts({
         <p className="dashboard-chart-hint">
           Click a slice to view accounts with that status.
         </p>
-      </section>
+      </motion.section>
 
       {/* ─── 4. Task Overview (Donut Chart + Structured Legend) ─── */}
-      <section className="dashboard-chart-card task-overview-card">
+      <motion.section
+        className="dashboard-chart-card task-overview-card"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="dashboard-chart-header">
           <h3 className="dashboard-chart-title">Task Overview</h3>
         </div>
@@ -606,6 +644,10 @@ export default function DashboardCharts({
                   paddingAngle={activeTaskData.length > 1 ? 4 : 0}
                   stroke={isDark ? "#1E293B" : "#E1EAF4"}
                   strokeWidth={2}
+                  isAnimationActive={isAnimationActive}
+                  animationDuration={850}
+                  animationEasing="ease-out"
+                  animationBegin={180}
                 >
                   {activeTaskData.map((task) => (
                     <Cell
@@ -682,7 +724,7 @@ export default function DashboardCharts({
         <p className="dashboard-chart-hint">
           Click a slice or legend item to view matching tasks.
         </p>
-      </section>
+      </motion.section>
     </div>
   );
 }

@@ -1,4 +1,9 @@
 import axios from "axios";
+import { clearCrmAuthStorage } from "../utils/authRouting";
+import {
+  clearPlatformSession,
+  getPlatformRefreshToken,
+} from "./platformApiClient";
 import type {
   CheckEmailRequest,
   CheckEmailResponse,
@@ -555,6 +560,118 @@ export async function completeUserProfile(data: CompleteProfileRequest, token: s
     return response.data;
   } catch (error) {
     handleApiError(error);
+  }
+}
+
+export interface AuthMeResponse {
+  message?: string;
+  user?: {
+    user_id?: string;
+    id?: string;
+    tenant_id?: string;
+    role?: string | null;
+    email?: string;
+    status?: string;
+    must_change_password?: boolean;
+    profile_completed?: boolean;
+    token_purpose?: string;
+  };
+}
+
+export interface TenantBillingProfileResponse {
+  tenant_id: string;
+  company_name: string;
+  industry?: string | null;
+  billing_email?: string | null;
+}
+
+export async function fetchCurrentAuthUser(
+  token?: string
+): Promise<AuthMeResponse> {
+  if (token) {
+    const baseUrl = String(import.meta.env.VITE_API_BASE_URL ?? "")
+      .trim()
+      .replace(/\/+$/, "");
+    const response = await axios.get<AuthMeResponse>(
+      `${baseUrl}/api/v1/auth/me`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
+  }
+
+  const response = await apiClient.get<AuthMeResponse>(AUTH_ENDPOINTS.ME);
+  return response.data;
+}
+
+export async function fetchTenantBillingProfile(
+  token?: string,
+  tenantId?: string | null
+): Promise<TenantBillingProfileResponse> {
+  if (token) {
+    const baseUrl = String(import.meta.env.VITE_API_BASE_URL ?? "")
+      .trim()
+      .replace(/\/+$/, "");
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+    if (tenantId) {
+      headers["X-Tenant-ID"] = tenantId;
+    }
+    const response = await axios.get<TenantBillingProfileResponse>(
+      `${baseUrl}/api/v1/subscription/billing-profile`,
+      { headers }
+    );
+    return response.data;
+  }
+
+  const response = await apiClient.get<TenantBillingProfileResponse>(
+    "/api/v1/subscription/billing-profile"
+  );
+  return response.data;
+}
+
+export async function logoutUserSession(): Promise<void> {
+  const crmRefreshToken =
+    sessionStorage.getItem("refresh_token") ||
+    localStorage.getItem("refresh_token");
+  const platformRefreshToken = getPlatformRefreshToken();
+  const uniqueTokens = Array.from(
+    new Set(
+      [crmRefreshToken, platformRefreshToken].filter(
+        (t): t is string => Boolean(t && t.trim())
+      )
+    )
+  );
+
+  try {
+    if (uniqueTokens.length > 0) {
+      const baseUrl = String(import.meta.env.VITE_API_BASE_URL ?? "")
+        .trim()
+        .replace(/\/+$/, "");
+      await Promise.allSettled(
+        uniqueTokens.map((refreshToken) =>
+          axios.post(
+            `${baseUrl}/api/v1/auth/logout`,
+            { refresh_token: refreshToken },
+            {
+              headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
+            }
+          )
+        )
+      );
+    }
+  } finally {
+    clearCrmAuthStorage();
+    clearPlatformSession();
   }
 }
 

@@ -8,6 +8,7 @@ import { getLeadPermissions } from "../../utils/leadPermissions";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import LeadDeleteConfirm from "../../components/leads/LeadDeleteConfirm";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
@@ -289,6 +290,14 @@ export default function Leads() {
           </p>
         </div>
         <div className="header-actions">
+          <ImportExportActions
+            moduleId="leads"
+            records={filteredLeads}
+            fetchAllRecords={getLeads}
+            onImportSuccess={fetchData}
+            canImport={permissions.canCreate}
+            canExport={permissions.canView}
+          />
           {permissions.canCreate && (
             <button className="btn-primary" onClick={handleCreate} id="create-lead-btn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

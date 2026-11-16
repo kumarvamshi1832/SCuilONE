@@ -5,6 +5,7 @@ import {
   startMFAEnrollment,
   verifyMFAEnrollment,
 } from "../../services/authService";
+import { completeAuthenticatedLogin } from "../../services/authSession";
 import { useTheme } from "../../context/ThemeContext";
 import type { MFAEnrollmentStartResponse } from "../../types/auth";
 import "./MFASetup.css";
@@ -103,68 +104,35 @@ export default function MFASetup() {
         throw new Error("The server did not return an access token.");
       }
 
-      sessionStorage.setItem("access_token", response.access_token);
-
-      if (response.refresh_token) {
-        sessionStorage.setItem("refresh_token", response.refresh_token);
-      } else {
-        sessionStorage.removeItem("refresh_token");
+      if (response.onboarding_required) {
+        sessionStorage.removeItem("mfa_token");
+        sessionStorage.removeItem("mfa_temp_token");
+        sessionStorage.removeItem("mfa_email");
+        sessionStorage.removeItem("mfa_setup_required");
+        sessionStorage.removeItem("otp_flow");
+        if (response.recovery_codes) {
+          sessionStorage.setItem("recovery_codes", JSON.stringify(response.recovery_codes));
+        }
+        navigate("/complete-profile", { replace: true });
+        return;
       }
 
-      if (response.user) {
-        sessionStorage.setItem(
-          "user",
-          JSON.stringify({
-            ...response.user,
-            role: response.role,
-            permissions: response.permissions || [],
-          })
-        );
+      const authResult = await completeAuthenticatedLogin(response);
+      if (!authResult.ok) {
+        sessionStorage.removeItem("mfa_token");
+        sessionStorage.removeItem("mfa_temp_token");
+        sessionStorage.removeItem("mfa_email");
+        sessionStorage.removeItem("mfa_setup_required");
+        sessionStorage.removeItem("otp_flow");
+        setError(authResult.message);
+        return;
       }
-
-      if (response.tenant) {
-        sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
-      }
-
-      sessionStorage.removeItem("mfa_token");
-      sessionStorage.removeItem("mfa_temp_token");
-      sessionStorage.removeItem("mfa_email");
-      sessionStorage.removeItem("mfa_setup_required");
-      sessionStorage.removeItem("otp_flow");
 
       if (response.recovery_codes) {
         sessionStorage.setItem("recovery_codes", JSON.stringify(response.recovery_codes));
       }
 
-      if (response.onboarding_required) {
-        navigate("/complete-profile", { replace: true });
-        return;
-      }
-
-      const normalizedRole = (response.role || "").toUpperCase();
-      const industry = response.tenant?.industry || "";
-
-      if (normalizedRole.includes("MANAGER")) {
-        navigate("/manager/dashboard", { replace: true });
-      } else if (normalizedRole.includes("SALES")) {
-        navigate("/sales/dashboard", { replace: true });
-      } else if (normalizedRole.includes("OPERATIONS")) {
-        navigate("/operations/dashboard", { replace: true });
-      } else if (normalizedRole.includes("SUPPORT")) {
-        navigate("/support/dashboard", { replace: true });
-      } else if (
-        normalizedRole.includes("AUDITOR") ||
-        normalizedRole.includes("READ_ONLY") ||
-        normalizedRole.includes("READ ONLY")
-      ) {
-        navigate("/auditor/dashboard", { replace: true });
-      } else {
-        const industrySlug = industry
-          ? industry.toLowerCase().trim().replace(/\s+/g, "-")
-          : "real-estate";
-
-        navigate(`/${industrySlug}/dashboard`, { replace: true });
-      }
+      navigate(authResult.session.destination, { replace: true });
     } catch (err) {
       const apiError = err as { message?: string };
       setError(apiError.message || "MFA setup verification failed.");

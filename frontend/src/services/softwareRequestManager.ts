@@ -152,7 +152,10 @@ export function clearSoftwareForbidden(moduleKey?: string): void {
         (moduleKey === "software_estimates" && (key.includes("estimates:") || key.includes("est:"))) ||
         (moduleKey === "software_contracts" && (key.includes("contracts:") || key.includes("contract:"))) ||
         (moduleKey === "software_projects" && (key.includes("projects:") || key.includes("proj:"))) ||
-        (moduleKey === "software_sprints" && (key.includes("sprints:") || key.includes("sprint:")))
+        (moduleKey === "software_sprints" && (key.includes("sprints:") || key.includes("sprint:"))) ||
+        (moduleKey === "software_time_entries" && (key.includes("time-entries:") || key.includes("time:"))) ||
+        (moduleKey === "software_invoices" && (key.includes("invoices:") || key.includes("inv:"))) ||
+        (moduleKey === "software_reports" && (key.includes("reports:") || key.includes("report:")))
       ) {
         inFlightRequests.delete(key);
       }

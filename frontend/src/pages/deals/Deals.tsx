@@ -14,6 +14,7 @@ import { getDealPermissions } from "../../utils/dealPermissions";
 import DealFormModal from "../../components/deals/DealFormModal";
 import DealViewModal from "../../components/deals/DealViewModal";
 import DealDeleteConfirm from "../../components/deals/DealDeleteConfirm";
+import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
@@ -286,6 +287,14 @@ export default function Deals() {
           <p className="text-muted">Manage and track your sales opportunities.</p>
         </div>
         <div className="header-actions">
+          <ImportExportActions
+            moduleId="deals"
+            records={filteredDeals}
+            fetchAllRecords={getDeals}
+            onImportSuccess={fetchData}
+            canImport={permissions.create}
+            canExport={permissions.view}
+          />
           {permissions.create && (
             <button className="btn-primary" onClick={handleCreate}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -4,6 +4,8 @@ import {
   getAuthenticatedUserPermissions,
   PermissionDetail,
 } from "../../services/permissionService";
+import { ExportFormatMenu } from "../../components/common/import-export/ExportFormatMenu";
+import { MODULE_CONFIGS } from "../../config/importExportConfig";
 import "../users/Users.css";
 
 export default function Permissions() {
@@ -110,6 +112,10 @@ export default function Permissions() {
               </option>
             ))}
           </select>
+          <ExportFormatMenu
+            config={MODULE_CONFIGS.permissions!}
+            records={filteredPermissions}
+          />
         </div>
       </div>
 

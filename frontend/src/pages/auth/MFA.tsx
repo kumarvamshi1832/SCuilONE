@@ -4,7 +4,7 @@ import {
   verifyOTP,
   verifyMFA,
 } from "../../services/authService";
-import { normalizeIndustry } from "../../utils/industryUtils";
+import { completeAuthenticatedLogin } from "../../services/authSession";
 import { useTheme } from "../../context/ThemeContext";
 import MFASetup from "./MFASetup";
 import "./MFA.css";
@@ -93,47 +93,19 @@ export default function MFA() {
           } catch {}
         }
 
-        sessionStorage.removeItem("mfa_email");
-        sessionStorage.removeItem("mfa_temp_token");
-        sessionStorage.removeItem("otp_flow");
-
-        if (response.access_token) {
-          sessionStorage.setItem("access_token", response.access_token);
-        }
-        if (response.refresh_token) {
-          sessionStorage.setItem("refresh_token", response.refresh_token);
-        }
-        if (response.tenant) {
-          sessionStorage.setItem("tenant", JSON.stringify(response.tenant));
-        }
-        if (response.user) {
-          const userObj = {
-            ...(response.user || {}),
-            role: response.role,
-            permissions: response.permissions || []
-          };
-          sessionStorage.setItem("user", JSON.stringify(userObj));
-        }
-
-        const userRole = (response.role || "").toUpperCase();
-        let targetRoute = "/";
-        if (userRole === "MANAGER" || userRole.includes("MANAGER")) {
-          targetRoute = "/manager/dashboard";
-        } else if (userRole === "SALES_USER" || userRole === "SALES USER" || userRole.includes("SALES")) {
-          targetRoute = "/sales/dashboard";
-        } else if (userRole === "OPERATIONS_USER" || userRole === "OPERATIONS USER" || userRole.includes("OPERATIONS")) {
-          targetRoute = "/operations/dashboard";
-        } else if (userRole === "SUPPORT_USER" || userRole === "SUPPORT USER" || userRole.includes("SUPPORT")) {
-          targetRoute = "/support/dashboard";
-        } else if (userRole === "READ_ONLY" || userRole === "AUDITOR" || userRole === "READ ONLY" || userRole === "READ-ONLY" || userRole === "READ-ONLY / AUDITOR" || userRole === "READ ONLY / AUDITOR" || userRole === "READ_ONLY / AUDITOR" || userRole.includes("AUDITOR")) {
-          targetRoute = "/auditor/dashboard";
-        } else if (response.tenant?.industry) {
-          const ind = normalizeIndustry(response.tenant.industry);
-          targetRoute = `/${ind}/dashboard`;
+        const authResult = await completeAuthenticatedLogin(response);
+        if (!authResult.ok) {
+          sessionStorage.removeItem("mfa_email");
+          sessionStorage.removeItem("mfa_temp_token");
+          sessionStorage.removeItem("mfa_token");
+          sessionStorage.removeItem("mfa_setup_required");
+          sessionStorage.removeItem("otp_flow");
+          setError(authResult.message);
+          return;
         }
 
         setMessage("MFA verified successfully!");
-        setTimeout(() => navigate(targetRoute), 800);
+        setTimeout(() => navigate(authResult.session.destination, { replace: true }), 800);
       } else {
         await verifyOTP({
           email,
