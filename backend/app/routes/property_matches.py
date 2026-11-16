@@ -27,6 +27,34 @@ router = APIRouter(
 )
 
 MAX_AUTO_MATCHES = 20
+NEARBY_BUDGET_PERCENT = 10
+
+# Customer language and the CRM inventory use different names for some types.
+# Keep this mapping centralized so AI-extracted values match inventory values.
+PROPERTY_TYPE_ALIASES = {
+    "apartment": {"apartment", "flat", "flats"},
+    "independent house": {"independent house", "independent home", "house"},
+    "villa": {"villa", "bungalow"},
+    "plot": {"plot", "land"},
+    "commercial": {"commercial"},
+    "office": {"office"},
+    "shop": {"shop", "retail shop"},
+    "warehouse": {"warehouse", "godown"},
+    "other": {"other"},
+}
+
+
+def property_type_aliases(value: str) -> set[str]:
+    """Return every inventory spelling equivalent to a customer property type."""
+    normalized = " ".join((value or "").casefold().split())
+
+    # The requirement may contain either the canonical inventory value or
+    # a customer-facing alias (for example, Flat instead of Apartment).
+    for canonical, aliases in PROPERTY_TYPE_ALIASES.items():
+        if normalized == canonical or normalized in aliases:
+            return aliases
+
+    return {normalized} if normalized else set()
 
 
 def get_db():
@@ -243,8 +271,9 @@ def auto_match_properties(
         Property.status == "Available",
         func.lower(func.trim(Property.listing_type))
         == expected_listing_type.lower(),
-        func.lower(func.trim(Property.property_type))
-        == requirement.property_type.strip().lower(),
+        func.lower(func.trim(Property.property_type)).in_(
+            property_type_aliases(requirement.property_type)
+        ),
     )
 
     if requirement.preferred_city and requirement.preferred_city.strip():
@@ -517,8 +546,9 @@ def get_potential_matches(
         Property.status == "Available",
         func.lower(func.trim(Property.listing_type))
         == expected_listing_type.lower(),
-        func.lower(func.trim(Property.property_type))
-        == requirement.property_type.strip().lower(),
+        func.lower(func.trim(Property.property_type)).in_(
+            property_type_aliases(requirement.property_type)
+        ),
     )
 
     city = (requirement.preferred_city or "").strip()
@@ -605,3 +635,88 @@ def get_potential_matches(
         potential_matches.append(property_record)
 
     return potential_matches
+
+
+@router.get(
+    "/nearby-budget/{requirement_id}",
+    response_model=list[PropertyResponse],
+)
+def get_nearby_budget_matches(
+    requirement_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_active_user),
+    _permission=Depends(require_permission("property_match.view")),
+):
+    """Return available properties priced just above the buyer's max budget.
+
+    This is intentionally separate from exact matches and from the legacy
+    potential-matches endpoint. The upper tolerance is 10% above max_budget.
+    """
+    from decimal import Decimal
+
+    tenant_id, _ = get_tenant_and_user(current_user)
+
+    requirement = db.query(BuyerRequirement).filter(
+        BuyerRequirement.id == requirement_id,
+        BuyerRequirement.tenant_id == tenant_id,
+    ).first()
+
+    if not requirement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Buyer requirement not found in this tenant.",
+        )
+
+    if requirement.status == "Closed" or requirement.max_budget is None:
+        return []
+
+    expected_listing_type = (
+        "Sale" if requirement.requirement_type == "Buy" else "Rent"
+    )
+    max_price = Decimal(str(requirement.max_budget))
+    upper_limit = max_price * (
+        Decimal("1") + Decimal(NEARBY_BUDGET_PERCENT) / Decimal("100")
+    )
+
+    query = db.query(Property).filter(
+        Property.tenant_id == tenant_id,
+        Property.status == "Available",
+        func.lower(func.trim(Property.listing_type)) == expected_listing_type.lower(),
+        func.lower(func.trim(Property.property_type)).in_(
+            property_type_aliases(requirement.property_type)
+        ),
+        Property.price > max_price,
+        Property.price <= upper_limit,
+    )
+
+    city = (requirement.preferred_city or "").strip()
+    location = (requirement.preferred_location or "").strip()
+
+    if city:
+        query = query.filter(
+            func.lower(func.trim(Property.city)) == city.casefold()
+        )
+
+    if location and location.casefold() != city.casefold():
+        query = query.filter(Property.address.ilike(f"%{location}%"))
+
+    if requirement.bedrooms is not None:
+        query = query.filter(Property.bedrooms == requirement.bedrooms)
+
+    if requirement.min_area is not None:
+        query = query.filter(Property.area >= requirement.min_area)
+
+    if requirement.max_area is not None:
+        query = query.filter(Property.area <= requirement.max_area)
+
+    if requirement.min_area is not None or requirement.max_area is not None:
+        query = query.filter(
+            func.lower(func.trim(Property.area_unit))
+            == requirement.area_unit.strip().casefold()
+        )
+
+    return (
+        query.order_by(Property.price.asc(), Property.id.asc())
+        .limit(MAX_AUTO_MATCHES)
+        .all()
+    )

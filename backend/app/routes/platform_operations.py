@@ -222,7 +222,10 @@ def list_platform_support_tickets(
             PlatformSupportTicketMeta,
             PlatformSupportTicketMeta.ticket_id == SupportTicket.id,
         )
-        .filter(PlatformSupportTicketMeta.id.is_(None))
+        .filter(
+            PlatformSupportTicketMeta.id.is_(None),
+            SupportTicket.source != "Client Portal",
+        )
         .all()
     )
     for t in unrouted:
@@ -236,6 +239,8 @@ def list_platform_support_tickets(
     ).join(
         Tenant,
         Tenant.id == SupportTicket.tenant_id,
+    ).filter(
+        SupportTicket.source != "Client Portal",
     )
 
     if effective_industry:
@@ -277,7 +282,14 @@ def get_platform_support_ticket_detail(
     platform_user: dict = Depends(require_platform_permission("platform.tickets.view")),
     db: Session = Depends(get_db),
 ):
-    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.source != "Client Portal",
+        )
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
     meta = auto_route_support_ticket(db, ticket)
@@ -314,7 +326,14 @@ def assign_platform_support_ticket(
 ):
     platform_tenant = ensure_platform_seeded(db)
     actor_id = UUID(str(platform_user["user_id"]))
-    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.source != "Client Portal",
+        )
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
     meta = auto_route_support_ticket(db, ticket, actor_user_id=actor_id)
@@ -368,7 +387,14 @@ def escalate_platform_support_ticket(
     """
     platform_tenant = ensure_platform_seeded(db)
     actor_id = UUID(str(platform_user["user_id"]))
-    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.source != "Client Portal",
+        )
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
     meta = auto_route_support_ticket(db, ticket, actor_user_id=actor_id)
@@ -426,7 +452,14 @@ def update_platform_ticket_status(
 ):
     platform_tenant = ensure_platform_seeded(db)
     actor_id = UUID(str(platform_user["user_id"]))
-    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.source != "Client Portal",
+        )
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
     meta = auto_route_support_ticket(db, ticket, actor_user_id=actor_id)
@@ -485,7 +518,14 @@ def audit_review_support_ticket(
     Allows Team Auditor or Platform Audit to record an independent resolution & SLA review without mutating ticket fields.
     """
     actor_id = UUID(str(platform_user["user_id"]))
-    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.source != "Client Portal",
+        )
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
     meta = auto_route_support_ticket(db, ticket, actor_user_id=actor_id)
@@ -2132,8 +2172,15 @@ def get_platform_or_industry_analytics(
     from app.services.platform_config import get_platform_config
     general_config = get_platform_config(db, "platform.general")
     tenants = db.query(Tenant).filter(Tenant.is_platform.is_(False)).all()
-    all_ticket_rows = (db.query(SupportTicket, PlatformSupportTicketMeta)
-                       .join(PlatformSupportTicketMeta, PlatformSupportTicketMeta.ticket_id == SupportTicket.id).all())
+    all_ticket_rows = (
+        db.query(SupportTicket, PlatformSupportTicketMeta)
+        .join(
+            PlatformSupportTicketMeta,
+            PlatformSupportTicketMeta.ticket_id == SupportTicket.id,
+        )
+        .filter(SupportTicket.source != "Client Portal")
+        .all()
+    )
     all_prospects = db.query(PlatformSalesProspect).all()
     registry_rows = [i for i in PLATFORM_INDUSTRIES if not effective_industry or i["industry_key"] == effective_industry]
     industry_breakdown = []

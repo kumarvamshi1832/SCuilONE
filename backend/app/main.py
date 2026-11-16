@@ -50,6 +50,14 @@ from app.routes.software_delivery_reports import (
 from app.routes.software_invoices import router as software_invoices_router
 from app.routes.support_tickets import router as support_tickets_router
 from app.routes.customer_portal import router as customer_portal_router
+from app.routes.customer_booking_journey import router as customer_booking_journey_router
+from app.routes.customer_portal_lifecycle import router as customer_portal_lifecycle_router
+from app.routes.tasks import router as tasks_router
+from app.routes.trash import router as trash_router
+from app.routes.forecast import router as forecast_router
+from app.routes.email_logs import router as email_logs_router, webhook_router as email_webhook_router
+from app.routes.custom_fields import router as custom_fields_router
+from app.routes.lead_scoring import router as lead_scoring_router  # also registers the auto-score listener
 from app.routes.platform_admin import router as platform_admin_router
 from app.routes.platform_operations import router as platform_operations_router
 from app.routes.subscriptions import (
@@ -182,7 +190,16 @@ app.include_router(software_time_entries_router)
 app.include_router(software_delivery_reports_router)
 app.include_router(software_invoices_router)
 app.include_router(support_tickets_router)
+app.include_router(tasks_router)
+app.include_router(trash_router)
+app.include_router(forecast_router)
+app.include_router(email_logs_router)
+app.include_router(email_webhook_router)
+app.include_router(custom_fields_router)
+app.include_router(lead_scoring_router)
 app.include_router(customer_portal_router)
+app.include_router(customer_booking_journey_router)
+app.include_router(customer_portal_lifecycle_router)
 app.include_router(platform_admin_router)
 app.include_router(platform_operations_router)
 

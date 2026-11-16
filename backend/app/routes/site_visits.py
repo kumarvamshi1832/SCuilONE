@@ -10,6 +10,9 @@ from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.property_match import PropertyMatch
 from app.models.site_visit import SiteVisit
+from app.models.buyer_requirement import BuyerRequirement
+from app.models.customer_portal import CustomerPortalUser
+from app.services.customer_portal_notifications import notify_customer
 from app.models.user import User
 from app.schemas.site_visit import (
     SiteVisitCreate,
@@ -366,9 +369,13 @@ def update_site_visit(
         "scheduled_start" in changes
         or "scheduled_end" in changes
     )
+    confirming_request = (
+        visit.status == "Requested"
+        and new_status in ("Scheduled", "Rescheduled")
+    )
 
     if (
-        rescheduling or "assigned_to" in changes
+        rescheduling or "assigned_to" in changes or confirming_request
     ) and new_status not in ("Cancelled", "Completed", "No-show"):
         validate_no_conflicts(
             db=db,
@@ -414,6 +421,17 @@ def update_site_visit(
 
         visit.updated_at = datetime.utcnow()
         db.flush()
+
+        match = db.query(PropertyMatch).filter(PropertyMatch.id == visit.property_match_id,
+            PropertyMatch.tenant_id == tenant_id).first()
+        requirement = db.query(BuyerRequirement).filter(BuyerRequirement.id == match.buyer_requirement_id,
+            BuyerRequirement.tenant_id == tenant_id).first() if match else None
+        portal_user = db.query(CustomerPortalUser).filter(CustomerPortalUser.tenant_id == tenant_id,
+            CustomerPortalUser.contact_id == requirement.contact_id).first() if requirement else None
+        if portal_user:
+            notify_customer(db, tenant_id, portal_user.id, "Site visit updated",
+                f"Your site visit status is {visit.status}. Scheduled start: {visit.scheduled_start.isoformat()}.",
+                "site_visit", "site_visits", visit.id)
 
         log_audit(
             db=db,

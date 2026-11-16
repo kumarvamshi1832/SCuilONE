@@ -14,6 +14,7 @@ from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.schemas.payment_plan import PaymentPlanCreate
 from app.services.audit_service import log_audit
+from app.services.customer_portal_notifications import notify_booking_customer
 
 router = APIRouter(prefix="/api/v1/bookings/{booking_id}", tags=["Payment Plans and Collections"])
 CENT = Decimal("0.01")
@@ -165,21 +166,25 @@ def create_payment_plan(
                 detail="A payment plan already exists for this booking.",
             )
 
-        existing_payment = db.query(Payment.id).filter(
+        pending_payment = db.query(Payment.id).filter(
             Payment.tenant_id == tenant_id,
             Payment.booking_id == booking.id,
-            Payment.status.in_(["Pending", "Verified"]),
+            Payment.status == "Pending",
         ).first()
-
-        if existing_payment:
+        if pending_payment:
             raise HTTPException(
                 status_code=409,
-                detail="A payment plan cannot be created because this booking already has pending or verified payments.",
-                )
-        total = sum((Decimal(str(item.amount)) for item in payload.installments), ZERO).quantize(CENT)
+                detail="Verify or reject pending payments before creating the installment schedule.",
+            )
+        _, _, verified_gross, refunded_total, _ = payment_totals(db, tenant_id, booking.id)
+        net_already_received = max(ZERO, verified_gross - refunded_total)
         agreed_price = Decimal(str(booking.agreed_price)).quantize(CENT)
-        if total != agreed_price:
-            raise HTTPException(status_code=422, detail=f"Payment plan total must equal the agreed price ({agreed_price}).")
+        remaining_balance = max(ZERO, agreed_price - net_already_received)
+        if remaining_balance <= ZERO:
+            raise HTTPException(status_code=409, detail="The agreed price has already been fully collected; no installment plan is required.")
+        total = sum((Decimal(str(item.amount)) for item in payload.installments), ZERO).quantize(CENT)
+        if total != remaining_balance:
+            raise HTTPException(status_code=422, detail=f"Payment plan total must equal the remaining balance ({remaining_balance}). Verified net received: {net_already_received}.")
         plan = PaymentPlan(tenant_id=tenant_id, booking_id=booking.id, total_amount=total, status="Active", notes=payload.notes, created_by=user_id)
         db.add(plan)
         db.flush()
@@ -194,6 +199,9 @@ def create_payment_plan(
                 status="Pending",
                 notes=item.notes,
             ))
+        notify_booking_customer(db, tenant_id, booking.id, "Installment schedule available",
+            "Your remaining payment schedule is now available in the Customer Portal.",
+            "payment_plan_created", "payment_plans", plan.id)
         log_audit(db=db, tenant_id=tenant_id, user_id=user_id, action="CREATE", module="payment_plans", record_id=plan.id,
                   description=f"Seller created payment plan for booking {booking.id} totaling {total}.",
                   after_data={"booking_id": str(booking.id), "total_amount": str(total), "installment_count": len(payload.installments)})
@@ -264,35 +272,39 @@ def update_payment_plan(
                 detail="A cancelled payment plan cannot be edited.",
             )
 
-        existing_payment = (
+        existing_installment_payment = (
             db.query(Payment.id)
             .filter(
                 Payment.tenant_id == tenant_id,
                 Payment.booking_id == booking.id,
+                Payment.installment_id.is_not(None),
             )
             .first()
         )
-
-        if existing_payment:
+        if existing_installment_payment:
             raise HTTPException(
                 status_code=409,
-                detail=(
-                    "This payment plan cannot be edited because payment "
-                    "records already exist for the booking."
-                ),
+                detail="This payment plan cannot be edited after an installment payment has been submitted.",
             )
+        pending_payment = db.query(Payment.id).filter(
+            Payment.tenant_id == tenant_id,
+            Payment.booking_id == booking.id,
+            Payment.status == "Pending",
+        ).first()
+        if pending_payment:
+            raise HTTPException(status_code=409, detail="Verify or reject pending payments before editing the installment schedule.")
 
+        _, _, verified_gross, refunded_total, _ = payment_totals(db, tenant_id, booking.id)
+        remaining_balance = max(ZERO, Decimal(str(booking.agreed_price)).quantize(CENT) - max(ZERO, verified_gross - refunded_total))
         total = sum(
             (Decimal(str(item.amount)) for item in payload.installments),
             ZERO,
         ).quantize(CENT)
 
-        agreed_price = Decimal(str(booking.agreed_price)).quantize(CENT)
-
-        if total != agreed_price:
+        if total != remaining_balance:
             raise HTTPException(
                 status_code=422,
-                detail=f"Payment plan total must equal the agreed price ({agreed_price}).",
+                detail=f"Payment plan total must equal the remaining balance ({remaining_balance}).",
             )
 
         before_data = {
@@ -333,6 +345,9 @@ def update_payment_plan(
                 )
             )
 
+        notify_booking_customer(db, tenant_id, booking.id, "Installment schedule updated",
+            "Your remaining payment schedule has been updated in the Customer Portal.",
+            "payment_plan_updated", "payment_plans", plan.id)
         log_audit(
             db=db,
             tenant_id=tenant_id,

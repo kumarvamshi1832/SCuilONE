@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 PropertyType = Literal[
     "Apartment",
     "Independent House",
+    "flat",
     "Villa",
     "Plot",
     "Commercial",

@@ -6,6 +6,7 @@ from app.models.role_permission import RolePermission
 
 role_permissions = {
     "Tenant Owner": [
+        "custom_field.view", "custom_field.manage", "email.view", "email.create", "email.delete", "email.manage", "forecast.view", "trash.view", "trash.restore", "trash.purge",
         "industry_config.update",
         "lead.view", "lead.create", "lead.update", "lead.delete", "lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
@@ -63,6 +64,7 @@ role_permissions = {
     ],
 
     "Tenant Admin": [
+        "custom_field.view", "custom_field.manage", "email.view", "email.create", "email.delete", "email.manage", "forecast.view", "trash.view", "trash.restore", "trash.purge",
         "industry_config.update",
         "lead.view", "lead.create", "lead.update", "lead.delete", "lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
@@ -120,6 +122,7 @@ role_permissions = {
     ],
 
     "Manager": [
+        "custom_field.view", "email.view", "email.create", "forecast.view", "trash.view", "trash.restore",
         "lead.view", "lead.create", "lead.update", "lead.delete", "lead.assignment.override",
         "contact.view", "contact.create", "contact.update", "contact.delete",
         "account.view", "account.create", "account.update", "account.delete",
@@ -176,6 +179,7 @@ role_permissions = {
     ],
 
     "Sales User": [
+        "custom_field.view", "email.view", "email.create",
         "lead.view", "lead.create", "lead.update",
         "contact.view", "contact.create", "contact.update",
         "account.view", "account.create", "account.update",

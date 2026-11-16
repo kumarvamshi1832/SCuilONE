@@ -786,6 +786,7 @@ def enforce_industry_scope(platform_user: dict, requested_industry: str | None =
     return norm_requested
 
 
+
 def auto_route_support_ticket(
     db: Session,
     ticket: SupportTicket,
@@ -793,109 +794,250 @@ def auto_route_support_ticket(
     actor_user_id: UUID | None = None,
 ) -> PlatformSupportTicketMeta:
     """
-    Automatically routes a customer company support ticket (Design Rule 4):
-    1. Identifies customer company's industry -> maps to one of the 10 Industry Teams.
-    2. Checks issue type from category/subject -> Support, Technical, or Billing.
-    3. Assigns to least-loaded active Industry Support (or Technical/Billing) employee if not yet assigned.
-    4. Sets SLA response and resolution deadlines based on team SLA config.
+    Automatically routes a tenant company's support ticket.
+
+    1. Identifies the tenant company's industry.
+    2. Classifies the issue as Support, Technical, or Billing.
+    3. Assigns the least-loaded eligible platform employee.
+    4. Applies the configured SLA deadlines.
+
+    Customer Portal tickets are excluded because they must be
+    handled by the customer's own tenant support team.
     """
+
+    # Customer Portal tickets must never enter Platform Support.
+    if ticket.source == "Client Portal":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Customer Portal tickets must be handled "
+                "by the customer's tenant support team."
+            ),
+        )
+
     existing_meta = (
         db.query(PlatformSupportTicketMeta)
-        .filter(PlatformSupportTicketMeta.ticket_id == ticket.id)
+        .filter(
+            PlatformSupportTicketMeta.ticket_id == ticket.id
+        )
         .first()
     )
+
     if existing_meta:
         return existing_meta
 
     if tenant is None:
-        tenant = db.query(Tenant).filter(Tenant.id == ticket.tenant_id).first()
+        tenant = (
+            db.query(Tenant)
+            .filter(Tenant.id == ticket.tenant_id)
+            .first()
+        )
 
     from app.services.platform_config import get_platform_config
-    routing_config = get_platform_config(db, "platform.ticket_routing")
-    industry_key = normalize_industry_key(tenant.industry if tenant else None)
+
+    routing_config = get_platform_config(
+        db,
+        "platform.ticket_routing",
+    )
+
+    industry_key = normalize_industry_key(
+        tenant.industry if tenant else None
+    )
+
     if not industry_key:
         industry_key = "unmapped"
-    team = None
-    if routing_config.get("route_by_industry_first", True):
-        team = next((candidate for candidate in db.query(PlatformIndustryTeam).all()
-                     if normalize_industry_key(candidate.industry_key) == industry_key), None)
 
-    issue_type, routing_queue = classify_ticket_issue_type(ticket.category, ticket.subject)
+    team = None
+
+    if routing_config.get("route_by_industry_first", True):
+        team = next(
+            (
+                candidate
+                for candidate in db.query(PlatformIndustryTeam).all()
+                if normalize_industry_key(candidate.industry_key)
+                == industry_key
+            ),
+            None,
+        )
+
+    issue_type, routing_queue = classify_ticket_issue_type(
+        ticket.category,
+        ticket.subject,
+    )
+
     if not routing_config.get("route_by_issue_type_second", True):
         issue_type, routing_queue = "Support", "Industry Support"
+
     now = datetime.utcnow()
-    configured_response = int(routing_config.get("default_sla_response_minutes", 60))
-    configured_resolution = int(routing_config.get("default_sla_resolution_hours", 24))
-    # Explicit team SLA overrides remain authoritative; unchanged seed defaults inherit platform policy.
-    sla_resp_mins = team.sla_response_minutes if team and team.sla_response_minutes != 60 else configured_response
-    sla_res_hours = team.sla_resolution_hours if team and team.sla_resolution_hours != 24 else configured_resolution
+
+    configured_response = int(
+        routing_config.get("default_sla_response_minutes", 60)
+    )
+
+    configured_resolution = int(
+        routing_config.get("default_sla_resolution_hours", 24)
+    )
+
+    # Explicit team SLA overrides remain authoritative.
+    sla_resp_mins = (
+        team.sla_response_minutes
+        if team and team.sla_response_minutes != 60
+        else configured_response
+    )
+
+    sla_res_hours = (
+        team.sla_resolution_hours
+        if team and team.sla_resolution_hours != 24
+        else configured_resolution
+    )
+
     if ticket.priority == "Urgent":
         sla_resp_mins = max(15, sla_resp_mins // 2)
         sla_res_hours = max(4, sla_res_hours // 2)
-    elif ticket.priority == "High":
-        sla_resp_mins = max(30, int(sla_resp_mins * 0.75))
-        sla_res_hours = max(8, int(sla_res_hours * 0.75))
 
-    def _pick_least_loaded(candidates: list[PlatformEmployee]) -> PlatformEmployee | None:
-        if candidates and not routing_config.get("auto_assign_least_loaded", True):
+    elif ticket.priority == "High":
+        sla_resp_mins = max(
+            30,
+            int(sla_resp_mins * 0.75),
+        )
+        sla_res_hours = max(
+            8,
+            int(sla_res_hours * 0.75),
+        )
+
+    def _pick_least_loaded(
+        candidates: list[PlatformEmployee],
+    ) -> PlatformEmployee | None:
+
+        if (
+            candidates
+            and not routing_config.get(
+                "auto_assign_least_loaded",
+                True,
+            )
+        ):
             return candidates[0]
+
         best_emp = None
         best_load = None
+
         for emp_cand in candidates:
             active_load = (
                 db.query(PlatformSupportTicketMeta)
-                .join(SupportTicket, SupportTicket.id == PlatformSupportTicketMeta.ticket_id)
+                .join(
+                    SupportTicket,
+                    SupportTicket.id
+                    == PlatformSupportTicketMeta.ticket_id,
+                )
                 .filter(
-                    PlatformSupportTicketMeta.assigned_employee_user_id == emp_cand.user_id,
-                    SupportTicket.status.notin_(["Resolved", "Closed"]),
+                    PlatformSupportTicketMeta.assigned_employee_user_id
+                    == emp_cand.user_id,
+                    SupportTicket.status.notin_(
+                        ["Resolved", "Closed"]
+                    ),
                 )
                 .count()
             )
+
             max_load = emp_cand.max_ticket_load or 25
+
             if active_load >= max_load:
                 continue
+
             if best_load is None or active_load < best_load:
                 best_emp = emp_cand
                 best_load = active_load
+
         return best_emp
 
-    def _industry_role_candidates(role_name: str) -> list[PlatformEmployee]:
-        return [candidate for candidate in q.filter(PlatformEmployee.role_name == role_name).all()
-                if normalize_industry_key(candidate.industry_key) == industry_key]
+    def _industry_role_candidates(
+        role_name: str,
+    ) -> list[PlatformEmployee]:
+
+        return [
+            candidate
+            for candidate in q.filter(
+                PlatformEmployee.role_name == role_name
+            ).all()
+            if normalize_industry_key(candidate.industry_key)
+            == industry_key
+        ]
 
     assigned_emp_user_id = ticket.assigned_to
+
     if not assigned_emp_user_id:
-        # Find least-loaded active platform employee for this queue
+
         q = (
             db.query(PlatformEmployee)
-            .join(User, User.id == PlatformEmployee.user_id)
+            .join(
+                User,
+                User.id == PlatformEmployee.user_id,
+            )
             .filter(
                 User.status == "Active",
                 PlatformEmployee.availability_status == "Available",
             )
             .order_by(PlatformEmployee.created_at.asc())
         )
+
         if routing_queue == "Technical":
-            candidate = _pick_least_loaded(q.filter(PlatformEmployee.role_name == "Technical").all())
+
+            candidate = _pick_least_loaded(
+                q.filter(
+                    PlatformEmployee.role_name == "Technical"
+                ).all()
+            )
+
         elif routing_queue == "Billing":
+
             industry_finance = (
                 _industry_role_candidates("Team Finance")
-                if routing_config.get("route_by_industry_first", True) else []
+                if routing_config.get(
+                    "route_by_industry_first",
+                    True,
+                )
+                else []
             )
-            candidate = _pick_least_loaded(industry_finance) or _pick_least_loaded(
-                q.filter(PlatformEmployee.role_name == "Billing").all()
+
+            candidate = (
+                _pick_least_loaded(industry_finance)
+                or _pick_least_loaded(
+                    q.filter(
+                        PlatformEmployee.role_name == "Billing"
+                    ).all()
+                )
             )
+
         else:
+
             industry_support = (
-                _pick_least_loaded(_industry_role_candidates("Industry Support"))
-                or _pick_least_loaded(_industry_role_candidates("Team Manager"))
-                if routing_config.get("route_by_industry_first", True) else None
+                (
+                    _pick_least_loaded(
+                        _industry_role_candidates("Industry Support")
+                    )
+                    or _pick_least_loaded(
+                        _industry_role_candidates("Team Manager")
+                    )
+                )
+                if routing_config.get(
+                    "route_by_industry_first",
+                    True,
+                )
+                else None
             )
-            candidate = industry_support or _pick_least_loaded(
-                q.filter(PlatformEmployee.role_name == "Platform Support").all()
+
+            candidate = (
+                industry_support
+                or _pick_least_loaded(
+                    q.filter(
+                        PlatformEmployee.role_name == "Platform Support"
+                    ).all()
+                )
             )
+
         if candidate:
             assigned_emp_user_id = candidate.user_id
+
             if not ticket.assigned_to:
                 ticket.assigned_to = candidate.user_id
 
@@ -905,8 +1047,16 @@ def auto_route_support_ticket(
         "industry_key": industry_key,
         "issue_type": issue_type,
         "routing_queue": routing_queue,
-        "assigned_employee_user_id": str(assigned_emp_user_id) if assigned_emp_user_id else None,
-        "actor_user_id": str(actor_user_id) if actor_user_id else None,
+        "assigned_employee_user_id": (
+            str(assigned_emp_user_id)
+            if assigned_emp_user_id
+            else None
+        ),
+        "actor_user_id": (
+            str(actor_user_id)
+            if actor_user_id
+            else None
+        ),
     }
 
     meta = PlatformSupportTicketMeta(
@@ -917,10 +1067,16 @@ def auto_route_support_ticket(
         issue_type=issue_type,
         routing_queue=routing_queue,
         assigned_employee_user_id=assigned_emp_user_id,
-        sla_response_due_at=now + timedelta(minutes=sla_resp_mins),
-        sla_resolution_due_at=now + timedelta(hours=sla_res_hours),
+        sla_response_due_at=now + timedelta(
+            minutes=sla_resp_mins
+        ),
+        sla_resolution_due_at=now + timedelta(
+            hours=sla_res_hours
+        ),
         history_json=[history_entry],
     )
+
     db.add(meta)
     db.flush()
+
     return meta

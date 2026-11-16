@@ -18,6 +18,7 @@ from app.schemas.payment_refund import (
     PaymentRefundResponse,
 )
 from app.services.audit_service import log_audit
+from app.services.customer_portal_notifications import notify_booking_customer
 
 
 router = APIRouter(
@@ -488,6 +489,9 @@ def decide_refund(
         refund.processed_by = None
         refund.processed_at = None
         refund.updated_at = datetime.utcnow()
+        notify_booking_customer(db, tenant_id, refund.booking_id, "Refund request declined",
+                                payload.notes or "Your refund request was declined by the finance team.",
+                                "refund_rejected", "payment_refunds", refund.id)
 
         audit_refund(
             db,
@@ -593,6 +597,9 @@ def confirm_manual_refund(
         refund.updated_at = now
 
         booking.refund_amount = new_refund_total
+        notify_booking_customer(db, tenant_id, booking.id, "Refund processed",
+                                f"A refund of {refund.amount:.2f} has been recorded as processed. Reference: {external_reference}.",
+                                "refund_processed", "payment_refunds", refund.id)
 
         audit_refund(
             db,

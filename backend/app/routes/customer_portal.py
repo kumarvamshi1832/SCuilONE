@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.dependencies import require_active_user
 from app.core.password_policy import ensure_password_policy
 from app.core.permissions import require_permission
-from app.core.platform_rbac import auto_route_support_ticket
+# from app.core.platform_rbac import auto_route_support_ticket
+from app.models.role import Role
+from app.models.user_role import UserRole
 from app.core.rate_limiter import limiter
 from app.core.security import (
     create_access_token,
@@ -39,8 +41,12 @@ from app.models.document import Document
 from app.models.lead import Lead
 from app.models.notification import Notification
 from app.models.payment import Payment
+from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.models.property import Property
+from app.models.property_image import PropertyImage
+from app.models.customer_property_shortlist import CustomerPropertyShortlist
+from app.models.customer_booking_journey import CustomerSiteVisitFeedback
 from app.models.property_match import PropertyMatch
 from app.models.site_visit import SiteVisit
 from app.models.software_contract import SoftwareContract
@@ -55,6 +61,7 @@ from app.schemas.customer_portal import (
     PortalActivateRequest,
     PortalChangePasswordRequest,
     PortalCommentCreate,
+    PortalBuyerRequirementCreate,
     PortalCommentResponse,
     PortalContractResponse,
     PortalContractSignRequest,
@@ -70,6 +77,8 @@ from app.schemas.customer_portal import (
     PortalProfileUpdateRequest,
     PortalProjectDetailResponse,
     PortalProjectResponse,
+    PortalSiteVisitRequest,
+    PortalShortlistAddRequest,
     PortalRefreshRequest,
     PortalResetPasswordRequest,
     PortalSwitchWorkspaceRequest,
@@ -165,6 +174,98 @@ def _notify_staff_user(
 ACTIVE_TENANT_STATUS = "Active"
 
 
+def _assign_portal_ticket_to_tenant_support(
+    db: Session,
+    ticket: SupportTicket,
+) -> UUID | None:
+    """
+    Assign a customer-portal ticket only to an active employee
+    belonging to the customer's own tenant.
+
+    Priority:
+    1. Support User
+    2. Operations User
+    3. Tenant Admin
+    4. Tenant Owner
+    5. Manager
+
+    Platform employees are never considered.
+    """
+
+    role_priority = {
+        "Support User": 0,
+        "Operations User": 1,
+        "Tenant Admin": 2,
+        "Tenant Owner": 3,
+        "Manager": 4,
+    }
+
+    candidates = (
+        db.query(User, Role.name)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(
+            User.tenant_id == ticket.tenant_id,
+            User.status == "Active",
+            Role.name.in_(role_priority.keys()),
+        )
+        .all()
+    )
+
+    # Keep each user once, using their highest-priority role.
+    by_user: dict[UUID, tuple[User, int]] = {}
+
+    for user, role_name in candidates:
+        priority = role_priority[role_name]
+        existing = by_user.get(user.id)
+
+        if existing is None or priority < existing[1]:
+            by_user[user.id] = (user, priority)
+
+    if not by_user:
+        return None
+
+    # Select users with the highest available role priority.
+    best_priority = min(
+        priority for _, priority in by_user.values()
+    )
+
+    eligible = [
+        user
+        for user, priority in by_user.values()
+        if priority == best_priority
+    ]
+
+    # Count each eligible employee's active ticket workload.
+    loads = dict(
+        db.query(
+            SupportTicket.assigned_to,
+            func.count(SupportTicket.id),
+        )
+        .filter(
+            SupportTicket.tenant_id == ticket.tenant_id,
+            SupportTicket.assigned_to.in_(
+                [user.id for user in eligible]
+            ),
+            SupportTicket.status.notin_(["Resolved", "Closed"]),
+        )
+        .group_by(SupportTicket.assigned_to)
+        .all()
+    )
+
+    # Choose the employee with the lowest workload.
+    selected = min(
+        eligible,
+        key=lambda user: (
+            loads.get(user.id, 0),
+            user.created_at,
+            str(user.id),
+        ),
+    )
+
+    return selected.id
+
+
 def tenant_is_active(db: Session, tenant_id: UUID) -> bool:
     """Customers may only use the portal while their workspace is Active."""
     return (
@@ -181,6 +282,7 @@ def ensure_tenant_active(db: Session, tenant_id: UUID) -> None:
 
 
 def require_portal_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(portal_security),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -195,6 +297,7 @@ def require_portal_user(
         account_id = UUID(str(payload["account_id"]))
     except (KeyError, ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid customer portal token data.")
+    request.state.portal_user_id = str(portal_user_id)  # used by the rate limiter key
     portal_user = db.query(CustomerPortalUser).filter(
         CustomerPortalUser.id == portal_user_id,
         CustomerPortalUser.tenant_id == tenant_id,
@@ -1129,27 +1232,20 @@ def update_customer_portal_profile(
 
 
 def _account_booking_filter(db: Session, portal: dict):
-    """Matches bookings belonging to this customer's Account/Contact via Deal, Lead, BuyerRequirement, or email."""
+    """Restrict booking visibility to this exact portal contact and its verified email.
+
+    Account-wide lead/deal matching is intentionally excluded because an Account can
+    contain multiple unrelated contacts and must not expose another buyer's booking.
+    """
     tenant_id = portal["tenant_id"]
-    account_id = portal["account_id"]
     contact_id = portal["contact_id"]
     email = (portal.get("email") or "").strip().lower()
 
-    lead_ids = [
-        r[0]
-        for r in db.query(Lead.id).filter(
-            Lead.tenant_id == tenant_id,
-            or_(Lead.account_id == account_id, func.lower(Lead.email) == email),
-        ).all()
-    ]
-    req_filters = [BuyerRequirement.contact_id == contact_id]
-    if lead_ids:
-        req_filters.append(BuyerRequirement.lead_id.in_(lead_ids))
     req_ids = [
         r[0]
         for r in db.query(BuyerRequirement.id).filter(
             BuyerRequirement.tenant_id == tenant_id,
-            or_(*req_filters),
+            BuyerRequirement.contact_id == contact_id,
         ).all()
     ]
     deal_booking_ids = [
@@ -1157,18 +1253,28 @@ def _account_booking_filter(db: Session, portal: dict):
         for r in db.query(Deal.booking_id).filter(
             Deal.tenant_id == tenant_id,
             Deal.booking_id.isnot(None),
-            or_(Deal.account_id == account_id, Deal.contact_id == contact_id),
+            Deal.contact_id == contact_id,
         ).all()
     ]
 
-    clauses = [func.lower(Booking.buyer_email) == email]
-    if lead_ids:
-        clauses.append(Booking.lead_id.in_(lead_ids))
+    clauses = []
+    if email:
+        contact = db.query(Contact).filter(
+            Contact.id == contact_id,
+            Contact.tenant_id == tenant_id,
+        ).first()
+        same_email_contacts = db.query(func.count(Contact.id)).filter(
+            Contact.tenant_id == tenant_id,
+            func.lower(Contact.email) == email,
+        ).scalar() or 0
+        if contact and (contact.email or "").strip().lower() == email and same_email_contacts == 1:
+            clauses.append(func.lower(Booking.buyer_email) == email)
     if req_ids:
         clauses.append(Booking.buyer_requirement_id.in_(req_ids))
     if deal_booking_ids:
         clauses.append(Booking.id.in_(deal_booking_ids))
-
+    if not clauses:
+        return db.query(Booking).filter(Booking.id == None)
     return db.query(Booking).filter(Booking.tenant_id == tenant_id, or_(*clauses))
 
 
@@ -1211,6 +1317,7 @@ def _serialize_portal_invoice(invoice: SoftwareInvoice) -> dict:
         "balance_due": balance,
         "is_overdue": is_overdue,
         "days_overdue": (today - invoice.due_date).days if is_overdue else 0,
+        "notes": invoice.notes,
         "sent_at": invoice.sent_at,
         "created_at": invoice.created_at,
         "updated_at": invoice.updated_at,
@@ -1399,18 +1506,26 @@ def create_portal_ticket(
     try:
         db.add(ticket)
         db.flush()
-        meta = auto_route_support_ticket(db, ticket)
-        if meta and meta.assigned_employee_user_id and not ticket.assigned_to:
-            ticket.assigned_to = meta.assigned_employee_user_id
+        # Customer Portal tickets belong to the customer's tenant
+        # # Never route these tickets to SCuilONE Platform Support.
+        ticket.assigned_to = _assign_portal_ticket_to_tenant_support(
+            db,
+            ticket,
+        )
+
         _notify_staff_user(
             db,
             tenant_id=portal["tenant_id"],
             recipient_user_id=ticket.assigned_to,
             title=f"New Portal Ticket {ticket.ticket_number}",
-            message=f"{contact.full_name} submitted '{ticket.subject}' ({ticket.priority}).",
+            message=(
+                f"{contact.full_name} submitted "
+                f"'{ticket.subject}' ({ticket.priority})."
+            ),
             related_module="support_tickets",
             related_record_id=ticket.id,
-        )
+
+            )
         log_audit(
             db,
             tenant_id=portal["tenant_id"],
@@ -2112,9 +2227,16 @@ def _serialize_portal_booking(db: Session, tenant_id: UUID, booking: Booking) ->
         .order_by(Payment.payment_date.desc())
         .all()
     )
-    verified_paid = money(
+    verified_paid_gross = money(
         sum((Decimal(str(p.amount)) for p in payments if p.status == "Verified"), Decimal("0.00"))
     )
+    processed_refunds = db.query(PaymentRefund).filter(
+        PaymentRefund.tenant_id == tenant_id,
+        PaymentRefund.booking_id == booking.id,
+        PaymentRefund.status == "Processed",
+    ).all()
+    refunded_total = money(sum((Decimal(str(r.amount)) for r in processed_refunds), Decimal("0.00")))
+    verified_paid = max(Decimal("0.00"), verified_paid_gross - refunded_total)
     agreed = money(booking.agreed_price)
     remaining = max(agreed - verified_paid, Decimal("0.00"))
 
@@ -2129,6 +2251,7 @@ def _serialize_portal_booking(db: Session, tenant_id: UUID, booking: Booking) ->
         "booking_amount": str(money(booking.booking_amount)),
         "agreed_price": str(agreed),
         "verified_paid_amount": str(verified_paid),
+        "refunded_amount": str(refunded_total),
         "remaining_balance": str(remaining),
         "refund_amount": str(money(booking.refund_amount)),
         "cancellation_reason": booking.cancellation_reason,
@@ -2208,16 +2331,7 @@ def list_portal_site_visits(
     contact_id = portal["contact_id"]
     email = (portal.get("email") or "").strip().lower()
 
-    lead_ids = [
-        r[0]
-        for r in db.query(Lead.id).filter(
-            Lead.tenant_id == tenant_id,
-            or_(Lead.account_id == account_id, func.lower(Lead.email) == email),
-        ).all()
-    ]
     req_filters = [BuyerRequirement.contact_id == contact_id]
-    if lead_ids:
-        req_filters.append(BuyerRequirement.lead_id.in_(lead_ids))
 
     rows = (
         db.query(SiteVisit, PropertyMatch, Property)
@@ -2226,18 +2340,34 @@ def list_portal_site_visits(
         .join(Property, Property.id == PropertyMatch.property_id)
         .filter(
             SiteVisit.tenant_id == tenant_id,
+            PropertyMatch.tenant_id == tenant_id,
             BuyerRequirement.tenant_id == tenant_id,
+            Property.tenant_id == tenant_id,
             or_(*req_filters),
         )
         .order_by(SiteVisit.scheduled_start.desc())
         .all()
     )
-    return [
-        {
+    result = []
+    for visit, match, prop in rows:
+        customer_feedback = db.query(CustomerSiteVisitFeedback).filter(
+            CustomerSiteVisitFeedback.tenant_id == tenant_id,
+            CustomerSiteVisitFeedback.portal_user_id == portal["portal_user_id"],
+            CustomerSiteVisitFeedback.site_visit_id == visit.id,
+        ).first()
+        result.append({
             "id": str(visit.id),
             "scheduled_start": visit.scheduled_start,
             "scheduled_end": visit.scheduled_end,
             "status": visit.status,
+            "outcome": visit.outcome,
+            "staff_feedback": visit.buyer_feedback,
+            "interest_level": visit.interest_level,
+            "follow_up_required": visit.follow_up_required,
+            "follow_up_date": visit.follow_up_date,
+            "customer_feedback": customer_feedback.feedback if customer_feedback else None,
+            "customer_rating": customer_feedback.rating if customer_feedback else None,
+            "customer_decision": customer_feedback.decision if customer_feedback else None,
             "property": {
                 "id": str(prop.id),
                 "name": prop.name,
@@ -2246,9 +2376,8 @@ def list_portal_site_visits(
                 "city": prop.city,
                 "state": prop.state,
             },
-        }
-        for visit, _match, prop in rows
-    ]
+        })
+    return result
 
 
 # ==============================================================================
@@ -2275,3 +2404,643 @@ def list_portal_documents(
         .order_by(Document.created_at.desc())
         .all()
     )
+
+
+
+# ==============================================================================
+# 11. LOCAL OLLAMA AI REQUIREMENT COLLECTION & CONFIRMATION (PHASE 3)
+# ==============================================================================
+
+from app.models.ai_conversation import AIConversation
+from app.schemas.ai_conversation import (
+    AIConversationResponse,
+    AIConversationStartRequest,
+    AIConversationSummaryResponse,
+    AIMessageSendRequest,
+    AIRequirementConfirmRequest,
+    AIRequirementReviseRequest,
+    PortalAIStatusResponse,
+    StaffAIDiagnosticsResponse,
+)
+from app.services.ai_conversation_service import (
+    confirm_ai_requirement,
+    get_owned_conversation_or_404,
+    process_customer_ai_message,
+    revise_ai_requirement,
+    start_or_resume_ai_conversation,
+)
+from app.services.ai_conversation_service import (
+    resolve_active_assignee,
+    resolve_tenant_ai_industry,
+    verify_portal_customer_relationships,
+)
+from app.services.ollama_service import check_ollama_health
+
+
+@router.get("/ai/status", response_model=PortalAIStatusResponse)
+@limiter.limit("30/minute")
+async def customer_portal_ai_status(
+    request: Request,
+    response: Response,
+    portal: dict = Depends(require_portal_user),
+):
+    """Customer-safe AI readiness check (never exposes server version, URLs, or model lists)."""
+    health = await check_ollama_health()
+    ready = bool(health.get("available") and health.get("model_present"))
+    return PortalAIStatusResponse(
+        available=bool(health.get("available")),
+        assistant_ready=ready,
+        message=(
+            "AI requirement assistant is available."
+            if ready
+            else "AI requirement assistant is temporarily offline; structured requirement collection remains available."
+        ),
+    )
+
+
+@router.get(
+    "/ai/diagnostics",
+    response_model=StaffAIDiagnosticsResponse,
+    dependencies=[Depends(require_permission("audit.view"))],
+)
+async def staff_ai_diagnostics(
+    current_user: dict = Depends(require_active_user),
+):
+    """Staff/Admin-only Ollama diagnostics endpoint."""
+    health = await check_ollama_health()
+    return StaffAIDiagnosticsResponse(**health)
+
+
+@router.post(
+    "/ai/conversations",
+    response_model=AIConversationResponse,
+    status_code=201,
+)
+@limiter.limit("20/minute")
+async def start_portal_ai_conversation(
+    request: Request,
+    response: Response,
+    payload: AIConversationStartRequest | None = None,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    req_body = payload or AIConversationStartRequest()
+    return await start_or_resume_ai_conversation(
+        db=db,
+        portal=portal,
+        force_new=req_body.force_new,
+        initial_message=req_body.initial_message,
+    )
+
+
+@router.get(
+    "/ai/conversations",
+    response_model=list[AIConversationSummaryResponse],
+)
+def list_portal_ai_conversations(
+    conversation_status: str | None = Query(default=None, alias="status"),
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(AIConversation).filter(
+        AIConversation.tenant_id == portal["tenant_id"],
+        AIConversation.portal_user_id == portal["portal_user_id"],
+    )
+    if conversation_status:
+        query = query.filter(AIConversation.status == conversation_status)
+    return query.order_by(AIConversation.updated_at.desc()).all()
+
+
+@router.get(
+    "/ai/conversations/{conversation_id}",
+    response_model=AIConversationResponse,
+)
+def get_portal_ai_conversation(
+    conversation_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    return get_owned_conversation_or_404(
+        db=db,
+        tenant_id=portal["tenant_id"],
+        portal_user_id=portal["portal_user_id"],
+        conversation_id=conversation_id,
+    )
+
+
+@router.post(
+    "/ai/conversations/{conversation_id}/messages",
+    response_model=AIConversationResponse,
+)
+@limiter.limit("15/minute")
+async def send_portal_ai_message(
+    request: Request,
+    response: Response,
+    conversation_id: UUID,
+    payload: AIMessageSendRequest,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    return await process_customer_ai_message(
+        db=db,
+        portal=portal,
+        conversation_id=conversation_id,
+        message_text=payload.message,
+    )
+
+
+@router.post(
+    "/ai/conversations/{conversation_id}/confirm",
+    response_model=AIConversationResponse,
+)
+@limiter.limit("10/minute")
+def confirm_portal_ai_requirement(
+    request: Request,
+    response: Response,
+    conversation_id: UUID,
+    payload: AIRequirementConfirmRequest,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    return confirm_ai_requirement(
+        db=db,
+        portal=portal,
+        conversation_id=conversation_id,
+        confirmed=payload.confirmed,
+        customer_notes=payload.customer_notes,
+    )
+
+
+@router.post(
+    "/ai/conversations/{conversation_id}/revise",
+    response_model=AIConversationResponse,
+)
+@limiter.limit("10/minute")
+async def revise_portal_ai_requirement(
+    request: Request,
+    response: Response,
+    conversation_id: UUID,
+    payload: AIRequirementReviseRequest,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    return await revise_ai_requirement(
+        db=db,
+        portal=portal,
+        conversation_id=conversation_id,
+        correction_message=payload.correction_message,
+        field_updates=payload.field_updates,
+    )
+
+
+# ==============================================================================
+# CUSTOMER REAL ESTATE JOURNEY
+# These endpoints are portal-user scoped. Staff property-match/site-visit APIs
+# remain staff-only and are deliberately not reused here.
+# ==============================================================================
+
+def _portal_buyer_requirement_or_404(db: Session, portal: dict, requirement_id: UUID) -> BuyerRequirement:
+    requirement = db.query(BuyerRequirement).filter(
+        BuyerRequirement.id == requirement_id,
+        BuyerRequirement.tenant_id == portal["tenant_id"],
+        BuyerRequirement.contact_id == portal["contact_id"],
+    ).first()
+    if not requirement:
+        raise HTTPException(status_code=404, detail="Buyer requirement not found for your portal account.")
+    return requirement
+
+
+def _portal_property_payload(db: Session, prop: Property, match: PropertyMatch) -> dict:
+    images = db.query(PropertyImage).filter(
+        PropertyImage.tenant_id == prop.tenant_id,
+        PropertyImage.property_id == prop.id,
+    ).order_by(PropertyImage.is_primary.desc(), PropertyImage.sort_order.asc()).all()
+    return {
+        "match_id": str(match.id),
+        "match_status": match.status,
+        "property": {
+            "id": str(prop.id),
+            "name": prop.name,
+            "unit_number": prop.unit_number,
+            "property_type": prop.property_type,
+            "listing_type": prop.listing_type,
+            "description": prop.description,
+            "address": prop.address,
+            "city": prop.city,
+            "state": prop.state,
+            "country": prop.country,
+            "postal_code": prop.postal_code,
+            "price": str(prop.price),
+            "currency": prop.currency,
+            "area": str(prop.area) if prop.area is not None else None,
+            "area_unit": prop.area_unit,
+            "bedrooms": prop.bedrooms,
+            "bathrooms": prop.bathrooms,
+            "furnishing": prop.furnishing,
+            "status": prop.status,
+            "images": [
+                {"image_url": image.image_url, "image_type": image.image_type, "is_primary": image.is_primary}
+                for image in images
+            ],
+        },
+    }
+
+
+@router.post(
+    "/buyer-requirements",
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("10/minute")
+def create_portal_buyer_requirement(
+    request: Request,
+    response: Response,
+    payload: PortalBuyerRequirementCreate,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    """Create a real-estate BuyerRequirement directly from the customer portal.
+
+    The authenticated portal identity supplies tenant/contact/account ownership;
+    the request body cannot choose another customer, staff assignee, or status.
+    """
+    industry_type = resolve_tenant_ai_industry(db, portal["tenant_id"])
+    if industry_type != "real_estate":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Manual buyer requirements are available only for Real Estate customers.",
+        )
+
+    _account, contact, lead = verify_portal_customer_relationships(db, portal)
+    assigned_to = resolve_active_assignee(db, portal["tenant_id"], lead, portal=portal)
+
+    customer_notes = payload.notes.strip() if payload.notes else None
+    notes = (
+        f"Manually submitted through Customer Portal by {portal['email']}."
+        + (f"\nAdditional preferences: {customer_notes}" if customer_notes else "")
+    )
+
+    requirement = BuyerRequirement(
+        tenant_id=portal["tenant_id"],
+        created_by=None,
+        lead_id=lead.id if lead else None,
+        contact_id=contact.id,
+        assigned_to=assigned_to,
+        requirement_type=payload.requirement_type,
+        property_type=payload.property_type,
+        preferred_city=payload.preferred_city,
+        preferred_location=payload.preferred_location,
+        min_budget=payload.min_budget,
+        max_budget=payload.max_budget,
+        bedrooms=payload.bedrooms,
+        min_area=payload.min_area,
+        max_area=payload.max_area,
+        area_unit=payload.area_unit,
+        status="New",
+        notes=notes,
+    )
+
+    try:
+        db.add(requirement)
+        db.flush()
+
+        if assigned_to:
+            _notify_staff_user(
+                db=db,
+                tenant_id=portal["tenant_id"],
+                recipient_user_id=assigned_to,
+                title="New customer buyer requirement",
+                message=(
+                    f"{contact.full_name} ({portal['email']}) submitted a manual "
+                    f"{payload.requirement_type.lower()} requirement for {payload.property_type} "
+                    f"in {payload.preferred_city}. Please review and match properties."
+                ),
+                related_module="buyer_requirements",
+                related_record_id=requirement.id,
+            )
+        else:
+            manager_rows = (
+                db.query(User.id)
+                .join(UserRole, UserRole.user_id == User.id)
+                .join(Role, Role.id == UserRole.role_id)
+                .filter(
+                    User.tenant_id == portal["tenant_id"],
+                    User.status == "Active",
+                    Role.name.in_(("Tenant Owner", "Tenant Admin", "Manager")),
+                )
+                .distinct()
+                .all()
+            )
+            for (manager_id,) in manager_rows:
+                db.add(Notification(
+                    tenant_id=portal["tenant_id"],
+                    recipient_user_id=manager_id,
+                    workflow_id=None,
+                    title="Customer submitted a buyer requirement",
+                    message=(
+                        f"{contact.full_name} ({portal['email']}) submitted a manual "
+                        f"{payload.requirement_type.lower()} requirement for {payload.property_type} "
+                        f"in {payload.preferred_city}. Please assign it and arrange property matching."
+                    ),
+                    notification_type="customer_portal",
+                    related_module="buyer_requirements",
+                    related_record_id=requirement.id,
+                    is_read=False,
+                ))
+
+        log_audit(
+            db=db,
+            tenant_id=portal["tenant_id"],
+            user_id=None,
+            action="CUSTOMER_PORTAL_MANUAL_CREATE",
+            module="buyer_requirements",
+            record_id=requirement.id,
+            description=f"Customer {portal['email']} submitted a manual buyer requirement.",
+            after_data={
+                "id": str(requirement.id),
+                "contact_id": str(contact.id),
+                "lead_id": str(lead.id) if lead else None,
+                "requirement_type": requirement.requirement_type,
+                "property_type": requirement.property_type,
+                "preferred_city": requirement.preferred_city,
+                "preferred_location": requirement.preferred_location,
+                "min_budget": str(requirement.min_budget) if requirement.min_budget is not None else None,
+                "max_budget": str(requirement.max_budget) if requirement.max_budget is not None else None,
+                "bedrooms": requirement.bedrooms,
+                "min_area": str(requirement.min_area) if requirement.min_area is not None else None,
+                "max_area": str(requirement.max_area) if requirement.max_area is not None else None,
+                "area_unit": requirement.area_unit,
+                "status": requirement.status,
+                "assigned_to": str(assigned_to) if assigned_to else None,
+            },
+        )
+        db.commit()
+        db.refresh(requirement)
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "id": str(requirement.id),
+        "requirement_type": requirement.requirement_type,
+        "property_type": requirement.property_type,
+        "preferred_city": requirement.preferred_city,
+        "preferred_location": requirement.preferred_location,
+        "min_budget": str(requirement.min_budget) if requirement.min_budget is not None else None,
+        "max_budget": str(requirement.max_budget) if requirement.max_budget is not None else None,
+        "bedrooms": requirement.bedrooms,
+        "min_area": str(requirement.min_area) if requirement.min_area is not None else None,
+        "max_area": str(requirement.max_area) if requirement.max_area is not None else None,
+        "area_unit": requirement.area_unit,
+        "status": requirement.status,
+        "created_at": requirement.created_at,
+        "updated_at": requirement.updated_at,
+    }
+
+
+@router.get("/buyer-requirements")
+def list_portal_buyer_requirements(
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    requirements = db.query(BuyerRequirement).filter(
+        BuyerRequirement.tenant_id == portal["tenant_id"],
+        BuyerRequirement.contact_id == portal["contact_id"],
+    ).order_by(BuyerRequirement.created_at.desc()).all()
+    return [
+        {
+            "id": str(item.id),
+            "requirement_type": item.requirement_type,
+            "property_type": item.property_type,
+            "preferred_city": item.preferred_city,
+            "preferred_location": item.preferred_location,
+            "min_budget": str(item.min_budget) if item.min_budget is not None else None,
+            "max_budget": str(item.max_budget) if item.max_budget is not None else None,
+            "bedrooms": item.bedrooms,
+            "min_area": str(item.min_area) if item.min_area is not None else None,
+            "max_area": str(item.max_area) if item.max_area is not None else None,
+            "area_unit": item.area_unit,
+            "status": item.status,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        for item in requirements
+    ]
+
+
+@router.get("/buyer-requirements/{requirement_id}")
+def get_portal_buyer_requirement(
+    requirement_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    item = _portal_buyer_requirement_or_404(db, portal, requirement_id)
+    return {
+        "id": str(item.id),
+        "requirement_type": item.requirement_type,
+        "property_type": item.property_type,
+        "preferred_city": item.preferred_city,
+        "preferred_location": item.preferred_location,
+        "min_budget": str(item.min_budget) if item.min_budget is not None else None,
+        "max_budget": str(item.max_budget) if item.max_budget is not None else None,
+        "bedrooms": item.bedrooms,
+        "min_area": str(item.min_area) if item.min_area is not None else None,
+        "max_area": str(item.max_area) if item.max_area is not None else None,
+        "area_unit": item.area_unit,
+        "status": item.status,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+@router.get("/buyer-requirements/{requirement_id}/matches")
+def list_portal_requirement_matches(
+    requirement_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    _portal_buyer_requirement_or_404(db, portal, requirement_id)
+    rows = db.query(PropertyMatch, Property).join(
+        Property, Property.id == PropertyMatch.property_id
+    ).filter(
+        PropertyMatch.tenant_id == portal["tenant_id"],
+        PropertyMatch.buyer_requirement_id == requirement_id,
+        Property.tenant_id == portal["tenant_id"],
+        Property.status == "Available",
+        PropertyMatch.status.in_(["Matched", "Viewed", "Shortlisted"]),
+    ).order_by(PropertyMatch.created_at.desc()).all()
+    return [_portal_property_payload(db, prop, match) for match, prop in rows]
+
+
+@router.get("/buyer-requirements/{requirement_id}/shortlist")
+def list_portal_shortlisted_properties(
+    requirement_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    _portal_buyer_requirement_or_404(db, portal, requirement_id)
+    rows = db.query(CustomerPropertyShortlist, PropertyMatch, Property).join(
+        PropertyMatch, PropertyMatch.id == CustomerPropertyShortlist.property_match_id
+    ).join(Property, Property.id == PropertyMatch.property_id).filter(
+        CustomerPropertyShortlist.tenant_id == portal["tenant_id"],
+        CustomerPropertyShortlist.portal_user_id == portal["portal_user_id"],
+        CustomerPropertyShortlist.buyer_requirement_id == requirement_id,
+        PropertyMatch.tenant_id == portal["tenant_id"],
+        Property.tenant_id == portal["tenant_id"],
+        Property.status == "Available",
+    ).order_by(CustomerPropertyShortlist.created_at.desc()).all()
+    return [_portal_property_payload(db, prop, match) for _saved, match, prop in rows]
+
+
+@router.post("/buyer-requirements/{requirement_id}/shortlist", status_code=status.HTTP_201_CREATED)
+def add_portal_property_to_shortlist(
+    requirement_id: UUID,
+    payload: PortalShortlistAddRequest,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    _portal_buyer_requirement_or_404(db, portal, requirement_id)
+    row = db.query(PropertyMatch, Property).join(
+        Property, Property.id == PropertyMatch.property_id
+    ).filter(
+        PropertyMatch.id == payload.property_match_id,
+        PropertyMatch.tenant_id == portal["tenant_id"],
+        PropertyMatch.buyer_requirement_id == requirement_id,
+        Property.status == "Available",
+        Property.tenant_id == portal["tenant_id"],
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Available matched property not found for this requirement.")
+    saved = db.query(CustomerPropertyShortlist).filter(
+        CustomerPropertyShortlist.tenant_id == portal["tenant_id"],
+        CustomerPropertyShortlist.portal_user_id == portal["portal_user_id"],
+        CustomerPropertyShortlist.buyer_requirement_id == requirement_id,
+        CustomerPropertyShortlist.property_match_id == payload.property_match_id,
+    ).first()
+    if not saved:
+        saved = CustomerPropertyShortlist(
+            tenant_id=portal["tenant_id"],
+            portal_user_id=portal["portal_user_id"],
+            buyer_requirement_id=requirement_id,
+            property_match_id=payload.property_match_id,
+        )
+        db.add(saved)
+        db.commit()
+        db.refresh(saved)
+    return {"id": str(saved.id), "buyer_requirement_id": str(requirement_id), "property_match_id": str(payload.property_match_id), "created_at": saved.created_at}
+
+
+@router.delete("/buyer-requirements/{requirement_id}/shortlist/{property_match_id}")
+def remove_portal_property_from_shortlist(
+    requirement_id: UUID,
+    property_match_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    _portal_buyer_requirement_or_404(db, portal, requirement_id)
+    saved = db.query(CustomerPropertyShortlist).filter(
+        CustomerPropertyShortlist.tenant_id == portal["tenant_id"],
+        CustomerPropertyShortlist.portal_user_id == portal["portal_user_id"],
+        CustomerPropertyShortlist.buyer_requirement_id == requirement_id,
+        CustomerPropertyShortlist.property_match_id == property_match_id,
+    ).first()
+    if not saved:
+        raise HTTPException(status_code=404, detail="Property is not in your shortlist.")
+    db.delete(saved)
+    db.commit()
+    return {"message": "Property removed from your shortlist."}
+
+
+@router.post("/site-visits/requests", status_code=status.HTTP_201_CREATED)
+def request_portal_site_visit(
+    payload: PortalSiteVisitRequest,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    match_row = db.query(PropertyMatch, BuyerRequirement).join(
+        BuyerRequirement, BuyerRequirement.id == PropertyMatch.buyer_requirement_id
+    ).join(Property, Property.id == PropertyMatch.property_id).filter(
+        PropertyMatch.id == payload.property_match_id,
+        PropertyMatch.tenant_id == portal["tenant_id"],
+        BuyerRequirement.tenant_id == portal["tenant_id"],
+        BuyerRequirement.contact_id == portal["contact_id"],
+        Property.tenant_id == portal["tenant_id"],
+        Property.status == "Available",
+    ).first()
+    if not match_row:
+        raise HTTPException(status_code=404, detail="Matched property not found for your portal account.")
+    match, requirement = match_row
+    shortlisted = db.query(CustomerPropertyShortlist.id).filter(
+        CustomerPropertyShortlist.tenant_id == portal["tenant_id"],
+        CustomerPropertyShortlist.portal_user_id == portal["portal_user_id"],
+        CustomerPropertyShortlist.buyer_requirement_id == match.buyer_requirement_id,
+        CustomerPropertyShortlist.property_match_id == match.id,
+    ).first()
+    if not shortlisted:
+        raise HTTPException(status_code=409, detail="Add this property to your shortlist before requesting a site visit.")
+    duplicate = db.query(SiteVisit.id).filter(
+        SiteVisit.tenant_id == portal["tenant_id"],
+        SiteVisit.property_match_id == match.id,
+        SiteVisit.status.in_(["Requested", "Scheduled", "Rescheduled"]),
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="A site visit is already requested or scheduled for this property.")
+
+    start = payload.scheduled_start
+    end = payload.scheduled_end
+    if start.tzinfo is not None:
+        start = start.astimezone(timezone.utc).replace(tzinfo=None)
+    if end.tzinfo is not None:
+        end = end.astimezone(timezone.utc).replace(tzinfo=None)
+    visit = SiteVisit(
+        tenant_id=portal["tenant_id"],
+        property_match_id=match.id,
+        assigned_to=match.assigned_to or requirement.assigned_to,
+        created_by=None,
+        scheduled_start=start,
+        scheduled_end=end,
+        status="Requested",
+    )
+    try:
+        db.add(visit)
+        db.flush()
+        _notify_staff_user(
+            db=db,
+            tenant_id=portal["tenant_id"],
+            recipient_user_id=match.assigned_to or requirement.assigned_to,
+            title="Customer requested a property site visit",
+            message="A customer has requested a site visit. Please review the requested time and confirm or reschedule it.",
+            related_module="site_visits",
+            related_record_id=visit.id,
+        )
+        log_audit(
+            db=db,
+            tenant_id=portal["tenant_id"],
+            user_id=None,
+            action="CREATE",
+            module="site_visits",
+            record_id=visit.id,
+            description="Customer portal user requested a property site visit.",
+            after_data={
+                "id": visit.id,
+                "property_match_id": visit.property_match_id,
+                "scheduled_start": visit.scheduled_start,
+                "scheduled_end": visit.scheduled_end,
+                "status": visit.status,
+            },
+        )
+        db.commit()
+        db.refresh(visit)
+    except Exception:
+        db.rollback()
+        raise
+    return {
+        "id": str(visit.id),
+        "property_match_id": str(visit.property_match_id),
+        "scheduled_start": visit.scheduled_start,
+        "scheduled_end": visit.scheduled_end,
+        "status": visit.status,
+        "message": "Your site-visit request has been submitted. The property team must confirm the appointment.",
+    }
+
+
+# ==============================================================================

@@ -156,6 +156,17 @@ permissions = [
 
     ("customer_portal.invite", "Invite customer contacts to the portal"),
     ("customer_portal.manage", "Suspend or reactivate customer portal users"),
+
+    ("custom_field.view", "View custom field definitions"),
+    ("custom_field.manage", "Create, change and retire custom fields"),
+    ("email.view", "View logged emails"),
+    ("email.create", "Log or send emails from the CRM"),
+    ("email.delete", "Delete logged emails"),
+    ("email.manage", "Manage email settings and the inbound webhook"),
+    ("forecast.view", "View the sales forecast"),
+    ("trash.view", "View deleted records"),
+    ("trash.restore", "Restore deleted records"),
+    ("trash.purge", "Permanently delete records from the trash"),
 ]
 
 

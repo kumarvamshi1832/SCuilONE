@@ -18,6 +18,7 @@ from app.schemas.payment import (
     PaymentResponse,
 )
 from app.services.audit_service import log_audit
+from app.services.customer_portal_notifications import notify_booking_customer
 
 
 router = APIRouter(prefix="/api/v1/bookings/{booking_id}/payments", tags=["Booking Payments"])
@@ -388,6 +389,39 @@ def decide_payment(
         if payload.notes is not None:
             payment.notes = payload.notes
         payment.updated_at = datetime.utcnow()
+
+        if payload.status == "Verified" and payment.installment_id is not None:
+            installment = db.query(PaymentPlanInstallment).filter(
+                PaymentPlanInstallment.id == payment.installment_id,
+                PaymentPlanInstallment.tenant_id == tenant_id,
+            ).with_for_update().first()
+            if installment:
+                verified_for_installment = db.query(Payment).filter(
+                    Payment.tenant_id == tenant_id,
+                    Payment.booking_id == booking.id,
+                    Payment.installment_id == installment.id,
+                    Payment.status == "Verified",
+                ).all()
+                gross_for_installment = sum((Decimal(str(item.amount)) for item in verified_for_installment), Decimal("0.00"))
+                verified_ids = [item.id for item in verified_for_installment]
+                refunded_for_installment = db.query(PaymentRefund).filter(
+                    PaymentRefund.tenant_id == tenant_id,
+                    PaymentRefund.booking_id == booking.id,
+                    PaymentRefund.payment_id.in_(verified_ids) if verified_ids else PaymentRefund.payment_id == None,
+                    PaymentRefund.status == "Processed",
+                ).all()
+                net_for_installment = max(Decimal("0.00"), gross_for_installment - sum((Decimal(str(item.amount)) for item in refunded_for_installment), Decimal("0.00")))
+                installment.status = "Paid" if net_for_installment >= Decimal(str(installment.amount)) else ("Partially Paid" if net_for_installment > 0 else "Pending")
+                installment.updated_at = datetime.utcnow()
+
+        notify_booking_customer(
+            db, tenant_id, booking.id,
+            "Payment verified" if payload.status == "Verified" else "Payment rejected",
+            (f"Your payment of {payment.amount} has been verified." if payload.status == "Verified"
+             else f"Your payment of {payment.amount} was rejected. Please review the payment details or contact support."),
+            "payment_verified" if payload.status == "Verified" else "payment_rejected",
+            "payments", payment.id,
+        )
 
         audit_payment(
             db,

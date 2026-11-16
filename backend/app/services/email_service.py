@@ -224,6 +224,66 @@ SCuilONE Team
         raise
 
 
+def send_platform_employee_appointment_email(
+    recipient_email: str,
+    full_name: str,
+    role_name: str,
+    appointed_by: str | None = None,
+    team_name: str | None = None,
+) -> str:
+    """Tell a newly added platform employee about their role and where to sign in.
+
+    The temporary password is intentionally NOT included: it is shared by the administrator
+    through a separate channel, so a single mailbox leak never exposes a working credential.
+    Returns the login URL that was emailed. Raises if delivery fails (callers decide how to react).
+    """
+    path = (settings.PLATFORM_LOGIN_PATH or "/platform/login").strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    login_url = f"{settings.FRONTEND_URL.rstrip('/')}{path}"
+
+    name = _clean_header_text(full_name, 150) or "there"
+    role = _clean_header_text(role_name, 100)
+    inviter = _clean_header_text(appointed_by, 150) if appointed_by else "A SCuilONE Platform administrator"
+    team_line = f" on the {_clean_header_text(team_name, 100)}" if team_name else ""
+
+    email = EmailMessage()
+    email["From"] = settings.SMTP_FROM_EMAIL
+    email["To"] = recipient_email
+    email["Subject"] = f"You have been appointed as {role} on SCuilONE Platform"
+    email.set_content(
+        f"""Hello {name},
+
+{inviter} has appointed you as {role}{team_line} on the SCuilONE Platform.
+
+To get started:
+
+1. Open the platform login page:
+   {login_url}
+
+2. Sign in with this email address ({recipient_email}) and the temporary password
+   your administrator gave you.
+
+3. Set up multi-factor authentication (MFA) when you are asked to.
+
+4. Choose a new password. You must replace the temporary password before you can
+   use the platform.
+
+For your security, never share your password or MFA codes with anyone, and
+SCuilONE staff will never ask you for them. If you were not expecting this
+appointment, please ignore this email and tell your platform administrator.
+
+Regards,
+SCuilONE Team
+"""
+    )
+    _deliver_smtp_message(
+        email,
+        {"type": "platform_employee_appointment", "role": role, "login_url": login_url},
+    )
+    return login_url
+
+
 async def send_customer_portal_invitation_email(
     recipient_email: str, full_name: str, invitation_token: str, tenant_id: str
 ):

@@ -521,3 +521,144 @@ JOBS = {
     "subscription_reminders": subscription_reminders_job,
     "technical_monitoring": technical_monitoring_job,
 }
+
+
+def expire_customer_booking_holds(db: Session, today: date) -> dict:
+    """Expire 48-hour customer booking holds and safely release pending reservations."""
+    from app.models.customer_booking_journey import CustomerBookingRequest
+    from app.models.booking import Booking
+    from app.models.property import Property
+    from app.models.notification import Notification
+    from app.models.user import User
+    from app.models.property_match import PropertyMatch
+    from app.models.payment import Payment
+    from app.models.payment_plan import PaymentPlan
+    from app.models.payment_refund import PaymentRefund
+
+    now = datetime.utcnow()
+    expired = 0
+    while True:
+        rows = (
+            db.query(CustomerBookingRequest)
+            .filter(
+                CustomerBookingRequest.status == "Approved",
+                CustomerBookingRequest.hold_expires_at.is_not(None),
+                CustomerBookingRequest.hold_expires_at <= now,
+            )
+            .order_by(CustomerBookingRequest.hold_expires_at.asc())
+            .limit(BATCH_SIZE)
+            .with_for_update(skip_locked=True)
+            .all()
+        )
+        if not rows:
+            break
+        for row in rows:
+            booking = None
+            if row.booking_id:
+                booking = (
+                    db.query(Booking)
+                    .filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id)
+                    .with_for_update()
+                    .first()
+                )
+            payment_review_required = False
+            if booking and booking.status == "Pending":
+                verified = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status == "Verified").all()
+                verified_total = sum((Decimal(str(p.amount)) for p in verified), Decimal("0.00"))
+                verified_ids = [p.id for p in verified]
+                refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == row.tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(verified_ids) if verified_ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
+                net_verified = verified_total - sum((Decimal(str(r.amount)) for r in refunds), Decimal("0.00"))
+                if net_verified > 0:
+                    # Never release a property automatically while verified customer funds remain.
+                    payment_review_required = True
+                else:
+                    before_status = booking.status
+                    booking.status = "Cancelled"
+                    booking.cancellation_reason = "Customer booking hold expired before final confirmation."
+                    prop = (
+                        db.query(Property)
+                        .filter(Property.id == booking.property_id, Property.tenant_id == row.tenant_id)
+                        .with_for_update()
+                        .first()
+                    )
+                    if prop and prop.status == "Reserved":
+                        prop.status = "Available"
+                        prop.updated_at = now
+                    active_plan = db.query(PaymentPlan).filter(PaymentPlan.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").with_for_update().first()
+                    if active_plan:
+                        active_plan.status = "Cancelled"
+                    pending = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status == "Pending").with_for_update().all()
+                    for payment in pending:
+                        payment.status = "Rejected"
+                        payment.notes = ((payment.notes or "") + "\nAutomatically rejected because the booking hold expired without verified funds.").strip()
+                    log_audit(
+                        db, row.tenant_id, None, "AUTO_EXPIRE", "bookings", booking.id,
+                        "Pending booking cancelled and property released after customer hold expired.",
+                        before_data={"status": before_status}, after_data={"status": "Cancelled"},
+                    )
+            row.status = "Expired - Payment Review" if payment_review_required else "Expired"
+            row.hold_expires_at = None
+            # Notify the property/booking owner, if one can be resolved from the linked match.
+            match = db.query(PropertyMatch).filter(PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == row.tenant_id).first()
+            recipient_id = match.assigned_to if match else None
+            recipient = db.query(User).filter(User.id == recipient_id, User.tenant_id == row.tenant_id, User.status == "Active").first() if recipient_id else None
+            if recipient:
+                db.add(Notification(tenant_id=row.tenant_id, recipient_user_id=recipient.id, workflow_id=None, title="Customer booking hold expired", message=(f"The 48-hour booking hold for property {row.property_id} expired. Staff review is required because verified funds remain." if payment_review_required else f"The 48-hour booking hold for property {row.property_id} expired and the property reservation was released."), notification_type="customer_booking_hold_expired", related_module="customer_booking_requests", related_record_id=row.id, is_read=False))
+            log_audit(db, row.tenant_id, None, "AUTO_EXPIRE", "customer_booking_requests", row.id, "Customer booking request hold expired.", before_data={"status": "Approved"}, after_data={"status": row.status})
+            expired += 1
+        db.commit()
+    return {"expired_holds": expired}
+
+
+# Register after the function definition so module import order is deterministic.
+JOBS["expire_customer_booking_holds"] = expire_customer_booking_holds
+
+
+def customer_booking_payment_reminders(db: Session, today: date) -> dict:
+    """Notify portal customers about instalments due in three days and overdue milestones."""
+    from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
+    from app.models.booking import Booking
+    from app.models.customer_booking_journey import CustomerBookingRequest
+    from app.models.customer_portal_lifecycle import CustomerPortalNotification
+    from app.models.payment import Payment
+    from app.models.payment_refund import PaymentRefund
+    from app.services.customer_portal_notifications import notify_customer
+
+    sent = 0
+    plans = db.query(PaymentPlan).filter(PaymentPlan.status == "Active").all()
+    for plan in plans:
+        booking = db.query(Booking).filter(Booking.id == plan.booking_id, Booking.tenant_id == plan.tenant_id, Booking.status == "Confirmed").first()
+        if not booking:
+            continue
+        journey = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == plan.tenant_id, CustomerBookingRequest.booking_id == booking.id).first()
+        if not journey:
+            continue
+        installments = db.query(PaymentPlanInstallment).filter(PaymentPlanInstallment.tenant_id == plan.tenant_id, PaymentPlanInstallment.payment_plan_id == plan.id, PaymentPlanInstallment.status.in_(["Pending", "Partially Paid", "Overdue"])).all()
+        for installment in installments:
+            verified = db.query(Payment).filter(Payment.tenant_id == plan.tenant_id, Payment.booking_id == booking.id, Payment.installment_id == installment.id, Payment.status == "Verified").all()
+            verified_total = sum((Decimal(str(p.amount)) for p in verified), Decimal("0.00"))
+            ids = [p.id for p in verified]
+            refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == plan.tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(ids) if ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
+            net = max(Decimal("0.00"), verified_total - sum((Decimal(str(r.amount)) for r in refunds), Decimal("0.00")))
+            if net >= Decimal(str(installment.amount)):
+                installment.status = "Paid"
+                continue
+            days_until = (installment.due_date - today).days
+            if days_until == DUE_SOON_DAYS:
+                kind, title = "installment_due", "Instalment due in three days"
+                message = f"Your instalment '{installment.name}' of {installment.amount} is due on {installment.due_date.isoformat()}."
+            elif days_until < 0 and abs(days_until) in OVERDUE_ALERT_DAYS:
+                kind, title = "installment_overdue", "Instalment payment overdue"
+                message = f"Your instalment '{installment.name}' of {installment.amount} was due on {installment.due_date.isoformat()}. Please review your payment schedule."
+                installment.status = "Overdue"
+            else:
+                continue
+            exists = db.query(CustomerPortalNotification.id).filter(CustomerPortalNotification.tenant_id == plan.tenant_id, CustomerPortalNotification.portal_user_id == journey.portal_user_id, CustomerPortalNotification.notification_type == kind, CustomerPortalNotification.related_record_id == installment.id).first()
+            if not exists:
+                notify_customer(db, plan.tenant_id, journey.portal_user_id, title, message, kind, "payment_plan_installments", installment.id)
+                sent += 1
+    db.commit()
+    return {"customer_installment_notifications": sent}
+
+
+JOBS["customer_booking_payment_reminders"] = customer_booking_payment_reminders

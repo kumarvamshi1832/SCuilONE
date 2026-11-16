@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.buyer_requirement import BuyerRequirement
 from app.models.lead import Lead
 from app.models.payment_plan import PaymentPlan
+from app.models.customer_booking_journey import CustomerBookingRequest
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
@@ -24,6 +25,7 @@ from app.schemas.booking import (
     BookingUpdate,
 )
 from app.services.audit_service import log_audit
+from app.services.customer_portal_notifications import notify_booking_customer
 
 
 router = APIRouter(
@@ -501,6 +503,26 @@ def update_booking(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Only pending bookings can be confirmed.",
                 )
+            if new_status == "Confirmed":
+                journey = db.query(CustomerBookingRequest).filter(
+                    CustomerBookingRequest.tenant_id == tenant_id,
+                    CustomerBookingRequest.booking_id == booking.id,
+                ).with_for_update().first()
+                if journey:
+                    if journey.status != "Approved" or not journey.hold_expires_at or journey.hold_expires_at <= datetime.utcnow():
+                        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Customer portal booking hold is not active. Resolve the hold before confirming.")
+                    if journey.agreement_status != "Verified" or not journey.agreement_verified_at:
+                        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Customer portal booking cannot be confirmed until the signed agreement is verified.")
+                    verified_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status == "Verified").all()
+                    payment_ids = [item.id for item in verified_payments]
+                    gross = sum((Decimal(str(item.amount)) for item in verified_payments), Decimal("0.00"))
+                    refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(payment_ids) if payment_ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
+                    net = gross - sum((Decimal(str(item.amount)) for item in refunds), Decimal("0.00"))
+                    if net < Decimal(str(booking.booking_amount)):
+                        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Verified booking amount is not yet received. Required {booking.booking_amount}; net verified {net}.")
+                    journey.status = "Confirmed"
+                    journey.final_confirmed_at = datetime.utcnow()
+                    journey.hold_expires_at = None
 
         before_data = booking_snapshot(booking)
 
@@ -582,6 +604,26 @@ def cancel_booking(
             db, booking.property_id, tenant_id
         )
 
+        verified_payments = db.query(Payment).filter(
+            Payment.tenant_id == tenant_id, Payment.booking_id == booking.id,
+            Payment.status == "Verified",
+        ).all()
+        verified_total = sum((Decimal(str(item.amount)) for item in verified_payments), Decimal("0.00"))
+        processed_refunds = db.query(PaymentRefund).filter(
+            PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id,
+            PaymentRefund.status == "Processed",
+        ).all()
+        processed_total = sum((Decimal(str(item.amount)) for item in processed_refunds), Decimal("0.00"))
+        pending_refund = db.query(PaymentRefund.id).filter(
+            PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id,
+            PaymentRefund.status == "Pending",
+        ).first()
+        if pending_refund or processed_total < verified_total:
+            raise HTTPException(status_code=409, detail=(
+                "Refund all verified customer payments and resolve pending refund requests before cancelling this booking. "
+                f"Verified: {verified_total:.2f}; processed refunds: {processed_total:.2f}."
+            ))
+
         before_data = booking_snapshot(booking)
         property_before = {
             "id": property_record.id,
@@ -591,6 +633,10 @@ def cancel_booking(
         booking.status = "Cancelled"
         booking.cancellation_reason = payload.cancellation_reason.strip()
         booking.updated_at = datetime.utcnow()
+        journey = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == tenant_id, CustomerBookingRequest.booking_id == booking.id).with_for_update().first()
+        if journey:
+            journey.status = "Cancelled"
+            journey.hold_expires_at = None
 
         close_linked_deals(
             db=db,
@@ -627,6 +673,13 @@ def cancel_booking(
             payment_plan.status = "Cancelled"
             payment_plan.updated_at = datetime.utcnow()
 
+        for pending_payment in db.query(Payment).filter(
+            Payment.tenant_id == tenant_id, Payment.booking_id == booking.id,
+            Payment.status == "Pending",
+        ).with_for_update().all():
+            pending_payment.status = "Rejected"
+            pending_payment.notes = ((pending_payment.notes or "") + "\nRejected because the booking was cancelled.").strip()
+
         db.flush()
 
         if payment_plan and plan_before:
@@ -645,6 +698,10 @@ def cancel_booking(
                 },
             )
 
+
+        notify_booking_customer(db, tenant_id, booking.id, "Booking cancelled",
+            "Your booking has been cancelled by the property team. Any refund must be handled through the recorded refund process.",
+            "booking_cancelled", "bookings", booking.id)
 
         audit_booking(
             db,
@@ -782,6 +839,13 @@ def complete_booking(
 
         booking.status = "Completed"
         booking.updated_at = datetime.utcnow()
+        notify_booking_customer(db, tenant_id, booking.id, "Property sale completed",
+            "Your full agreed sale amount has been verified and the property sale is marked complete. The handover team can now schedule possession.",
+            "sale_completed", "bookings", booking.id)
+        journey = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == tenant_id, CustomerBookingRequest.booking_id == booking.id).with_for_update().first()
+        if journey:
+            journey.status = "Completed"
+            journey.hold_expires_at = None
 
         close_linked_deals(
             db=db,

@@ -14,6 +14,7 @@ from app.models.account import Account
 from app.models.contact import Contact
 from app.models.software_project import SoftwareProject
 from app.models.support_ticket import SupportTicket, SupportTicketComment
+from app.models.platform import PlatformSupportTicketMeta
 from app.models.user import User
 from app.schemas.support_tickets import (
     SupportTicketCommentCreate, SupportTicketCommentResponse,
@@ -69,10 +70,29 @@ def ticket_snapshot(ticket: SupportTicket) -> dict:
     }
 
 
+def tenant_managed_ticket_query(db: Session, tenant_id: UUID):
+    """Return only tickets owned by this tenant's support team.
+
+    Tickets with PlatformSupportTicketMeta are platform-managed requests and
+    must be handled through Platform Support, not the tenant support queue.
+    Customer Portal tickets have no platform metadata and remain visible here.
+    """
+    return (
+        db.query(SupportTicket)
+        .outerjoin(
+            PlatformSupportTicketMeta,
+            PlatformSupportTicketMeta.ticket_id == SupportTicket.id,
+        )
+        .filter(
+            SupportTicket.tenant_id == tenant_id,
+            PlatformSupportTicketMeta.id.is_(None),
+        )
+    )
+
+
 def get_ticket_or_404(db: Session, tenant_id: UUID, ticket_id: UUID) -> SupportTicket:
-    ticket = db.query(SupportTicket).filter(
+    ticket = tenant_managed_ticket_query(db, tenant_id).filter(
         SupportTicket.id == ticket_id,
-        SupportTicket.tenant_id == tenant_id,
     ).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
@@ -171,7 +191,7 @@ def list_support_tickets(current_user: dict = Depends(require_active_user),
                          limit: int = Query(default=20, ge=1, le=100),
                          offset: int = Query(default=0, ge=0)):
     tenant_id, _ = get_tenant_user(current_user)
-    query = db.query(SupportTicket).filter(SupportTicket.tenant_id == tenant_id)
+    query = tenant_managed_ticket_query(db, tenant_id)
     if ticket_status:
         query = query.filter(SupportTicket.status == ticket_status)
     if priority:
@@ -196,9 +216,9 @@ def list_support_tickets(current_user: dict = Depends(require_active_user),
 def get_support_ticket(ticket_id: UUID, current_user: dict = Depends(require_active_user),
                        db: Session = Depends(get_db)):
     tenant_id, _ = get_tenant_user(current_user)
-    ticket = db.query(SupportTicket).options(selectinload(SupportTicket.comments)).filter(
-        SupportTicket.id == ticket_id, SupportTicket.tenant_id == tenant_id
-    ).first()
+    ticket = tenant_managed_ticket_query(db, tenant_id).options(
+        selectinload(SupportTicket.comments)
+    ).filter(SupportTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Support ticket not found.")
     return ticket

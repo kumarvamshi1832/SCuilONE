@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+import logging
 import uuid
 import hmac
 from uuid import UUID
@@ -76,6 +77,8 @@ from app.schemas.platform import (
     RolePermissionsUpdateRequest,
 )
 from app.services.audit_service import log_audit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/platform", tags=["Platform Administration"])
 
@@ -166,20 +169,34 @@ def _validate_active_platform_employee_ref(db: Session, user_or_emp_id: UUID, pl
 
 def serialize_employee(db: Session, user: User, emp: PlatformEmployee) -> dict:
     team_name = None
+
     if emp.industry_team_id:
-        team = db.query(PlatformIndustryTeam).filter(PlatformIndustryTeam.id == emp.industry_team_id).first()
+        team = (
+            db.query(PlatformIndustryTeam)
+            .filter(PlatformIndustryTeam.id == emp.industry_team_id)
+            .first()
+        )
         if team:
             team_name = team.name
+
+    # Only count tickets routed to Platform Support.
+    # Customer Portal tickets must never contribute to platform workload.
     open_tickets = (
         db.query(PlatformSupportTicketMeta)
-        .join(SupportTicket, SupportTicket.id == PlatformSupportTicketMeta.ticket_id)
+        .join(
+            SupportTicket,
+            SupportTicket.id == PlatformSupportTicketMeta.ticket_id,
+        )
         .filter(
             PlatformSupportTicketMeta.assigned_employee_user_id == user.id,
             SupportTicket.status.notin_(["Resolved", "Closed"]),
+            SupportTicket.source != "Client Portal",
         )
         .count()
     )
+
     dash = get_dashboard_metadata(emp.role_name, emp.industry_key)
+
     return {
         "employee_id": str(emp.id),
         "user_id": str(user.id),
@@ -208,7 +225,6 @@ def serialize_employee(db: Session, user: User, emp: PlatformEmployee) -> dict:
         "last_login_at": emp.last_login_at.isoformat() if emp.last_login_at else None,
         "created_at": emp.created_at.isoformat() if emp.created_at else None,
     }
-
 
 # ============================================================================
 # 1. PLATFORM AUTHENTICATION & FIRST-LOGIN TEMPORARY PASSWORD FLOW
@@ -772,9 +788,37 @@ def add_platform_employee(
     db.refresh(new_user)
     db.refresh(new_emp)
 
+    # Appointment email: sent only AFTER the account is safely committed. An SMTP problem must never
+    # undo or block the creation, so failures are logged and reported back to the admin instead.
+    welcome_email = {"sent": False, "to": email}
+    try:
+        from app.services.email_service import send_platform_employee_appointment_email
+        actor_user = db.query(User.full_name).filter(User.id == actor_id).first()
+        welcome_email["login_url"] = send_platform_employee_appointment_email(
+            recipient_email=email,
+            full_name=new_user.full_name,
+            role_name=requested_role,
+            appointed_by=actor_user[0] if actor_user else None,
+            team_name=industry_team.name if industry_team else None,
+        )
+        welcome_email["sent"] = True
+    except Exception:
+        logger.exception("Failed to send platform appointment email to %s", email)
+        welcome_email["error"] = (
+            "The employee was created, but the appointment email could not be delivered. "
+            "Share the login link and temporary password with them directly."
+        )
+
     return {
-        "message": "Platform employee created successfully. Temporary password must be changed at first login.",
+        "message": (
+            "Platform employee created successfully and the appointment email was sent. "
+            "Temporary password must be changed at first login."
+            if welcome_email["sent"] else
+            "Platform employee created successfully, but the appointment email could not be sent. "
+            "Temporary password must be changed at first login."
+        ),
         "employee": serialize_employee(db, new_user, new_emp),
+        "welcome_email": welcome_email,
     }
 
 
@@ -1023,18 +1067,37 @@ def update_platform_employee(
 def serialize_industry_team(db: Session, team: PlatformIndustryTeam) -> dict:
     members_rows = (
         db.query(User, PlatformEmployee)
-        .join(PlatformEmployee, PlatformEmployee.user_id == User.id)
-        .filter(PlatformEmployee.industry_team_id == team.id)
+        .join(
+            PlatformEmployee,
+            PlatformEmployee.user_id == User.id,
+        )
+        .filter(
+            PlatformEmployee.industry_team_id == team.id
+        )
         .all()
     )
-    members = [serialize_employee(db, u, e) for u, e in members_rows]
-    active_members = [m for m in members if m["status"] == "Active"]
 
-    # Map the 7 reusable industry roles to show filled vs vacant slots
+    members = [
+        serialize_employee(db, u, e)
+        for u, e in members_rows
+    ]
+
+    active_members = [
+        m for m in members
+        if m["status"] == "Active"
+    ]
+
+    # Map the 7 reusable industry roles to show filled vs vacant slots.
     role_slots = []
+
     for r in REUSABLE_INDUSTRY_ROLES:
         r_name = r["name"]
-        assigned = [m for m in active_members if m["role"] == r_name]
+
+        assigned = [
+            m for m in active_members
+            if m["role"] == r_name
+        ]
+
         role_slots.append(
             {
                 "role": r_name,
@@ -1045,23 +1108,38 @@ def serialize_industry_team(db: Session, team: PlatformIndustryTeam) -> dict:
             }
         )
 
-    vacant_roles = [slot["role"] for slot in role_slots if not slot["filled"]]
+    vacant_roles = [
+        slot["role"]
+        for slot in role_slots
+        if not slot["filled"]
+    ]
+
+    # Only count platform-routed tickets for this industry team.
+    # Never include Customer Portal tickets.
     open_tickets_count = (
         db.query(PlatformSupportTicketMeta)
-        .join(SupportTicket, SupportTicket.id == PlatformSupportTicketMeta.ticket_id)
+        .join(
+            SupportTicket,
+            SupportTicket.id == PlatformSupportTicketMeta.ticket_id,
+        )
         .filter(
             PlatformSupportTicketMeta.industry_key == team.industry_key,
             SupportTicket.status.notin_(["Resolved", "Closed"]),
+            SupportTicket.source != "Client Portal",
         )
         .count()
     )
+
     tenant_count = (
         db.query(Tenant)
         .filter(Tenant.is_platform.is_(False))
         .all()
     )
+
     matching_tenants = sum(
-        1 for t in tenant_count if normalize_industry_key(t.industry) == team.industry_key
+        1
+        for t in tenant_count
+        if normalize_industry_key(t.industry) == team.industry_key
     )
 
     return {
@@ -1082,12 +1160,16 @@ def serialize_industry_team(db: Session, team: PlatformIndustryTeam) -> dict:
         "sla_resolution_hours": team.sla_resolution_hours,
         "allocated_budget": str(team.allocated_budget),
         "spent_budget": str(team.spent_budget),
-        "remaining_budget": str(max(Decimal("0.00"), team.allocated_budget - team.spent_budget)),
+        "remaining_budget": str(
+            max(
+                Decimal("0.00"),
+                team.allocated_budget - team.spent_budget,
+            )
+        ),
         "open_tickets_workload": open_tickets_count,
         "registered_companies_count": matching_tenants,
         "config_json": team.config_json or {},
     }
-
 
 @router.get("/industry-teams")
 def list_industry_teams(
@@ -1359,11 +1441,23 @@ def serialize_tenant_company(db: Session, tenant: Tenant) -> dict:
             PlatformSubscriptionPlan,
             PlatformSubscriptionPlan.id == PlatformTenantSubscription.plan_id,
         )
-        .filter(PlatformTenantSubscription.tenant_id == tenant.id)
-        .order_by(PlatformTenantSubscription.created_at.desc())
+        .filter(
+            PlatformTenantSubscription.tenant_id == tenant.id
+        )
+        .order_by(
+            PlatformTenantSubscription.created_at.desc()
+        )
         .first()
     )
-    user_count = db.query(User).filter(User.tenant_id == tenant.id).count()
+
+    user_count = (
+        db.query(User)
+        .filter(User.tenant_id == tenant.id)
+        .count()
+    )
+
+    # This is the tenant's own support-ticket count.
+    # Customer Portal tickets should remain visible here.
     open_tickets = (
         db.query(SupportTicket)
         .filter(
@@ -1372,6 +1466,7 @@ def serialize_tenant_company(db: Session, tenant: Tenant) -> dict:
         )
         .count()
     )
+
     return {
         "id": str(tenant.id),
         "name": tenant.name,
@@ -1384,19 +1479,36 @@ def serialize_tenant_company(db: Session, tenant: Tenant) -> dict:
             "subscription_id": str(sub[0].id),
             "plan_key": sub[1].plan_key,
             "plan_name": sub[1].name,
-            "selected_plan_id": str(sub[0].selected_plan_id) if sub[0].selected_plan_id else None,
+            "selected_plan_id": (
+                str(sub[0].selected_plan_id)
+                if sub[0].selected_plan_id
+                else None
+            ),
             "status": sub[0].status,
             "billing_cycle": sub[0].billing_cycle,
             "price": str(sub[1].price),
-            "trial_start_date": sub[0].trial_start_date.isoformat() if sub[0].trial_start_date else None,
-            "trial_end_date": sub[0].trial_end_date.isoformat() if sub[0].trial_end_date else None,
-            "renewal_date": sub[0].renewal_date.isoformat() if sub[0].renewal_date else None,
-        }
-        if sub
-        else None,
-        "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+            "trial_start_date": (
+                sub[0].trial_start_date.isoformat()
+                if sub[0].trial_start_date
+                else None
+            ),
+            "trial_end_date": (
+                sub[0].trial_end_date.isoformat()
+                if sub[0].trial_end_date
+                else None
+            ),
+            "renewal_date": (
+                sub[0].renewal_date.isoformat()
+                if sub[0].renewal_date
+                else None
+            ),
+        } if sub else None,
+        "created_at": (
+            tenant.created_at.isoformat()
+            if tenant.created_at
+            else None
+        ),
     }
-
 
 @router.get("/tenants")
 def list_platform_tenants(
@@ -1676,56 +1788,116 @@ def build_role_dashboard_payload(
     user_id: UUID | None = None,
 ) -> dict:
     ensure_platform_seeded(db)
+
     norm_ind = normalize_industry_key(industry_key) if industry_key else None
     dash_meta = get_dashboard_metadata(role_name, norm_ind)
 
-    # Ensure all existing tickets have platform routing metadata
+    # Automatically route only non-Customer-Portal tickets.
+    # Customer Portal tickets belong to their own tenant support team.
     unrouted_tickets = (
         db.query(SupportTicket)
         .outerjoin(
             PlatformSupportTicketMeta,
             PlatformSupportTicketMeta.ticket_id == SupportTicket.id,
         )
-        .filter(PlatformSupportTicketMeta.id.is_(None))
+        .filter(
+            PlatformSupportTicketMeta.id.is_(None),
+            SupportTicket.source != "Client Portal",
+        )
         .all()
     )
-    for t in unrouted_tickets:
-        auto_route_support_ticket(db, t)
+
+    for ticket in unrouted_tickets:
+        auto_route_support_ticket(db, ticket)
+
     if unrouted_tickets:
         db.commit()
 
-    tenants = db.query(Tenant).filter(Tenant.is_platform.is_(False)).all()
+    tenants = (
+        db.query(Tenant)
+        .filter(Tenant.is_platform.is_(False))
+        .all()
+    )
+
     if norm_ind:
-        scoped_tenants = [t for t in tenants if normalize_industry_key(t.industry) == norm_ind]
+        scoped_tenants = [
+            t for t in tenants
+            if normalize_industry_key(t.industry) == norm_ind
+        ]
     else:
         scoped_tenants = tenants
-    scoped_tenant_ids = {t.id for t in scoped_tenants}
+
+    scoped_tenant_ids = {
+        t.id for t in scoped_tenants
+    }
 
     total_companies = len(scoped_tenants)
-    active_companies = sum(1 for t in scoped_tenants if getattr(t, "status", "Active") == "Active")
+
+    active_companies = sum(
+        1 for t in scoped_tenants
+        if getattr(t, "status", "Active") == "Active"
+    )
 
     emp_q = db.query(PlatformEmployee)
+
     if norm_ind:
-        emp_q = emp_q.filter(PlatformEmployee.industry_key == norm_ind)
+        emp_q = emp_q.filter(
+            PlatformEmployee.industry_key == norm_ind
+        )
+
     total_employees = emp_q.count()
 
-    ticket_q = db.query(SupportTicket, PlatformSupportTicketMeta).join(
-        PlatformSupportTicketMeta,
-        PlatformSupportTicketMeta.ticket_id == SupportTicket.id,
+    # Platform dashboard ticket query.
+    # Customer Portal tickets must never be included.
+    ticket_q = (
+        db.query(SupportTicket, PlatformSupportTicketMeta)
+        .join(
+            PlatformSupportTicketMeta,
+            PlatformSupportTicketMeta.ticket_id == SupportTicket.id,
+        )
+        .filter(
+            SupportTicket.source != "Client Portal",
+        )
     )
+
     if norm_ind:
-        ticket_q = ticket_q.filter(PlatformSupportTicketMeta.industry_key == norm_ind)
+        ticket_q = ticket_q.filter(
+            PlatformSupportTicketMeta.industry_key == norm_ind
+        )
+
     ticket_rows = ticket_q.all()
 
-    open_tickets = sum(1 for t, _ in ticket_rows if t.status not in {"Resolved", "Closed"})
-    resolved_tickets = sum(1 for t, _ in ticket_rows if t.status in {"Resolved", "Closed"})
-    escalated_tickets = sum(1 for _, m in ticket_rows if m.is_escalated)
-    sla_breached_tickets = sum(1 for _, m in ticket_rows if m.sla_breached)
+    open_tickets = sum(
+        1 for ticket, _meta in ticket_rows
+        if ticket.status not in {"Resolved", "Closed"}
+    )
+
+    resolved_tickets = sum(
+        1 for ticket, _meta in ticket_rows
+        if ticket.status in {"Resolved", "Closed"}
+    )
+
+    escalated_tickets = sum(
+        1 for _, meta in ticket_rows
+        if meta.is_escalated
+    )
+
+    sla_breached_tickets = sum(
+        1 for _, meta in ticket_rows
+        if meta.sla_breached
+    )
+
     my_assigned_tickets = (
         sum(
             1
-            for t, m in ticket_rows
-            if user_id and (m.assigned_employee_user_id == user_id or t.assigned_to == user_id)
+            for ticket, meta in ticket_rows
+            if (
+                user_id
+                and (
+                    meta.assigned_employee_user_id == user_id
+                    or ticket.assigned_to == user_id
+                )
+            )
         )
         if user_id
         else 0
@@ -1734,22 +1906,39 @@ def build_role_dashboard_payload(
     subs_q = db.query(PlatformTenantSubscription).filter(
         PlatformTenantSubscription.status == "Active"
     )
+
     if norm_ind:
-        subs_q = subs_q.filter(PlatformTenantSubscription.tenant_id.in_(scoped_tenant_ids))
+        subs_q = subs_q.filter(
+            PlatformTenantSubscription.tenant_id.in_(scoped_tenant_ids)
+        )
+
     active_subscriptions = subs_q.count()
 
     inv_q = db.query(PlatformBillingInvoice)
+
     if norm_ind:
-        inv_q = inv_q.filter(PlatformBillingInvoice.tenant_id.in_(scoped_tenant_ids))
+        inv_q = inv_q.filter(
+            PlatformBillingInvoice.tenant_id.in_(scoped_tenant_ids)
+        )
+
     invoices = inv_q.all()
-    total_revenue = sum((i.paid_amount for i in invoices), Decimal("0.00"))
-    overdue_invoices = sum(1 for i in invoices if i.status == "Overdue")
+
+    total_revenue = sum(
+        (i.paid_amount for i in invoices),
+        Decimal("0.00"),
+    )
+
+    overdue_invoices = sum(
+        1 for i in invoices
+        if i.status == "Overdue"
+    )
 
     failed_payments = (
         db.query(PlatformBillingPayment)
         .filter(PlatformBillingPayment.status == "Failed")
         .count()
     )
+
     pending_refunds = (
         db.query(PlatformRefundRequest)
         .filter(PlatformRefundRequest.status == "Pending")
@@ -1757,38 +1946,80 @@ def build_role_dashboard_payload(
     )
 
     sales_q = db.query(PlatformSalesProspect)
+
     if norm_ind:
-        sales_q = sales_q.filter(PlatformSalesProspect.industry_key == norm_ind)
+        sales_q = sales_q.filter(
+            PlatformSalesProspect.industry_key == norm_ind
+        )
+
     prospects = sales_q.all()
+
     total_prospects = len(prospects)
-    won_prospects = sum(1 for p in prospects if p.pipeline_stage == "Won")
-    pipeline_mrr = sum((p.estimated_mrr for p in prospects if p.pipeline_stage != "Lost"), Decimal("0.00"))
+
+    won_prospects = sum(
+        1 for p in prospects
+        if p.pipeline_stage == "Won"
+    )
+
+    pipeline_mrr = sum(
+        (
+            p.estimated_mrr
+            for p in prospects
+            if p.pipeline_stage != "Lost"
+        ),
+        Decimal("0.00"),
+    )
 
     exp_q = db.query(PlatformExpense)
+
     if norm_ind:
-        exp_q = exp_q.filter(PlatformExpense.industry_key == norm_ind)
+        exp_q = exp_q.filter(
+            PlatformExpense.industry_key == norm_ind
+        )
+
     expenses = exp_q.all()
-    total_expenses = sum((e.amount for e in expenses if e.status in {"Approved", "Paid", "Reconciled"}), Decimal("0.00"))
-    pending_expenses = sum(1 for e in expenses if e.status == "Pending")
+
+    total_expenses = sum(
+        (
+            e.amount
+            for e in expenses
+            if e.status in {"Approved", "Paid", "Reconciled"}
+        ),
+        Decimal("0.00"),
+    )
+
+    pending_expenses = sum(
+        1 for e in expenses
+        if e.status == "Pending"
+    )
 
     active_incidents = (
         db.query(PlatformTechnicalIncident)
-        .filter(PlatformTechnicalIncident.status.notin_(["Resolved", "Deployed"]))
+        .filter(
+            PlatformTechnicalIncident.status.notin_(["Resolved", "Deployed"])
+        )
         .count()
     )
+
     failed_logins = (
         db.query(PlatformSecurityEvent)
-        .filter(PlatformSecurityEvent.event_type == "login_failed")
+        .filter(
+            PlatformSecurityEvent.event_type == "login_failed"
+        )
         .count()
     )
+
     security_incidents = (
         db.query(PlatformSecurityEvent)
         .filter(
-            PlatformSecurityEvent.event_type.in_(["security_incident", "suspicious_activity"]),
+            PlatformSecurityEvent.event_type.in_(
+                ["security_incident", "suspicious_activity"]
+            ),
             PlatformSecurityEvent.status != "Closed",
         )
         .count()
     )
+
     audit_logs_count = db.query(AuditLog).count()
 
     return {
@@ -1798,9 +2029,25 @@ def build_role_dashboard_payload(
             "active_companies": active_companies,
             "platform_employees": total_employees,
             "active_subscriptions": active_subscriptions,
-            "trialing_tenants": db.query(PlatformTenantSubscription).filter(PlatformTenantSubscription.status == "Trial").count(),
-            "expired_subscriptions": db.query(PlatformTenantSubscription).filter(PlatformTenantSubscription.status == "Expired").count(),
-            "pending_payment_verifications": db.query(PlatformBillingPayment).filter(PlatformBillingPayment.status.in_(["Submitted", "Under Review"])).count(),
+            "trialing_tenants": (
+                db.query(PlatformTenantSubscription)
+                .filter(PlatformTenantSubscription.status == "Trial")
+                .count()
+            ),
+            "expired_subscriptions": (
+                db.query(PlatformTenantSubscription)
+                .filter(PlatformTenantSubscription.status == "Expired")
+                .count()
+            ),
+            "pending_payment_verifications": (
+                db.query(PlatformBillingPayment)
+                .filter(
+                    PlatformBillingPayment.status.in_(
+                        ["Submitted", "Under Review"]
+                    )
+                )
+                .count()
+            ),
             "total_revenue": str(total_revenue),
             "overdue_invoices": overdue_invoices,
             "failed_payments": failed_payments,
@@ -1815,14 +2062,15 @@ def build_role_dashboard_payload(
             "pipeline_estimated_mrr": str(pipeline_mrr),
             "total_expenses": str(total_expenses),
             "pending_expense_requests": pending_expenses,
-            "net_profit_estimate": str(total_revenue - total_expenses),
+            "net_profit_estimate": str(
+                total_revenue - total_expenses
+            ),
             "active_technical_incidents": active_incidents,
             "failed_login_attempts": failed_logins,
             "open_security_incidents": security_incidents,
             "total_audit_events": audit_logs_count,
         },
     }
-
 
 @router.get("/dashboards/catalog")
 def get_dashboards_catalog(

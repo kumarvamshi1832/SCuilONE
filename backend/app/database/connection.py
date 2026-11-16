@@ -18,12 +18,22 @@ class Settings(BaseSettings):
 
     MFA_ENCRYPTION_KEY: str
     PLATFORM_BOOTSTRAP_TOKEN: str | None = None
+    # Secret used to derive each tenant's inbound-email webhook token. Webhook is disabled when unset.
+    EMAIL_WEBHOOK_SECRET: str | None = None
 
     FRONTEND_URL: str
+    # Frontend route of the platform-employee login page; used in the appointment email link.
+    PLATFORM_LOGIN_PATH: str = "/platform/login"
 
     CLOUDINARY_CLOUD_NAME: str
     CLOUDINARY_API_KEY: str
     CLOUDINARY_API_SECRET: str
+
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.2:1b"
+    OLLAMA_TIMEOUT_SECONDS: int = 45
+    OLLAMA_MAX_RETRIES: int = 2
+    OLLAMA_TEMPERATURE: float = 0.1
 
     model_config = SettingsConfigDict(
         env_file=".env",

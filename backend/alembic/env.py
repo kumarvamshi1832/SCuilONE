@@ -91,6 +91,10 @@ from app.models.platform import (
     PlatformSecurityEvent,
     PlatformSetting,
 )
+from app.models.ai_conversation import AIConversation, AIMessage
+from app.models.customer_property_shortlist import CustomerPropertyShortlist
+from app.models.customer_booking_journey import CustomerBookingRequest, CustomerSiteVisitFeedback, CustomerPortalJourneyFile
+from app.models.customer_portal_lifecycle import CustomerPortalNotification, CustomerBookingCancellationRequest, PropertyHandover, CustomerPropertyServiceRequest
 
 
 config = context.config

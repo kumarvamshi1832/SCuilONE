@@ -1,7 +1,41 @@
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+
+class PortalBuyerRequirementCreate(BaseModel):
+    """Customer-owned manual real-estate requirement; ownership fields are server supplied."""
+    requirement_type: Literal["Buy", "Rent"] = "Buy"
+    property_type: str = Field(min_length=1, max_length=50)
+    preferred_city: str = Field(min_length=1, max_length=100)
+    preferred_location: str | None = Field(default=None, max_length=200)
+    min_budget: Decimal | None = Field(default=None, ge=0)
+    max_budget: Decimal | None = Field(default=None, ge=0)
+    bedrooms: int | None = Field(default=None, ge=0, le=100)
+    min_area: Decimal | None = Field(default=None, ge=0)
+    max_area: Decimal | None = Field(default=None, ge=0)
+    area_unit: str = Field(default="sqft", min_length=1, max_length=20)
+    notes: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("property_type", "preferred_city", "preferred_location", "area_unit", "notes")
+    @classmethod
+    def strip_requirement_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned if cleaned else None
+
+    @model_validator(mode="after")
+    def validate_requirement_ranges(self):
+        if self.min_budget is not None and self.max_budget is not None and self.min_budget > self.max_budget:
+            raise ValueError("Minimum budget cannot exceed maximum budget.")
+        if self.min_area is not None and self.max_area is not None and self.min_area > self.max_area:
+            raise ValueError("Minimum area cannot exceed maximum area.")
+        if not self.property_type or not self.preferred_city:
+            raise ValueError("Property type and preferred city are required.")
+        return self
 
 
 class PortalInviteCreate(BaseModel):
@@ -342,3 +376,28 @@ class PortalDocumentResponse(BaseModel):
     expires_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class PortalSiteVisitRequest(BaseModel):
+    property_match_id: UUID
+    scheduled_start: datetime
+    scheduled_end: datetime
+
+    @model_validator(mode="after")
+    def validate_requested_window(self):
+        start = self.scheduled_start
+        end = self.scheduled_end
+        if end <= start:
+            raise ValueError("scheduled_end must be after scheduled_start.")
+        if (end - start).total_seconds() < 30 * 60:
+            raise ValueError("Please request at least a 30-minute visit window.")
+        if (end - start).total_seconds() > 8 * 60 * 60:
+            raise ValueError("A site-visit request cannot exceed 8 hours.")
+        now = datetime.now(start.tzinfo) if start.tzinfo else datetime.utcnow()
+        if start <= now:
+            raise ValueError("Please choose a future site-visit time.")
+        return self
+
+
+class PortalShortlistAddRequest(BaseModel):
+    property_match_id: UUID

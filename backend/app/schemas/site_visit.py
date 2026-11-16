@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 SiteVisitStatus = Literal[
-    "Scheduled", "Completed", "Cancelled", "Rescheduled", "No-show"
+    "Requested", "Scheduled", "Completed", "Cancelled", "Rescheduled", "No-show"
 ]
 SiteVisitOutcome = Literal[
     "Interested", "Follow-up Required", "Not Interested", "Negotiation", "Other"
