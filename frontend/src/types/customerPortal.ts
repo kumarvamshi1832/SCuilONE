@@ -506,4 +506,13 @@ export interface PortalSiteVisit {
   status: string;
   property?: PortalSiteVisitProperty | null;
   created_at?: string;
+  /** Fields returned by GET /api/v1/customer-portal/site-visits. */
+  outcome?: string | null;
+  staff_feedback?: string | null;
+  interest_level?: string | null;
+  follow_up_required?: boolean;
+  follow_up_date?: string | null;
+  customer_feedback?: string | null;
+  customer_rating?: number | null;
+  customer_decision?: string | null;
 }

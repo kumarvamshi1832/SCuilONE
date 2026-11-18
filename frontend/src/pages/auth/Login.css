@@ -1,7 +1,7 @@
 /* ==========================================================================
    SCuilONE CRM - Premium Refined Login Page
    Exact Spacing, Typography, Alignment & 8px-Grid System
-   Consistent 620px Login Card with Stable Height & Padding
+   Enhanced 520px Glassmorphism Panel with 40px Inset & 5.5% Right Margin
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -31,6 +31,9 @@ html, body, #root {
   --text-sub: #94A3B8;
   --text-muted: #64748B;
   --welcome-tag: #38BDF8;
+
+  --nav-tagline: #CBD5E1;
+  --nav-tagline-border: rgba(255, 255, 255, 0.25);
 
   /* Transparent Dark Glass: Buildings softly visible through card */
   --card-surface: rgba(5, 20, 40, 0.34);
@@ -70,6 +73,9 @@ html, body, #root {
   --text-sub: #334155;
   --text-muted: #64748B;
   --welcome-tag: #0284C7;
+
+  --nav-tagline: #0F172A;
+  --nav-tagline-border: rgba(15, 23, 42, 0.25);
 
   /* Translucent White Glass: Crisp contrast while softly showing daylight corporate city */
   --card-surface: rgba(255, 255, 255, 0.76);
@@ -271,6 +277,7 @@ html, body, #root {
 .card-title-main,
 .card-welcome-tag,
 .register-prompt-container,
+.navbar-center-tagline,
 .input-field-label,
 .checkbox-text-label {
   transition: background-color 0.35s ease, background 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, backdrop-filter 0.35s ease;
@@ -309,7 +316,7 @@ html, body, #root {
 }
 
 /* ==========================================================================
-   TOP NAVBAR (Brand Identity, Theme Switcher)
+   TOP NAVBAR (Brand Identity, Centered Pillars, Theme Switcher)
    ========================================================================== */
 .login-top-navbar {
   position: relative;
@@ -317,15 +324,17 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 48px;
+  padding: clamp(16px, 2.4vh, 24px) clamp(48px, 3.6vw, 56px);
   width: 100%;
   box-sizing: border-box;
 }
 
-/* Left Brand Identity */
+/* Left Brand Identity: flex 1 aligns center tagline exactly in the screen middle */
 .brand-badge-container {
+  flex: 1 1 0;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -369,8 +378,31 @@ html, body, #root {
   margin-top: 1px;
 }
 
-/* Right Theme Action */
+/* Center Tagline: PEOPLE | PROCESS | GROWTH (Strictly centered horizontally) */
+.navbar-center-tagline {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+  color: var(--nav-tagline);
+  opacity: 0.85;
+}
+
+.nav-tagline-separator {
+  color: var(--nav-tagline-border);
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.4;
+  margin: 0 2px;
+}
+
+/* Right Theme Action: flex 1 balances left brand */
 .navbar-theme-action {
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -427,9 +459,8 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 36px;
-  padding: 0 48px 24px 48px;
-  min-height: 0;
+  gap: clamp(24px, 4vw, 64px);
+  padding: 0 0 clamp(16px, 2.5vh, 28px) clamp(48px, 3.6vw, 56px);
   width: 100%;
   box-sizing: border-box;
 }
@@ -446,7 +477,7 @@ html, body, #root {
   justify-content: center;
   align-items: flex-start;
   text-align: left;
-  transform: translateY(-24px); /* Harmoniously centered with 620px login card */
+  transform: translateY(-85px); /* Move entire left hero block upward by ~85px */
 }
 
 .hero-typography-group {
@@ -589,58 +620,57 @@ html, body, #root {
 }
 
 /* ==========================================================================
-   3 & 4. LOGIN PANEL (Consistent 620px Desktop Width & Stable Height)
+   3 & 4. LOGIN PANEL (500–540px Width, 5–6% Right Margin, 40px Inset)
    ========================================================================== */
 .right-interactive-card-area {
-  flex: 0 0 620px;
-  width: 620px;
-  max-width: 100%;
+  flex: 0 0 520px;
+  max-width: 530px;
+  width: 100%;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-right: 16px;
+  margin-right: 5.5%; /* 5–6% right margin requested */
   box-sizing: border-box;
 }
 
 .login-card-glassmorphism {
-  width: 620px;
-  max-width: calc(100vw - 32px);
-  min-height: 575px;
+  width: 100%;
+  max-width: 520px;
   background: var(--card-surface);
   backdrop-filter: var(--card-backdrop-blur);
   -webkit-backdrop-filter: var(--card-backdrop-blur);
   border-radius: 24px;
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
-  padding: 34px 40px 26px 40px;
+  padding: clamp(26px, 3.2vh, 34px) 40px clamp(20px, 2.5vh, 26px) 40px; /* Consistent ~40px left/right padding */
   box-sizing: border-box;
   position: relative;
   display: flex;
   flex-direction: column;
 }
 
-/* Card Header: Welcome back, heading, and subtitle comfortably spaced */
+/* Card Header: Welcome back, heading, and subtitle close together */
 .login-card-header {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   width: 100%;
   text-align: left;
 }
 
 .card-welcome-tag {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 1.8px;
+  letter-spacing: 1.5px;
   color: var(--welcome-tag);
   text-transform: uppercase;
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .card-title-main {
   margin: 0;
-  font-size: 25px;
+  font-size: 23px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.2;
   letter-spacing: -0.3px;
 }
 
@@ -659,10 +689,10 @@ html, body, #root {
 }
 
 .card-subtitle-desc {
-  font-size: 13.5px;
+  font-size: 12.5px;
   color: var(--text-sub);
-  margin: 6px 0 0 0;
-  line-height: 1.5;
+  margin: 5px 0 0 0;
+  line-height: 1.45;
 }
 
 /* Form Container */
@@ -675,19 +705,19 @@ html, body, #root {
 .form-fields-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 13px;
   width: 100%;
 }
 
 .form-group-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
 }
 
 .input-field-label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-main);
   margin: 0;
@@ -701,9 +731,9 @@ html, body, #root {
   align-items: center;
   background: var(--input-surface);
   border: 1px solid var(--input-border);
-  border-radius: 12px;
-  padding: 0 16px;
-  height: 48px;
+  border-radius: 11px;
+  padding: 0 14px;
+  height: 42px;
   width: 100%;
   transition: all 0.2s ease;
   box-sizing: border-box;
@@ -714,69 +744,20 @@ html, body, #root {
   box-shadow: var(--input-focus-shadow);
 }
 
-.input-box-container.has-error {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25), 0 0 12px rgba(239, 68, 68, 0.2);
-}
-
-.login-page-root.light .input-box-container.has-error {
-  border-color: #dc2626;
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2), 0 0 8px rgba(220, 38, 38, 0.12);
-}
-
-/* Inline Field Validation Error */
-.field-inline-error {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: #fca5a5;
-  margin-top: 4px;
-  line-height: 1.3;
-  animation: fieldErrorFadeIn 0.18s ease-out;
-}
-
-@keyframes fieldErrorFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-3px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.field-error-icon {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  color: #f87171;
-}
-
-.login-page-root.light .field-inline-error {
-  color: #dc2626;
-}
-
-.login-page-root.light .field-error-icon {
-  color: #dc2626;
-}
-
 .input-leading-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 12px;
+  margin-right: 10px;
   flex-shrink: 0;
 }
 
 .input-leading-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .styled-input-control {
@@ -784,7 +765,7 @@ html, body, #root {
   border: none;
   outline: none;
   color: var(--input-text);
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-family: inherit;
   width: 100%;
   height: 100%;
@@ -798,7 +779,7 @@ html, body, #root {
 }
 
 .styled-input-control.with-trailing-action {
-  padding-right: 32px;
+  padding-right: 28px;
 }
 
 /* ==========================================================================
@@ -822,7 +803,7 @@ html, body, #root {
   caret-color: #ffffff;
   transition: background-color 9999s ease-in-out 0s;
   font-family: inherit !important;
-  font-size: 14.5px !important;
+  font-size: 13.5px !important;
 }
 
 /* Ensure seamless dark glass container when autofilled in dark mode */
@@ -863,7 +844,7 @@ html, body, #root {
 
 .input-trailing-reveal-btn {
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
@@ -883,8 +864,8 @@ html, body, #root {
 }
 
 .input-trailing-reveal-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Remember Me and Forgot Password (Aligned across 100% boundary) */
@@ -893,9 +874,9 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  margin-top: 3px;
-  margin-bottom: 3px;
-  height: 24px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  height: 22px;
 }
 
 .checkbox-label-wrapper {
@@ -916,8 +897,8 @@ html, body, #root {
 }
 
 .custom-checkbox-box {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   border-radius: 4px;
   border: 1px solid var(--input-border);
   background: var(--input-surface);
@@ -929,8 +910,8 @@ html, body, #root {
 }
 
 .custom-checkbox-box svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   color: #FFFFFF;
   opacity: 0;
   transform: scale(0.6);
@@ -948,7 +929,7 @@ html, body, #root {
 }
 
 .checkbox-text-label {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-sub);
   line-height: 1;
 }
@@ -958,7 +939,7 @@ html, body, #root {
   border: none;
   padding: 0;
   color: #38bdf8;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
@@ -1030,115 +1011,15 @@ html, body, #root {
   height: 14px;
 }
 
-/* Light Theme Error & Success Alert Enhancements */
-.login-page-root.light .auth-alert-message {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #991b1b;
-}
-
-.login-page-root.light .alert-warning-icon {
-  color: #dc2626;
-}
-
-.login-page-root.light .alert-text {
-  color: #991b1b;
-  font-weight: 500;
-}
-
-.login-page-root.light .alert-close-btn {
-  color: #b91c1c;
-}
-
-.auth-alert-success-banner {
-  background: rgba(16, 185, 129, 0.15) !important;
-  border-color: rgba(16, 185, 129, 0.4) !important;
-  color: #6ee7b7 !important;
-  margin-bottom: 14px;
-}
-
-.auth-alert-success-banner .alert-warning-icon {
-  color: #34d399 !important;
-}
-
-.auth-alert-success-banner .alert-text {
-  color: #6ee7b7 !important;
-  font-weight: 500 !important;
-}
-
-.auth-alert-success-banner .alert-close-btn {
-  color: #6ee7b7 !important;
-}
-
-.login-page-root.light .auth-alert-success-banner {
-  background: #f0fdf4 !important;
-  border-color: #bbf7d0 !important;
-  color: #166534 !important;
-}
-
-.login-page-root.light .auth-alert-success-banner .alert-warning-icon {
-  color: #16a34a !important;
-}
-
-.login-page-root.light .auth-alert-success-banner .alert-text {
-  color: #166534 !important;
-}
-
-.login-page-root.light .auth-alert-success-banner .alert-close-btn {
-  color: #166534 !important;
-}
-
-/* Visible Focus States for Accessibility */
-.theme-toggle-pill:focus-visible {
-  outline: 2px solid var(--input-focus-border);
-  outline-offset: 3px;
-}
-
-.native-checkbox-hidden:focus-visible + .custom-checkbox-box {
-  outline: 2px solid var(--input-focus-border);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.35);
-}
-
-.input-trailing-reveal-btn:focus-visible {
-  outline: 2px solid var(--input-focus-border);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-.forgot-password-link:focus-visible {
-  outline: 2px solid var(--input-focus-border);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-.login-submit-button:focus-visible {
-  outline: 2px solid #38bdf8;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.4), var(--btn-shadow);
-}
-
-.register-action-btn:focus-visible {
-  outline: 2px solid var(--input-focus-border);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
-.alert-close-btn:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
 /* Submit CTA Button (100% Width) */
 .login-submit-button {
   width: 100%;
-  height: 48px;
-  border-radius: 12px;
+  height: 44px;
+  border-radius: 11px;
   background: var(--btn-gradient);
   border: none;
   color: #FFFFFF;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -1147,7 +1028,7 @@ html, body, #root {
   align-items: center;
   justify-content: center;
   transition: all 0.25s ease;
-  margin-top: 5px;
+  margin-top: 4px;
   box-sizing: border-box;
 }
 
@@ -1173,7 +1054,7 @@ html, body, #root {
 }
 
 .button-arrow {
-  font-size: 17px;
+  font-size: 16px;
   transition: transform 0.2s ease;
 }
 
@@ -1200,10 +1081,10 @@ html, body, #root {
 
 /* OR Divider (Symmetrical on both sides, 100% width) */
 .auth-divider-line {
-  margin: 15px 0 13px 0;
+  margin: 12px 0 10px 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -1214,10 +1095,10 @@ html, body, #root {
 }
 
 .divider-text-tag {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--divider-label);
-  letter-spacing: 1.4px;
+  letter-spacing: 1.2px;
   line-height: 1;
 }
 
@@ -1225,13 +1106,13 @@ html, body, #root {
 .register-prompt-container {
   background: var(--reg-box-bg);
   border: 1px solid var(--reg-box-border);
-  border-radius: 10px;
-  padding: 10px 16px;
+  border-radius: 9px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12.5px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1247,7 +1128,7 @@ html, body, #root {
   padding: 0;
   color: #38bdf8;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12.5px;
   cursor: pointer;
   font-family: inherit;
   transition: color 0.2s ease;
@@ -1271,8 +1152,8 @@ html, body, #root {
    5. BOTTOM FEATURES (Equal Width, Centered Separators, Aligned Content)
    ========================================================================== */
 .security-badges-footer {
-  margin-top: 18px;
-  padding-top: 15px;
+  margin-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid var(--divider-line);
   display: flex;
   align-items: stretch;
@@ -1302,13 +1183,13 @@ html, body, #root {
 }
 
 .badge-icon-circle {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .badge-cyan-accent {
@@ -1332,8 +1213,8 @@ html, body, #root {
 }
 
 .badge-icon-circle svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 
 .badge-text-group {
@@ -1343,14 +1224,14 @@ html, body, #root {
 }
 
 .badge-text-heading {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--text-main);
   line-height: 1.2;
 }
 
 .badge-text-sub {
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--text-sub);
   line-height: 1.25;
   margin: 0;
@@ -1359,50 +1240,53 @@ html, body, #root {
 /* ==========================================================================
    RESPONSIVE ADAPTATIONS
    ========================================================================== */
-@media (max-width: 1440px) {
+@media (max-width: 1366px) {
   .left-branding-hero {
-    transform: translateY(-20px);
-  }
-}
-
-@media (max-width: 1280px) {
-  .login-top-navbar {
-    padding: 18px 36px;
-  }
-  .login-content-split {
-    padding: 0 36px 20px 36px;
-    gap: 30px;
-  }
-  .left-branding-hero {
-    max-width: 460px;
-    transform: translateY(-16px);
-  }
-  .features-grid-2x2 {
-    max-width: 460px;
-    column-gap: 20px;
+    transform: translateY(-60px);
   }
   .right-interactive-card-area {
-    margin-right: 0;
+    flex: 0 0 490px;
+    max-width: 500px;
+    margin-right: 3.5%;
+  }
+  .login-card-glassmorphism {
+    padding: clamp(24px, 3vh, 30px) 32px clamp(18px, 2.2vh, 24px) 32px;
   }
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1120px) {
+  .right-interactive-card-area {
+    flex: 0 0 460px;
+    max-width: 470px;
+    margin-right: 2%;
+  }
+  .login-card-glassmorphism {
+    padding: 22px 28px 18px 28px;
+  }
+}
+
+@media (max-width: 1024px) {
   .login-top-navbar {
     padding: 16px 24px;
+  }
+  .navbar-center-tagline {
+    display: none;
   }
   .login-content-split {
     padding: 0 24px 20px 24px;
     gap: 24px;
   }
   .left-branding-hero {
-    max-width: 380px;
-    transform: translateY(-12px);
+    max-width: 420px;
+    transform: translateY(-30px);
   }
   .features-grid-2x2 {
-    max-width: 380px;
-    column-gap: 14px;
+    max-width: 420px;
+    column-gap: 16px;
   }
   .right-interactive-card-area {
+    flex: 0 0 440px;
+    max-width: 450px;
     margin-right: 0;
   }
 }
@@ -1416,8 +1300,8 @@ html, body, #root {
   .login-content-split {
     flex-direction: column;
     justify-content: center;
-    gap: 32px;
-    padding: 16px 20px 36px 20px;
+    gap: 28px;
+    padding: 10px 20px 32px 20px;
   }
   .left-branding-hero {
     max-width: 100%;
@@ -1440,153 +1324,25 @@ html, body, #root {
     text-align: center;
   }
   .features-grid-2x2 {
-    max-width: 520px;
+    max-width: 440px;
     margin: 0 auto;
     text-align: left;
   }
   .right-interactive-card-area {
-    flex: 0 0 auto;
-    max-width: 620px;
-    width: 100%;
-    margin: 0 auto;
+    flex: 0 0 100%;
+    max-width: 460px;
+    margin-right: 0;
     justify-content: center;
   }
   .login-card-glassmorphism {
-    width: 620px;
-    max-width: calc(100vw - 32px);
-    margin: 0 auto;
-    min-height: 575px;
-    padding: 34px 40px 26px 40px;
+    padding: 24px 24px 20px 24px;
   }
 }
 
-@media (max-width: 640px) {
-  .login-card-glassmorphism {
-    padding: 24px 20px 20px 20px;
-    min-height: auto;
-  }
+@media (max-width: 580px) {
   .features-grid-2x2 {
     grid-template-columns: 1fr;
     row-gap: 16px;
     max-width: 360px;
   }
-  .security-badges-footer {
-    padding-top: 12px;
-    margin-top: 14px;
-  }
-  .badge-icon-circle {
-    width: 24px;
-    height: 24px;
-  }
-  .badge-icon-circle svg {
-    width: 15px;
-    height: 15px;
-  }
-  .badge-text-heading {
-    font-size: 10px;
-  }
-  .badge-text-sub {
-    font-size: 9px;
-  }
-}
-
-
-/* ==========================================================================
-   SCuilONE CRM - Automatic Email Prefill & Change Account Styles
-   ========================================================================== */
-
-.input-label-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.change-account-action-btn {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: #38BDF8;
-  cursor: pointer;
-  transition: color 0.15s ease, opacity 0.15s ease;
-  text-decoration: none;
-}
-
-.change-account-action-btn:hover {
-  color: #7DD3FC;
-  text-decoration: underline;
-}
-
-.change-account-action-btn:focus-visible {
-  outline: 2px solid #38BDF8;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.change-account-action-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.login-page-root.light .change-account-action-btn {
-  color: #0284C7;
-}
-
-.login-page-root.light .change-account-action-btn:hover {
-  color: #0369A1;
-}
-
-.login-page-root.light .change-account-action-btn:focus-visible {
-  outline-color: #0284C7;
-}
-
-/* Subtle read-only appearance for remembered email */
-.input-box-container.is-readonly-prefilled {
-  background: rgba(13, 22, 41, 0.65);
-  border-color: rgba(56, 189, 248, 0.3);
-}
-
-.login-page-root.light .input-box-container.is-readonly-prefilled {
-  background: rgba(241, 245, 249, 0.9);
-  border-color: #CBD5E1;
-}
-
-.styled-input-control.input-readonly-prefilled {
-  cursor: default;
-  color: var(--input-text);
-  font-weight: 500;
-  user-select: all;
-}
-
-.remembered-badge-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  border-radius: 9999px;
-  background: rgba(56, 189, 248, 0.12);
-  color: #38BDF8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  white-space: nowrap;
-  flex-shrink: 0;
-  pointer-events: none;
-  user-select: none;
-}
-
-.remembered-badge-icon {
-  width: 11px;
-  height: 11px;
-}
-
-.login-page-root.light .remembered-badge-pill {
-  background: rgba(2, 132, 199, 0.09);
-  color: #0284C7;
-  border-color: rgba(2, 132, 199, 0.22);
 }

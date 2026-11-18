@@ -73,6 +73,8 @@
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 12px;
 }
 
@@ -132,6 +134,8 @@
   border: none;
   border-radius: 8px;
   padding: 9px 18px;
+  min-height: 40px;
+  white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -851,6 +855,107 @@
   gap: 14px;
 }
 
+/* ─── Schedule Site Visit modal ─── */
+.sv-schedule-modal {
+  max-width: 600px;
+}
+
+/* Header and footer stay fixed; only .modal-body scrolls. */
+.sv-modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sv-modal-form .modal-body {
+  min-height: 0;
+  overflow-x: hidden;
+}
+
+.sv-modal-form .form-group select,
+.sv-modal-form .form-group input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sv-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sv-schedule-grid .form-group {
+  min-width: 0;
+}
+
+.sv-form-alert {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.sv-form-notice {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+.sv-field-error {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #dc2626;
+}
+
+.sv-field-hint {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.sv-modal-form .form-group [aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.sv-modal-form .form-group select:disabled,
+.sv-modal-form .form-group input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.dashboard-wrapper.dark .sv-form-alert {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.dashboard-wrapper.dark .sv-form-notice {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
+.dashboard-wrapper.dark .sv-field-error {
+  color: #f87171;
+}
+
+.dashboard-wrapper.dark .sv-field-hint {
+  color: #94a3b8;
+}
+
+.dashboard-wrapper.dark .sv-modal-form .form-group input[type="date"],
+.dashboard-wrapper.dark .sv-modal-form .form-group input[type="time"] {
+  color-scheme: dark;
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -977,6 +1082,28 @@
   }
 }
 
+@media (max-width: 640px) {
+  /* Date on its own row, start / end side by side. */
+  .sv-schedule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sv-schedule-grid .form-group:first-child {
+    grid-column: 1 / -1;
+  }
+  .sv-schedule-modal .modal-body {
+    padding: 18px 16px;
+  }
+  .sv-schedule-modal .modal-footer {
+    padding: 14px 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .sv-schedule-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .site-visits-header {
     flex-direction: column;
@@ -985,6 +1112,10 @@
   .header-actions {
     width: 100%;
     justify-content: space-between;
+  }
+  .header-actions .btn-schedule-visit {
+    flex: 1 1 100%;
+    justify-content: center;
   }
   .site-visits-summary-grid {
     grid-template-columns: 1fr;
@@ -1007,4 +1138,104 @@
   .details-spec-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Modal layout hardening (Schedule / Update / View)
+   - overlay and card are always sized against the viewport (see the note on
+     .dashboard-page-transition-wrapper in DashboardLayout.css)
+   - header and footer are pinned, ONLY .modal-body scrolls
+   - scoped to .site-visits-page so the ten other pages that also define a
+     global .modal-overlay / .modal-card cannot override it
+   ══════════════════════════════════════════════════════════════════════════ */
+.site-visits-page .modal-overlay {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.site-visits-page .modal-card {
+  width: 100%;
+  min-height: 0;
+  max-height: 90vh;
+  max-height: min(90vh, calc(100dvh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.site-visits-page .modal-card > .modal-header,
+.site-visits-page .modal-card > .modal-footer,
+.site-visits-page .modal-card > form > .modal-footer {
+  flex: 0 0 auto;
+}
+
+.site-visits-page .modal-card > .modal-header {
+  gap: 12px;
+}
+
+.site-visits-page .modal-card > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.site-visits-page .modal-card .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+}
+
+.site-visits-page .modal-card .modal-body::-webkit-scrollbar { width: 8px; }
+.site-visits-page .modal-card .modal-body::-webkit-scrollbar-track { background: transparent; }
+.site-visits-page .modal-card .modal-body::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.site-visits-page .modal-card .modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+  background-clip: content-box;
+}
+
+.dashboard-wrapper.dark .site-visits-page .modal-card .modal-body { scrollbar-color: rgba(100, 116, 139, 0.6) transparent; }
+.dashboard-wrapper.dark .site-visits-page .modal-card .modal-body::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.6); background-clip: content-box; }
+
+/* Nothing inside the dialog may push it wider than the viewport */
+.site-visits-page .modal-card .modal-body * { min-width: 0; }
+.site-visits-page .modal-card .modal-body input,
+.site-visits-page .modal-card .modal-body select,
+.site-visits-page .modal-card .modal-body textarea { max-width: 100%; box-sizing: border-box; }
+
+/* Footer: one row, right-aligned, equal-height buttons; wraps instead of overflowing */
+.site-visits-page .modal-card .modal-footer {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.site-visits-page .modal-card .modal-footer button {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .site-visits-page .modal-overlay { padding: 8px; }
+  .site-visits-page .modal-card { border-radius: 12px; max-height: calc(100dvh - 16px); }
+  .site-visits-page .modal-card .modal-footer button { flex: 1 1 auto; }
+}
+
+@media (max-height: 560px) {
+  .site-visits-page .modal-card > .modal-header { padding-top: 12px; padding-bottom: 12px; }
 }

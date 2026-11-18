@@ -26,19 +26,6 @@ body.dark .account-modal-wide .modal-header {
   border-bottom-color: #333333;
 }
 
-.account-modal-wide .modal-header h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0;
-  color: #1a202c;
-}
-
-.dashboard-wrapper.dark .account-modal-wide .modal-header h2,
-.dark .account-modal-wide .modal-header h2,
-body.dark .account-modal-wide .modal-header h2 {
-  color: #F3F4F6;
-}
-
 .account-modal-wide .modal-body {
   padding: 24px 28px;
   overflow-y: auto;
@@ -86,18 +73,12 @@ body.dark .account-modal-section {
 .account-modal-section-title,
 .related-records-heading {
   margin: 0 0 16px 0;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: #1a202c;
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.account-section-header {
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 8px;
-  margin-bottom: 16px;
 }
 
 .dashboard-wrapper.dark .account-modal-section-title,
@@ -106,13 +87,7 @@ body.dark .account-modal-section {
 .dark .related-records-heading,
 body.dark .account-modal-section-title,
 body.dark .related-records-heading {
-  color: #E5E7EB;
-}
-
-.dashboard-wrapper.dark .account-section-header,
-.dark .account-section-header,
-body.dark .account-section-header {
-  border-bottom-color: #333333;
+  color: #f7fafc;
 }
 
 /* ─── Two-Column Overview Grid ─── */
@@ -160,7 +135,7 @@ body.dark .account-section-header {
 .dark .detail-group .text-muted,
 body.dark .detail-group label,
 body.dark .detail-group .text-muted {
-  color: #AAB4C5;
+  color: #94a3b8;
 }
 
 .detail-value {
@@ -173,29 +148,10 @@ body.dark .detail-group .text-muted {
   line-height: 1.45;
 }
 
-.detail-value-semibold {
-  font-weight: 600;
-}
-
 .dashboard-wrapper.dark .detail-value,
 .dark .detail-value,
 body.dark .detail-value {
-  color: #F3F4F6;
-}
-
-.notes-box {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 10px 14px;
-}
-
-.dashboard-wrapper.dark .notes-box,
-.dark .notes-box,
-body.dark .notes-box {
-  background: #252525;
-  border-color: #383838;
-  color: #F3F4F6;
+  color: #f1f5f9;
 }
 
 .detail-notes-value {
@@ -498,15 +454,14 @@ body.dark .related-header-title {
 .dark .related-count-badge,
 body.dark .related-count-badge {
   background: #2d3748;
-  color: #cbd5e1;
+  color: #a0aec0;
 }
 
 .dashboard-wrapper.dark .related-count-badge.has-records,
 .dark .related-count-badge.has-records,
 body.dark .related-count-badge.has-records {
-  background: #1e3a5f;
-  color: #93c5fd;
-  border: 1px solid #2563eb;
+  background: #2a3b4c;
+  color: #90cdf4;
 }
 
 /* Toggle Button */
@@ -534,9 +489,8 @@ body.dark .related-count-badge.has-records {
 .dashboard-wrapper.dark .related-toggle-btn,
 .dark .related-toggle-btn,
 body.dark .related-toggle-btn {
-  color: #e2e8f0;
+  color: #a0aec0;
   border-color: #4a5568;
-  background: #252b36;
 }
 
 .dashboard-wrapper.dark .related-toggle-btn:hover,
@@ -544,31 +498,13 @@ body.dark .related-toggle-btn {
 body.dark .related-toggle-btn:hover {
   background: #2d3748;
   border-color: #718096;
-  color: #ffffff;
+  color: #e2e8f0;
 }
 
 .related-toggle-icon {
   width: 12px;
   height: 12px;
   transition: transform 0.2s ease;
-}
-
-.related-toggle-icon.expanded {
-  transform: rotate(180deg);
-}
-
-.related-section-title-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 8px;
-}
-
-.dashboard-wrapper.dark .related-section-title-bar,
-.dark .related-section-title-bar,
-body.dark .related-section-title-bar {
-  border-bottom-color: #2d3748;
 }
 
 /* Content Area */
@@ -831,211 +767,3 @@ body.dark .related-empty-state {
 body.dark .related-loading-state {
   color: #9ca3af;
 }
-
-/* ─── Related Record Card Component & Action Buttons ─── */
-.related-records-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.related-record-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background-color: #ffffff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.related-record-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-}
-
-.dashboard-wrapper.dark .related-record-card,
-.dark .related-record-card,
-body.dark .related-record-card {
-  background-color: #1a202c;
-  border-color: #2d3748;
-}
-
-.dashboard-wrapper.dark .related-record-card:hover,
-.dark .related-record-card:hover,
-body.dark .related-record-card:hover {
-  border-color: #4a5568;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.related-record-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
-
-.related-record-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: #1a202c;
-  word-break: break-word;
-}
-
-.dashboard-wrapper.dark .related-record-name,
-.dark .related-record-name,
-body.dark .related-record-name {
-  color: #F3F4F6;
-}
-
-.related-record-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  font-size: 0.85rem;
-  color: #718096;
-}
-
-.dashboard-wrapper.dark .related-record-meta,
-.dark .related-record-meta,
-body.dark .related-record-meta {
-  color: #AAB4C5;
-}
-
-.related-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.related-deal-amount {
-  font-weight: 600;
-  color: #2b6cb0;
-  font-size: 0.9rem;
-}
-
-.dashboard-wrapper.dark .related-deal-amount,
-.dark .related-deal-amount,
-body.dark .related-deal-amount {
-  color: #60a5fa;
-}
-
-/* Card Actions Container */
-.related-record-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-/* Compact Outline / Text Action Buttons */
-.related-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 11px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  border-radius: 6px;
-  cursor: pointer;
-  background-color: transparent;
-  border: 1px solid #cbd5e1;
-  color: #475569;
-  transition: all 0.15s ease-in-out;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.related-action-btn svg {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-}
-
-.related-action-btn:hover:not(:disabled) {
-  background-color: #f1f5f9;
-  border-color: #94a3b8;
-  color: #0f172a;
-}
-
-.related-action-btn.view:hover:not(:disabled) {
-  border-color: #3b82f6;
-  background-color: #eff6ff;
-  color: #2563eb;
-}
-
-.related-action-btn.edit:hover:not(:disabled) {
-  border-color: #10b981;
-  background-color: #ecfdf5;
-  color: #059669;
-}
-
-.dashboard-wrapper.dark .related-action-btn,
-.dark .related-action-btn,
-body.dark .related-action-btn {
-  border-color: #4a5568;
-  color: #E5E7EB;
-  background-color: #252b36;
-}
-
-.dashboard-wrapper.dark .related-action-btn:hover:not(:disabled),
-.dark .related-action-btn:hover:not(:disabled),
-body.dark .related-action-btn:hover:not(:disabled) {
-  background-color: #2d3748;
-  border-color: #718096;
-  color: #ffffff;
-}
-
-.dashboard-wrapper.dark .related-action-btn.view:hover:not(:disabled),
-.dark .related-action-btn.view:hover:not(:disabled),
-body.dark .related-action-btn.view:hover:not(:disabled) {
-  border-color: #60a5fa;
-  background-color: #1e3a5f;
-  color: #93c5fd;
-}
-
-.dashboard-wrapper.dark .related-action-btn.edit:hover:not(:disabled),
-.dark .related-action-btn.edit:hover:not(:disabled),
-body.dark .related-action-btn.edit:hover:not(:disabled) {
-  border-color: #34d399;
-  background-color: #133e32;
-  color: #6ee7b7;
-}
-
-.related-action-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* Spinner for loading state on button */
-.related-action-spinner {
-  animation: related-spin 0.75s linear infinite;
-}
-
-@keyframes related-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Nested submodal overlay z-index stacking */
-.account-modal-submodal-container .modal-overlay {
-  z-index: 1100;
-}
-
-/* Responsive adjustment for small screens */
-@media (max-width: 600px) {
-  .related-record-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  .related-record-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-}
-

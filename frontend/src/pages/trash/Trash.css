@@ -1,0 +1,30 @@
+/* Trash page refinements (builds on Users.css / Leads.css / CrmInsights.css) */
+.ins-page .page-header { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.ins-page .page-header .header-actions { display: flex; align-items: center; gap: 8px; }
+
+.ins-tabs { scrollbar-width: thin; }
+.ins-tab { flex: 0 0 auto; }
+
+.ins-toolbar .leads-search-box { min-width: 0; }
+
+.trash-error { align-items: flex-start; }
+.trash-error-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.trash-error-text strong { font-weight: 600; line-height: 1.4; }
+.trash-error-text code {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.trash-error .ins-alert-action { flex-shrink: 0; }
+
+.ins-row-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .ins-page .page-header .header-actions { width: 100%; }
+  .ins-page .page-header .header-actions .btn-secondary { flex: 1; justify-content: center; }
+  .trash-error { flex-direction: column; }
+  .trash-error .ins-alert-action { align-self: stretch; }
+  .ins-table-wrap { overflow-x: auto; }
+  .ins-row-actions { justify-content: flex-start; }
+}

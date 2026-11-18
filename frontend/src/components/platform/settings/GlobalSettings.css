@@ -1,0 +1,580 @@
+/* Global Settings — built entirely on the --plat-* tokens so Light/Dark follow the platform theme. */
+
+.gs-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.gs-card {
+  background: var(--plat-surface);
+  border: 1px solid var(--plat-border);
+  border-radius: 14px;
+  box-shadow: var(--plat-shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.gs-card:hover {
+  border-color: var(--plat-border-strong);
+}
+
+.gs-card.is-dirty {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+/* ---------- header ---------- */
+
+.gs-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--plat-border);
+}
+
+.gs-card-icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: var(--plat-accent);
+  background: var(--plat-accent-soft);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+}
+
+.gs-card-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.gs-card-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--plat-text);
+}
+
+.gs-card-heading p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--plat-muted);
+}
+
+.gs-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--plat-border);
+  color: var(--plat-muted);
+  background: var(--plat-surface-alt);
+}
+
+.gs-chip.dirty {
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.gs-chip.saving {
+  color: var(--plat-accent);
+  background: var(--plat-accent-soft);
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+/* ---------- body / sections ---------- */
+
+.gs-card-body {
+  padding: 18px 22px 20px;
+}
+
+.gs-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.gs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.gs-section-head h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--plat-muted);
+}
+
+.gs-section-head p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--plat-muted);
+}
+
+.gs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px 20px;
+}
+
+/* ---------- fields ---------- */
+
+.gs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gs-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--plat-text);
+}
+
+.gs-unit {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--plat-muted);
+}
+
+.gs-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--plat-surface-alt);
+  color: var(--plat-text);
+  border: 1px solid var(--plat-border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.gs-input:hover:not(:disabled) {
+  border-color: var(--plat-border-strong);
+}
+
+.gs-input:focus-visible {
+  border-color: var(--plat-accent);
+  box-shadow: 0 0 0 3px var(--plat-accent-soft);
+}
+
+.gs-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.gs-input.is-invalid {
+  border-color: #ef4444;
+}
+
+.gs-input.is-invalid:focus-visible {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.gs-select {
+  appearance: none;
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--plat-muted) 50%),
+    linear-gradient(135deg, var(--plat-muted) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.gs-select option {
+  background: var(--plat-surface);
+  color: var(--plat-text);
+}
+
+.gs-input-wrap {
+  position: relative;
+}
+
+.gs-input-wrap .gs-input {
+  padding-right: 40px;
+}
+
+.gs-input-adorn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--plat-muted);
+  cursor: pointer;
+}
+
+.gs-input-adorn:hover {
+  background: var(--plat-accent-soft);
+  color: var(--plat-text);
+}
+
+.gs-help,
+.gs-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.gs-help {
+  color: var(--plat-muted);
+}
+
+.gs-error {
+  color: #ef4444;
+}
+
+/* ---------- toggles ---------- */
+
+.gs-toggle-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--plat-border);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.gs-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--plat-surface-alt);
+  transition: background 0.15s ease;
+}
+
+.gs-toggle-row + .gs-toggle-row {
+  border-top: 1px solid var(--plat-border);
+}
+
+.gs-toggle-row:hover {
+  background: var(--plat-accent-soft);
+}
+
+.gs-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gs-toggle-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--plat-text);
+}
+
+.gs-switch {
+  flex: none;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--plat-border-strong);
+  background: var(--plat-border-strong);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.gs-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(2, 6, 23, 0.35);
+  transition: transform 0.18s ease;
+}
+
+.gs-switch.is-on {
+  background: var(--plat-accent);
+  border-color: var(--plat-accent);
+}
+
+.gs-switch.is-on .gs-switch-thumb {
+  transform: translateX(18px);
+}
+
+.gs-switch:focus-visible {
+  outline: 2px solid var(--plat-accent);
+  outline-offset: 2px;
+}
+
+.gs-switch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------- nested objects / arrays ---------- */
+
+.gs-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--plat-border);
+  border-radius: 11px;
+  background: var(--plat-surface-alt);
+}
+
+.gs-subgroup-head h5 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--plat-text);
+}
+
+.gs-subgroup-head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--plat-muted);
+}
+
+.gs-array {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gs-array-item {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.gs-array-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.gs-icon-btn,
+.gs-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--plat-border);
+  background: var(--plat-surface);
+  color: var(--plat-muted);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.gs-icon-btn {
+  width: 36px;
+  height: 38px;
+  flex: none;
+}
+
+.gs-add-btn {
+  align-self: flex-start;
+  padding: 7px 12px;
+}
+
+.gs-icon-btn:hover,
+.gs-add-btn:hover {
+  color: var(--plat-text);
+  border-color: var(--plat-border-strong);
+  background: var(--plat-accent-soft);
+}
+
+/* ---------- banner + footer ---------- */
+
+.gs-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 22px 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.gs-banner svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.gs-banner.error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.gs-banner.success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+.gs-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--plat-border);
+  background: var(--plat-surface-alt);
+  border-radius: 0 0 14px 14px;
+}
+
+.gs-meta {
+  font-size: 12px;
+  color: var(--plat-muted);
+}
+
+.gs-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---------- states ---------- */
+
+.gs-empty {
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 36px 22px;
+  color: var(--plat-muted);
+}
+
+.gs-empty p {
+  margin: 0;
+  color: var(--plat-text);
+}
+
+.gs-skeleton {
+  padding: 22px;
+  gap: 12px;
+}
+
+.gs-skel-line,
+.gs-skel-box {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--plat-surface-alt) 25%,
+    var(--plat-accent-soft) 50%,
+    var(--plat-surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: gs-shimmer 1.4s linear infinite;
+}
+
+.gs-skel-line {
+  height: 14px;
+}
+
+.gs-skel-line.w40 {
+  width: 40%;
+}
+
+.gs-skel-line.w70 {
+  width: 70%;
+}
+
+.gs-skel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.gs-skel-box {
+  height: 42px;
+}
+
+.gs-spin {
+  animation: gs-rotate 0.9s linear infinite;
+}
+
+@keyframes gs-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes gs-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-skel-line,
+  .gs-skel-box,
+  .gs-spin,
+  .gs-switch,
+  .gs-switch-thumb {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 640px) {
+  .gs-card-head {
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+
+  .gs-card-body {
+    padding: 16px;
+  }
+
+  .gs-banner {
+    margin: 0 16px 12px;
+  }
+
+  .gs-card-foot {
+    padding: 12px 16px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gs-actions {
+    justify-content: flex-end;
+  }
+
+  .gs-grid {
+    grid-template-columns: 1fr;
+  }
+}

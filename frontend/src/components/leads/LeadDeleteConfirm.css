@@ -1,0 +1,22 @@
+/* Delete Lead confirmation – readable text in both light and dark themes */
+.lead-delete-question {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: #334155;
+}
+.lead-delete-name {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+.lead-delete-warning {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.dashboard-wrapper.dark .lead-delete-question { color: #e2e8f0; }
+.dashboard-wrapper.dark .lead-delete-name { color: #ffffff; }
+.dashboard-wrapper.dark .lead-delete-warning { color: #94a3b8; }

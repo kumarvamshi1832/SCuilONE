@@ -31,7 +31,11 @@ import {
   XIcon,
 } from "../../components/common/SupportPortalIcons";
 import { useTheme } from "../../context/ThemeContext";
-import { hasPlatformPermission } from "../../services/platformApiClient";
+import {
+  getStoredPlatformUser,
+  hasPlatformPermission,
+} from "../../services/platformApiClient";
+import { resolvePlatformRoleLabel } from "../../utils/platformRoleDisplay";
 import {
   extractApiErrorMessage,
   platformService,
@@ -585,6 +589,40 @@ export default function PlatformDashboardPage() {
     loadInitial();
   }, []);
 
+  // Keep the welcome heading in step with the authenticated session: the display name comes from
+  // the stored platform profile (updated on profile edits) and the role is re-read from the API.
+  const [sessionUser, setSessionUser] = useState<any>(() =>
+    getStoredPlatformUser()
+  );
+  useEffect(() => {
+    let active = true;
+    const syncIdentity = (event?: Event) => {
+      if (
+        event instanceof StorageEvent &&
+        event.key !== null &&
+        !event.key.startsWith("platform_")
+      ) {
+        return;
+      }
+      setSessionUser(getStoredPlatformUser());
+      platformService
+        .getMyDashboard()
+        .then((fresh) => {
+          if (active) setDashboard(fresh);
+        })
+        .catch(() => {
+          /* Keep the current heading; auth failures are handled by the API client. */
+        });
+    };
+    window.addEventListener("platform-profile-updated", syncIdentity);
+    window.addEventListener("storage", syncIdentity);
+    return () => {
+      active = false;
+      window.removeEventListener("platform-profile-updated", syncIdentity);
+      window.removeEventListener("storage", syncIdentity);
+    };
+  }, []);
+
   const handleCustomerLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canLookup) return;
@@ -863,17 +901,18 @@ export default function PlatformDashboardPage() {
     industryChartData.length > 0 ||
     Boolean(canViewAnalytics && (analyticsError || analytics));
 
-  const backendTitle = (dashboard?.dashboard_title || "").trim();
-  const isPlatformAdminHero =
-    !backendTitle ||
-    backendTitle === "Super Admin Dashboard" ||
-    backendTitle === "Platform Admin Dashboard" ||
-    backendTitle === "Super Admin Platform";
-  const rawHeroTitle = backendTitle || "Super Admin Platform";
-  const titleWords = rawHeroTitle.split(/\s+/);
-  const heroTitleLead =
-    titleWords.length > 1 ? `${titleWords.slice(0, -1).join(" ")} ` : "";
-  const heroTitleAccent = titleWords[titleWords.length - 1] || rawHeroTitle;
+  // Role of the authenticated employee as reported by GET /dashboards/me (`role_name`).
+  // If it is missing or not a known platform role, no role is shown (never default to Super Admin).
+  const heroRoleLabel = resolvePlatformRoleLabel(
+    dashboard?.role_name,
+    dashboard?.role_key,
+    dashboard?.role
+  );
+  const heroUserName = String(sessionUser?.full_name || sessionUser?.name || "")
+    .trim();
+  const showHeroUserName =
+    Boolean(heroUserName) &&
+    heroUserName.toLowerCase() !== (heroRoleLabel || "").toLowerCase();
 
   const axisTickFill = isDark ? "#94a3b8" : "#475569";
   const axisLineStroke = isDark
@@ -898,29 +937,27 @@ export default function PlatformDashboardPage() {
         <div className="platform-dash-hero-inner">
           <div className="platform-dash-hero-main">
             <h2 className="platform-dash-title">
-              {isPlatformAdminHero ? (
+              {heroRoleLabel ? (
                 <>
                   <span className="platform-dash-title-lead">
                     Welcome Back,{" "}
                   </span>
                   <span className="platform-dash-title-accent">
-                    Super Admin
+                    {heroRoleLabel}
                   </span>
                   <span className="platform-dash-title-lead">!</span>
                 </>
               ) : (
-                <>
-                  {heroTitleLead && (
-                    <span className="platform-dash-title-lead">
-                      {heroTitleLead}
-                    </span>
-                  )}
-                  <span className="platform-dash-title-accent">
-                    {heroTitleAccent}
-                  </span>
-                </>
+                <span className="platform-dash-title-accent">
+                  Welcome Back!
+                </span>
               )}
             </h2>
+            {showHeroUserName && (
+              <p className="platform-dash-hero-user">
+                Signed in as <strong>{heroUserName}</strong>
+              </p>
+            )}
             <p className="platform-dash-hero-tagline">
               One Platform. Multiple Industries. Unified Control.
             </p>

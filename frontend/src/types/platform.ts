@@ -264,8 +264,11 @@ export interface PlatformDashboardKPIs {
 }
 
 export interface PlatformDashboardPayload {
-  role: string;
-  role_key: string;
+  /** GET /dashboards/me returns the role as `role_name` (e.g. "Platform Admin"). */
+  role_name?: string;
+  /** Present on the per-role dashboard listings; not sent by /dashboards/me. */
+  role?: string;
+  role_key?: string;
   industry_key?: string | null;
   dashboard_key: string;
   dashboard_title: string;

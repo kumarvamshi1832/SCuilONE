@@ -31,6 +31,7 @@ import { getIndustryDisplayName } from "../../utils/industryUtils";
 import { useVerifiedAuth } from "./ProtectedRoute";
 import { signOutAndRedirect } from "../../services/authSession";
 import { classifyCrmRole } from "../../utils/authRouting";
+import { roleFallbackAllows } from "../../utils/modulePermissions";
 import GlobalSearch from "../search/GlobalSearch";
 
 interface DashboardLayoutProps {
@@ -66,6 +67,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
       "/deals",
       "/pipelines",
       "/buyer-requirements",
+      "/lead-scoring",
     ],
   },
   {
@@ -109,6 +111,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     icon: "M2 7h20v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7z M2 4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2H2V4z M4 12h4v2H4v-2z",
     routes: [
       "/bookings",
+      "/customer-booking-requests",
       "/payments",
       "/documents",
     ],
@@ -127,6 +130,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     icon: "M18 20V10 M12 20V4 M6 20v-4",
     routes: [
       "/reports",
+      "/forecast",
       "/workflows",
     ],
   },
@@ -143,6 +147,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
       "/settings",
       "/form-builder",
       "/audit-logs",
+      "/trash",
     ],
   },
 ];
@@ -726,7 +731,10 @@ export default function DashboardLayout({
 
         const route = routeMap[moduleName];
 
-        if (route) {
+        if (moduleName === "customer_booking_requests") {
+          // Customer booking requests have a dedicated detail route keyed by the request id.
+          navigate(`${basePath}/customer-booking-requests/${encodeURIComponent(item.related_record_id)}`);
+        } else if (route) {
 
           navigate(
 
@@ -826,7 +834,7 @@ export default function DashboardLayout({
     } else if (Array.isArray(sourceUser.role_permissions)) {
       permissions = sourceUser.role_permissions;
     }
-    return permissions.some((item) => {
+    const explicitMatch = permissions.some((item) => {
       const pName = typeof item === "string" ? item : item?.name || "";
       const lower = pName.toLowerCase().trim();
       const target = permission.toLowerCase().trim();
@@ -837,6 +845,15 @@ export default function DashboardLayout({
         lower.startsWith(target.split(".")[0] + ".*")
       );
     });
+    if (explicitMatch) return true;
+
+    // The verified CRM session carries the role but no permission list. For Accounts/Deals,
+    // use the same role-based fallback as the pages so the sidebar and page checks agree.
+    if (permissions.length === 0) {
+      const fallback = roleFallbackAllows(permission, authoritativeRole);
+      if (fallback !== null) return fallback;
+    }
+    return false;
   };
 
   const getNavItems = (): NavItem[] => {
@@ -930,6 +947,42 @@ export default function DashboardLayout({
       icon: workflowIcon,
     };
 
+    // Lead Scoring, Sales Forecast and Trash: shown only when the industry configuration enables the
+    // module AND the user holds the matching permission (backend still authorizes every request).
+    const insightNavItems = (): NavItem[] => {
+      const enabled = industryConfig.modules;
+      const items: NavItem[] = [];
+      if (enabled.includes("lead-scoring") && hasPermission("lead.view")) {
+        items.push({
+          label: "Lead Scoring",
+          path: `${basePath}/lead-scoring`,
+          icon: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+        });
+      }
+      if (enabled.includes("forecast") && hasPermission("forecast.view")) {
+        items.push({
+          label: "Sales Forecast",
+          path: `${basePath}/forecast`,
+          icon: "M3 17l6-6 4 4 8-8 M14 7h7v7",
+        });
+      }
+      if (enabled.includes("customer-booking-requests") && hasPermission("booking.view")) {
+        items.push({
+          label: "Customer Booking Requests",
+          path: `${basePath}/customer-booking-requests`,
+          icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 15l2 2 4-4",
+        });
+      }
+      if (enabled.includes("trash") && hasPermission("trash.view")) {
+        items.push({
+          label: "Trash",
+          path: `${basePath}/trash`,
+          icon: "M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6 M10 11v6 M14 11v6",
+        });
+      }
+      return items;
+    };
+
     if (isManager) {
       const managerNav: NavItem[] = [
         { label: "Dashboard", path: "/manager/dashboard", icon: dashboardIcon },
@@ -975,6 +1028,8 @@ export default function DashboardLayout({
       if (isRealEstate || hasPermission("audit.view")) {
         managerNav.push({ label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon });
       }
+
+      managerNav.push(...insightNavItems());
 
       return managerNav;
     }
@@ -1034,6 +1089,8 @@ export default function DashboardLayout({
         salesNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
       }
 
+      salesNav.push(...insightNavItems());
+
       return salesNav;
     }
 
@@ -1091,6 +1148,8 @@ export default function DashboardLayout({
       if (hasPermission("task.view")) {
         opsNav.push({ label: "Tasks", path: `${basePath}/tasks`, icon: activityIcon });
       }
+
+      opsNav.push(...insightNavItems());
 
       return opsNav;
     }
@@ -1193,6 +1252,8 @@ export default function DashboardLayout({
         customNav.push({ label: "Settings", path: `${basePath}/settings`, icon: settingsIcon });
       }
 
+      customNav.push(...insightNavItems());
+
       return customNav;
     }
 
@@ -1242,6 +1303,7 @@ export default function DashboardLayout({
           icon: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01",
         },
         { label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon },
+        ...insightNavItems(),
       ];
     }
 
@@ -1320,6 +1382,8 @@ export default function DashboardLayout({
       defaultNav.push({ label: "Audit Logs", path: `${basePath}/audit-logs`, icon: auditLogIcon });
     }
 
+    defaultNav.push(...insightNavItems());
+
     return defaultNav;
 
   };
@@ -1367,6 +1431,8 @@ export default function DashboardLayout({
             "/accounts",
             "/deals",
             "/activities",
+            "/lead-scoring",
+            "/forecast",
           ],
         },
         {
@@ -1405,6 +1471,7 @@ export default function DashboardLayout({
             "/settings",
             "/form-builder",
             "/audit-logs",
+            "/trash",
           ],
         },
       ];

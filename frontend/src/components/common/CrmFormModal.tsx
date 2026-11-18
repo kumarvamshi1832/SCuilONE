@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
 import "./CrmFormModal.css";
 
@@ -31,7 +32,9 @@ export default function CrmFormModal({
   useBodyScrollLock();
   const titleId = useId();
 
-  return (
+  // Rendered into document.body so no transformed / clipped ancestor in the dashboard layout can
+  // change what `position: fixed` is relative to (the modal must always sit in the viewport).
+  return createPortal(
     <div className="crm-modal-overlay" onClick={onClose}>
       <div
         className="crm-modal"
@@ -63,6 +66,7 @@ export default function CrmFormModal({
 
         <footer className="crm-modal-footer">{footer}</footer>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,0 +1,172 @@
+/* ==========================================================================
+   Booking journey widgets shared by the customer portal and the staff CRM.
+   Colours fall back to neutral values so the same markup works under the
+   portal (--cp-*) and the CRM (.dashboard-wrapper.dark) theme systems.
+   ========================================================================== */
+
+.bj-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(100, 116, 139, 0.16);
+  color: #64748b;
+}
+.bj-badge.bj-good { background: rgba(16, 185, 129, 0.16); color: #059669; }
+.bj-badge.bj-info { background: rgba(50, 133, 246, 0.14); color: #3285f6; }
+.bj-badge.bj-warn { background: rgba(245, 158, 11, 0.18); color: #d97706; }
+.bj-badge.bj-bad { background: rgba(239, 68, 68, 0.14); color: #dc2626; }
+
+/* Timeline ------------------------------------------------------------------ */
+.bj-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bj-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+}
+.bj-step:last-child { padding-bottom: 0; }
+
+.bj-step::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: 0;
+  width: 2px;
+  background: var(--cp-border, #d7e1ef);
+}
+.bj-step:last-child::before { display: none; }
+.bj-step-done::before { background: #10b981; }
+
+.bj-step-dot {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid var(--cp-border, #cbd5e1);
+  background: var(--cp-card-bg, #fff);
+  color: #64748b;
+  box-sizing: border-box;
+}
+.bj-step-done .bj-step-dot { background: #10b981; border-color: #10b981; color: #fff; }
+.bj-step-current .bj-step-dot { border-color: #3285f6; color: #3285f6; box-shadow: 0 0 0 4px rgba(50, 133, 246, 0.18); }
+.bj-step-failed .bj-step-dot { background: #ef4444; border-color: #ef4444; color: #fff; }
+.bj-step-skipped .bj-step-dot { opacity: 0.55; }
+
+.bj-step-body { display: flex; flex-direction: column; gap: 2px; padding-top: 2px; min-width: 0; }
+.bj-step-label { font-size: 0.9rem; font-weight: 600; color: var(--cp-text, inherit); overflow-wrap: anywhere; }
+.bj-step-pending .bj-step-label,
+.bj-step-skipped .bj-step-label { font-weight: 500; opacity: 0.65; }
+.bj-step-detail { font-size: 0.78rem; color: var(--cp-text-muted, #718096); overflow-wrap: anywhere; }
+
+.bj-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* Fact list ------------------------------------------------------------------ */
+.bj-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px 18px;
+  margin: 0;
+}
+.bj-fact dt {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--cp-text-muted, #718096);
+  margin: 0 0 2px;
+}
+.bj-fact dd { margin: 0; font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
+
+/* Agreement text ------------------------------------------------------------------ */
+.bj-agreement {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--cp-border, #e2e8f0);
+  background: rgba(100, 116, 139, 0.07);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.bj-note {
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  background: rgba(50, 133, 246, 0.1);
+  border: 1px solid rgba(50, 133, 246, 0.25);
+}
+.bj-note.bj-warn { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.35); }
+
+/* Two-column page layout ----------------------------------------------------------- */
+.bj-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.bj-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.bj-inline-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.bj-inline-form .full { grid-column: 1 / -1; }
+.bj-inline-form .form-group,
+.bj-inline-form .bj-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.bj-inline-form label { font-size: 0.8125rem; font-weight: 600; }
+.bj-field-error { color: #ef4444; font-size: 0.75rem; margin: 0; }
+.bj-check { display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; line-height: 1.45; }
+.bj-check input { margin-top: 3px; flex: 0 0 auto; }
+
+.bj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bj-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cp-border-subtle, rgba(160, 174, 192, 0.3));
+  flex-wrap: wrap;
+}
+.bj-list li:last-child { border-bottom: none; }
+.bj-list-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bj-list-main strong { font-size: 0.9rem; overflow-wrap: anywhere; }
+.bj-list-main span { font-size: 0.78rem; color: var(--cp-text-muted, #718096); }
+
+.dashboard-wrapper.dark .bj-step-dot { background: #1f1f1f; border-color: #4a5568; }
+.dashboard-wrapper.dark .bj-step-done .bj-step-dot { background: #10b981; border-color: #10b981; }
+.dashboard-wrapper.dark .bj-step-failed .bj-step-dot { background: #ef4444; border-color: #ef4444; }
+.dashboard-wrapper.dark .bj-step::before { background: #333; }
+.dashboard-wrapper.dark .bj-step-done::before { background: #10b981; }
+
+@media (max-width: 900px) {
+  .bj-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .bj-inline-form { grid-template-columns: 1fr; }
+}

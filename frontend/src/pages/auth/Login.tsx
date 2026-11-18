@@ -1,203 +1,84 @@
 import { FormEvent, useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { loginUser } from "../../services/authService";
-import { useTheme } from "../../context/ThemeContext";
 import { completeAuthenticatedLogin } from "../../services/authSession";
+import { useTheme } from "../../context/ThemeContext";
+
 import backdropDark from "../../assets/login-full-backdrop.jpg";
 import backdropLight from "../../assets/login-full-backdrop-light.jpg";
-import "./Login.css";
 
-const REMEMBERED_EMAIL_KEY = "scuilone_remember_email";
+import "./Login.css";
 
 export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
 
-  // Helper to retrieve remembered email from location state or localStorage
-  const getInitialEmail = (): string => {
-    try {
-      const locEmail = (location.state as any)?.email;
-      if (locEmail && typeof locEmail === "string" && locEmail.trim()) {
-        return locEmail.trim().toLowerCase();
-      }
-      const saved =
-        localStorage.getItem(REMEMBERED_EMAIL_KEY) ||
-        localStorage.getItem("scuilone_saved_email");
-      if (saved && typeof saved === "string" && saved.trim()) {
-        return saved.trim().toLowerCase();
-      }
-    } catch {}
-    return "";
-  };
-
-  const initialEmail = getInitialEmail();
-  const isSubmittingRef = useRef(false);
-
-  // Automatic email prefill state & read-only lock when remembered
-  const [email, setEmail] = useState<string>(initialEmail);
-  const [isEmailRemembered, setIsEmailRemembered] = useState<boolean>(() => Boolean(initialEmail));
-  const [rememberMe, setRememberMe] = useState(() => {
-    return localStorage.getItem("scuilone_remember_me") !== "false";
-  });
+  const [email, setEmail] = useState("");
+  const [isEmailReadOnly, setIsEmailReadOnly] = useState(true);
   const [password, setPassword] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
-  const [, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState<string | null>(() => {
-    const locState = location.state as any;
-    return locState?.message || locState?.successMessage || null;
+  const [rememberMe, setRememberMe] = useState(() => {
+    return localStorage.getItem("scuilone_remember_me") === "true";
   });
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const isSubmittingRef = useRef(false);
 
-  // Clear router history state after reading message so refresh won't resurface stale banners
   useEffect(() => {
-    if (location.state && ((location.state as any)?.message || (location.state as any)?.successMessage)) {
-      window.history.replaceState({}, document.title);
-    }
+    setEmail("");
+    localStorage.removeItem("scuilone_remember_email");
+    sessionStorage.removeItem("scuilone_remember_email");
   }, []);
 
-  // Synchronize email if passed via navigation state (e.g. after registration or activation)
   useEffect(() => {
-    const locEmail = (location.state as any)?.email;
-    if (locEmail && typeof locEmail === "string" && locEmail.trim()) {
-      const cleanEmail = locEmail.trim().toLowerCase();
-      setEmail(cleanEmail);
-      setIsEmailRemembered(true);
-      try {
-        localStorage.setItem(REMEMBERED_EMAIL_KEY, cleanEmail);
-      } catch {}
-    }
-  }, [location.state]);
-
-  // When email is remembered and page opens, focus password field directly
-  useEffect(() => {
-    if (isEmailRemembered && email) {
-      const timer = setTimeout(() => {
-        document.getElementById("login-password-input")?.focus();
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isEmailRemembered]);
-
-  // Change account option to clear remembered email and allow entering a different email
-  const handleChangeAccount = () => {
-    try {
-      localStorage.removeItem(REMEMBERED_EMAIL_KEY);
-      localStorage.removeItem("scuilone_saved_email");
+    if (rememberMe) {
+      localStorage.setItem("scuilone_remember_me", "true");
+    } else {
       localStorage.removeItem("scuilone_remember_me");
-    } catch {}
-    setEmail("");
-    setIsEmailRemembered(false);
-    setFieldErrors((prev) => ({ ...prev, email: undefined }));
-    setError("");
-    setSuccessMessage(null);
-    setTimeout(() => {
-      document.getElementById("login-email-input")?.focus();
-    }, 50);
-  };
-
-  const validateEmail = (val: string): string => {
-    const trimmed = val.trim();
-    if (!trimmed) {
-      return "Please enter your email address.";
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      return "Please enter a valid email address (e.g., name@company.com).";
-    }
-    return "";
-  };
-
-  const validatePassword = (val: string): string => {
-    if (!val) {
-      return "Please enter your password.";
-    }
-    return "";
-  };
-
-  const handleEmailChange = (val: string) => {
-    setEmail(val);
-    setError("");
-    setSuccessMessage(null);
-    if (fieldErrors.email) {
-      setFieldErrors((prev) => ({ ...prev, email: validateEmail(val) }));
-    }
-  };
-
-  const handleEmailBlur = () => {
-    setTouched((prev) => ({ ...prev, email: true }));
-    setFieldErrors((prev) => ({ ...prev, email: validateEmail(email) }));
-  };
-
-  const handlePasswordChange = (val: string) => {
-    setPassword(val);
-    setError("");
-    setSuccessMessage(null);
-    if (fieldErrors.password) {
-      setFieldErrors((prev) => ({ ...prev, password: validatePassword(val) }));
-    }
-  };
-
-  const handlePasswordBlur = () => {
-    setTouched((prev) => ({ ...prev, password: true }));
-    setFieldErrors((prev) => ({ ...prev, password: validatePassword(password) }));
-  };
+    localStorage.removeItem("scuilone_remember_email");
+  }, [rememberMe]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (isSubmittingRef.current || loading) return;
-    isSubmittingRef.current = true;
-
+    if (isSubmittingRef.current) return;
     setError("");
-    setSuccessMessage(null);
 
-    const emailErr = validateEmail(email);
-    const passwordErr = validatePassword(password);
-
-    setTouched({ email: true, password: true });
-
-    if (emailErr || passwordErr) {
-      isSubmittingRef.current = false;
-      setFieldErrors({ email: emailErr, password: passwordErr });
-      if (emailErr) {
-        document.getElementById("login-email-input")?.focus();
-      } else if (passwordErr) {
-        document.getElementById("login-password-input")?.focus();
-      }
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!password) {
+      setError("Password is required.");
       return;
     }
 
-    setFieldErrors({});
+    isSubmittingRef.current = true;
+    setLoading(true);
 
     try {
-      setLoading(true);
       const cleanEmail = email.trim().toLowerCase();
-      const response = await loginUser({
-        email: cleanEmail,
-        password,
-      });
+      const response = await loginUser({ email: cleanEmail, password });
 
-      // Save user email to localStorage upon successful login
-      try {
-        localStorage.setItem(REMEMBERED_EMAIL_KEY, cleanEmail);
-        if (rememberMe) {
-          localStorage.setItem("scuilone_remember_me", "true");
-        }
-      } catch {}
-
+      // The backend answers HTTP 200 for an MFA challenge too (no access token yet).
       if (response.requires_mfa || response.mfa_required) {
         const mfaToken = response.mfa_token || response.temp_token || "";
         const isSetupRequired = Boolean(
-          response.mfa_setup_required ||
-          response.next_step === "mfa_enrollment"
+          response.mfa_setup_required || response.next_step === "mfa_enrollment"
         );
 
-        sessionStorage.setItem("mfa_email", email.trim().toLowerCase());
-        if (mfaToken) {
-          sessionStorage.setItem("mfa_token", mfaToken);
-          sessionStorage.setItem("mfa_temp_token", mfaToken);
+        if (!mfaToken) {
+          setError("Multi-factor authentication could not be started. Please try again.");
+          return;
         }
+
+        sessionStorage.setItem("mfa_email", cleanEmail);
+        sessionStorage.setItem("mfa_token", mfaToken);
+        sessionStorage.setItem("mfa_temp_token", mfaToken);
         sessionStorage.setItem("otp_flow", "mfa");
 
         if (isSetupRequired) {
@@ -207,14 +88,19 @@ export default function Login() {
           sessionStorage.removeItem("mfa_setup_required");
           navigate("/mfa");
         }
-      } else {
-        const authResult = await completeAuthenticatedLogin(response);
-        if (!authResult.ok) {
-          setError(authResult.message);
-          return;
-        }
-        navigate(authResult.session.destination, { replace: true });
+        return;
       }
+
+      // A 200 response is only a completed login when it carries a valid session.
+      // completeAuthenticatedLogin verifies the token with /auth/me, resolves the real role,
+      // tenant and industry, persists the session through the single supported storage
+      // mechanism and returns the role-specific dashboard destination.
+      const authResult = await completeAuthenticatedLogin(response);
+      if (!authResult.ok) {
+        setError(authResult.message);
+        return;
+      }
+      navigate(authResult.session.destination, { replace: true });
     } catch (err) {
       const apiError = err as { message?: string; status?: number };
       if (apiError.status === 401) {
@@ -222,7 +108,7 @@ export default function Login() {
       } else if (apiError.status === 403) {
         setError(apiError.message || "Your account is inactive. Contact your administrator.");
       } else if (apiError.status && apiError.status >= 500) {
-        setError("Server error (500). Please try again later or contact your administrator.");
+        setError("Server error. Please try again later or contact your administrator.");
       } else if (
         apiError.status === 0 ||
         (apiError.message &&
@@ -232,7 +118,10 @@ export default function Login() {
       ) {
         setError("Unable to reach the server. Please check your internet connection.");
       } else {
-        setError(apiError.message || "Invalid email or password. Please check your credentials and try again.");
+        setError(
+          apiError.message ||
+            "Invalid email or password. Please check your credentials and try again."
+        );
       }
     } finally {
       isSubmittingRef.current = false;
@@ -390,38 +279,14 @@ export default function Login() {
               </div>
 
               {/* Form */}
-              <form
-                onSubmit={(e) => {
-                  if (loading || isSubmittingRef.current) {
-                    e.preventDefault();
-                    return;
-                  }
-                  handleSubmit(e);
-                }}
-                className="login-interactive-form"
-                noValidate
-              >
+              <form onSubmit={handleSubmit} className="login-interactive-form" noValidate autoComplete="off">
                 <div className="form-fields-wrapper">
                   {/* Email Field */}
                   <div className="form-group-item">
-                    <div className="input-label-header">
-                      <label htmlFor="login-email-input" className="input-field-label">
-                        Email
-                      </label>
-                      {isEmailRemembered && (
-                        <button
-                          type="button"
-                          className="change-account-action-btn"
-                          onClick={handleChangeAccount}
-                          disabled={loading || isSubmittingRef.current}
-                          aria-label="Change account"
-                          title="Sign in with a different account"
-                        >
-                          Change Account
-                        </button>
-                      )}
-                    </div>
-                    <div className={`input-box-container ${fieldErrors.email ? "has-error" : ""} ${isEmailRemembered ? "is-readonly-prefilled" : ""}`}>
+                    <label htmlFor="login-email-input" className="input-field-label">
+                      Email
+                    </label>
+                    <div className="input-box-container">
                       <span className="input-leading-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect width="20" height="16" x="2" y="4" rx="2" />
@@ -430,39 +295,28 @@ export default function Login() {
                       </span>
                       <input
                         id="login-email-input"
+                        name="email"
                         type="email"
-                        className={`styled-input-control ${isEmailRemembered ? "input-readonly-prefilled" : ""}`}
+                        className="styled-input-control"
                         placeholder="name@company.com"
                         value={email}
-                        readOnly={isEmailRemembered}
-                        onChange={(e) => handleEmailChange(e.target.value)}
-                        onBlur={handleEmailBlur}
-                        disabled={loading || isSubmittingRef.current}
-                        autoComplete="username"
-                        aria-required="true"
-                        aria-invalid={Boolean(fieldErrors.email)}
-                        aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
+                        readOnly={isEmailReadOnly}
+                        onFocus={() => setIsEmailReadOnly(false)}
+                        onMouseDown={() => setIsEmailReadOnly(false)}
+                        onTouchStart={() => setIsEmailReadOnly(false)}
+                        onKeyDown={() => setIsEmailReadOnly(false)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          setError("");
+                        }}
+                        disabled={loading}
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                         required
                       />
-                      {isEmailRemembered && (
-                        <span className="remembered-badge-pill" title="Saved email address">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="remembered-badge-icon" aria-hidden="true">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Saved</span>
-                        </span>
-                      )}
                     </div>
-                    {fieldErrors.email && (
-                      <div id="login-email-error" className="field-inline-error" role="alert">
-                        <svg className="field-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="8" x2="12" y2="12" />
-                          <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                        <span>{fieldErrors.email}</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Password Field */}
@@ -470,7 +324,7 @@ export default function Login() {
                     <label htmlFor="login-password-input" className="input-field-label">
                       Password
                     </label>
-                    <div className={`input-box-container ${fieldErrors.password ? "has-error" : ""}`}>
+                    <div className="input-box-container">
                       <span className="input-leading-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
@@ -483,23 +337,19 @@ export default function Login() {
                         className="styled-input-control with-trailing-action"
                         placeholder="Enter your password"
                         value={password}
-                        onChange={(e) => handlePasswordChange(e.target.value)}
-                        onBlur={handlePasswordBlur}
-                        disabled={loading || isSubmittingRef.current}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          setError("");
+                        }}
+                        disabled={loading}
                         autoComplete="current-password"
-                        aria-required="true"
-                        aria-invalid={Boolean(fieldErrors.password)}
-                        aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
                         required
                       />
                       <button
                         type="button"
                         className="input-trailing-reveal-btn"
                         onClick={() => setShowPassword(!showPassword)}
-                        disabled={loading || isSubmittingRef.current}
                         aria-label={showPassword ? "Hide password" : "Show password"}
-                        aria-pressed={showPassword}
-                        title={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? (
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -516,29 +366,18 @@ export default function Login() {
                         )}
                       </button>
                     </div>
-                    {fieldErrors.password && (
-                      <div id="login-password-error" className="field-inline-error" role="alert">
-                        <svg className="field-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="8" x2="12" y2="12" />
-                          <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                        <span>{fieldErrors.password}</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Remember Me and Forgot Password */}
                   <div className="login-options-row">
-                    <label className="checkbox-label-wrapper" htmlFor="remember-me-toggle">
+                    <label className="checkbox-label-wrapper">
                       <input
                         type="checkbox"
                         id="remember-me-toggle"
                         className="native-checkbox-hidden"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        disabled={loading || isSubmittingRef.current}
-                        aria-label="Remember me"
+                        disabled={loading}
                       />
                       <span className="custom-checkbox-box" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -552,53 +391,16 @@ export default function Login() {
                       type="button"
                       onClick={() => navigate("/forgot-password")}
                       className="forgot-password-link"
-                      disabled={loading || isSubmittingRef.current}
                     >
                       Forgot Password?
                     </button>
                   </div>
 
-                  {/* Activation Success Banner */}
-                  {!error && successMessage && (
-                    <div
-                      className="auth-alert-message auth-alert-success-banner"
-                      role="status"
-                    >
-                      <div className="alert-content-left">
-                        <svg
-                          className="alert-warning-icon"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span className="alert-text">
-                          {successMessage}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="alert-close-btn"
-                        onClick={() => setSuccessMessage(null)}
-                        aria-label="Dismiss message"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
-
                   {/* Persistent Error Alert */}
                   {error && (
                     <div className="auth-alert-message" role="alert" aria-live="assertive">
                       <div className="alert-content-left">
-                        <svg className="alert-warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <svg className="alert-warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="10" />
                           <line x1="12" y1="8" x2="12" y2="12" />
                           <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -623,12 +425,12 @@ export default function Login() {
                   <button
                     type="submit"
                     className="login-submit-button"
-                    disabled={loading || isSubmittingRef.current}
+                    disabled={loading}
                     aria-busy={loading}
                   >
                     {loading ? (
                       <span className="button-spinner-state">
-                        <svg className="spinner-animation" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg className="spinner-animation" viewBox="0 0 24 24" fill="none">
                           <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32" strokeLinecap="round" />
                         </svg>
                         <span>Logging In...</span>
@@ -657,7 +459,6 @@ export default function Login() {
                   type="button"
                   className="register-action-btn"
                   onClick={() => navigate("/register")}
-                  disabled={loading}
                 >
                   Create Account
                 </button>

@@ -2,8 +2,8 @@
 
 /* Modal Content Container */
 .lead-form-modal-content {
-  width: min(560px, calc(100vw - 32px));
-  max-width: min(560px, calc(100vw - 32px));
+  width: min(600px, calc(100vw - 32px));
+  max-width: min(600px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
   height: auto;
   display: flex;
@@ -66,10 +66,34 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: hidden !important;
   padding: 20px 24px;
   box-sizing: border-box;
   width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+}
+
+.lead-form-modal-content .modal-body::-webkit-scrollbar {
+  width: 6px;
+  height: 0;
+}
+
+.lead-form-modal-content .modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lead-form-modal-content .modal-body::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 4px;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .modal-body {
+  scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
+}
+
+.dashboard-wrapper.dark .lead-form-modal-content .modal-body::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.5);
 }
 
 /* Form Groups & Field Alignment */
@@ -120,7 +144,28 @@
 
 /* Inputs, Selects, and Textareas */
 .lead-form-modal-content .form-group input:not([type="checkbox"]),
-.lead-form-modal-content .form-group select,
+.lead-form-modal-content .form-group select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 42px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 0.925rem;
+  line-height: normal;
+  background: #ffffff;
+  color: #1a202c;
+  font-family: inherit;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lead-form-modal-content .form-group select {
+  cursor: pointer;
+}
+
 .lead-form-modal-content .form-group textarea {
   width: 100%;
   min-width: 0;
@@ -128,13 +173,15 @@
   padding: 10px 12px;
   border: 1px solid #cbd5e0;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: 0.925rem;
   line-height: 1.4;
   background: #ffffff;
   color: #1a202c;
   font-family: inherit;
-  box-sizing: border-box;
-  min-height: 42px;
+  box-sizing: border-box !important;
+  resize: vertical;
+  min-height: 80px;
+  display: block;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -144,12 +191,6 @@
   outline: none;
   border-color: #3182ce;
   box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
-}
-
-.lead-form-modal-content .form-group textarea {
-  resize: vertical;
-  min-height: 76px;
-  display: block;
 }
 
 .lead-form-modal-content .form-group input:disabled,
@@ -244,12 +285,16 @@
 }
 
 .lead-form-modal-content .usd-trigger {
-  box-sizing: border-box;
-  width: 100%;
+  box-sizing: border-box !important;
+  width: 100% !important;
   min-width: 0;
   max-width: 100%;
   padding: 8px 12px;
+  height: 42px;
   min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 /* Alert Box */

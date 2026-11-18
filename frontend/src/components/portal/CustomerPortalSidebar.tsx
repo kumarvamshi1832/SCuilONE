@@ -10,6 +10,9 @@ import {
   TicketIcon,
   UserIcon,
   BuildingIcon,
+  HomeIcon,
+  LayersIcon,
+  CreditCardIcon,
   ClockIcon,
   ChevronLeftIcon,
   XIcon,
@@ -52,6 +55,16 @@ export const CustomerPortalSidebar: React.FC<CustomerPortalSidebarProps> = ({
           icon: <BuildingIcon size={19} />,
         },
         {
+          name: "Buyer Requirements",
+          path: "/portal/buyer-requirements",
+          icon: <FileSignatureIcon size={19} />,
+        },
+        {
+          name: "Shortlist",
+          path: "/portal/shortlist",
+          icon: <HomeIcon size={19} />,
+        },
+        {
           name: "Bookings",
           path: "/portal/bookings",
           icon: <ReceiptIcon size={19} />,
@@ -60,6 +73,16 @@ export const CustomerPortalSidebar: React.FC<CustomerPortalSidebarProps> = ({
           name: "Site Visits",
           path: "/portal/site-visits",
           icon: <ClockIcon size={19} />,
+        },
+        {
+          name: "Booking Journey",
+          path: "/portal/booking-journey",
+          icon: <LayersIcon size={19} />,
+        },
+        {
+          name: "Booking Requests",
+          path: "/portal/booking-requests",
+          icon: <CreditCardIcon size={19} />,
         },
         {
           name: "Documents",

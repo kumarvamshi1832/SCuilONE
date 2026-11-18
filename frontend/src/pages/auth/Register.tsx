@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ChangeEvent, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { registerUser } from "../../services/authService";
 import type { RegisterRequest } from "../../types/auth";
@@ -14,7 +14,6 @@ const industries = [
   "Education Consulting",
   "Training Institute",
   "Digital Marketing Agency",
-  "Software Services",
   "Software Company",
   "Insurance Agency",
   "Automobile Dealer",
@@ -31,31 +30,6 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [isIndustryOpen, setIsIndustryOpen] = useState(false);
-  const industryDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isIndustryOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        industryDropdownRef.current &&
-        !industryDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsIndustryOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsIndustryOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isIndustryOpen]);
 
   const [formData, setFormData] = useState({
     company_name: "",
@@ -107,18 +81,11 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Normalize industry to canonical values expected by backend route-level security guards
-      const canonicalIndustry =
-        formData.industry.trim().toLowerCase() === "software company" ||
-        formData.industry.trim().toLowerCase() === "software"
-          ? "Software Services"
-          : formData.industry.trim();
-
       const payload: RegisterRequest = {
         company_name: formData.company_name.trim(),
         company_email: companyEmail,
         phone: formData.phone.trim(),
-        industry: canonicalIndustry,
+        industry: formData.industry,
         full_name: formData.full_name.trim(),
         email: email,
         password: formData.password,
@@ -132,9 +99,6 @@ export default function Register() {
       );
       sessionStorage.setItem("verification_email", email);
       sessionStorage.setItem("otp_flow", "email");
-      try {
-        localStorage.setItem("scuilone_remember_email", email);
-      } catch {}
 
       setTimeout(() => navigate("/mfa"), 1200);
     } catch (err) {
@@ -331,112 +295,36 @@ export default function Register() {
                     </div>
 
                     {/* Industry Dropdown */}
-                    <div className={`form-group-item ${isIndustryOpen ? "has-open-dropdown" : ""}`}>
+                    <div className="form-group-item">
                       <label htmlFor="industry" className="input-field-label">
                         Industry
                       </label>
-                      <div
-                        ref={industryDropdownRef}
-                        className={`input-box-container select-box-container ${isIndustryOpen ? "is-open" : ""}`}
-                        role="combobox"
-                        aria-expanded={isIndustryOpen}
-                        aria-haspopup="listbox"
-                        aria-controls="industry-options-list"
-                        tabIndex={0}
-                        onClick={() => {
-                          if (!loading) {
-                            setIsIndustryOpen((prev) => !prev);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (loading) return;
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setIsIndustryOpen((prev) => !prev);
-                          } else if (e.key === "ArrowDown") {
-                            e.preventDefault();
-                            if (!isIndustryOpen) {
-                              setIsIndustryOpen(true);
-                            } else {
-                              const currentIndex = industries.indexOf(formData.industry);
-                              const nextIndex = currentIndex < industries.length - 1 ? currentIndex + 1 : 0;
-                              setFormData((prev) => ({ ...prev, industry: industries[nextIndex] ?? "" }));
-                              setError("");
-                            }
-                          } else if (e.key === "ArrowUp") {
-                            e.preventDefault();
-                            if (!isIndustryOpen) {
-                              setIsIndustryOpen(true);
-                            } else {
-                              const currentIndex = industries.indexOf(formData.industry);
-                              const prevIndex = currentIndex > 0 ? currentIndex - 1 : industries.length - 1;
-                              setFormData((prev) => ({ ...prev, industry: industries[prevIndex] ?? "" }));
-                              setError("");
-                            }
-                          } else if (e.key === "Escape") {
-                            setIsIndustryOpen(false);
-                          }
-                        }}
-                      >
+                      <div className="input-box-container select-box-container">
                         <span className="input-leading-icon" aria-hidden="true">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <rect width="20" height="14" x="2" y="7" rx="2" ry="2" />
                             <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                           </svg>
                         </span>
-                        <span className={`selected-value-display ${!formData.industry ? "is-placeholder" : ""}`}>
-                          {formData.industry || "Select Industry"}
-                        </span>
-                        <span className={`select-trailing-arrow ${isIndustryOpen ? "is-open" : ""}`} aria-hidden="true">
+                        <select
+                          id="industry"
+                          name="industry"
+                          className="styled-select-control"
+                          value={formData.industry}
+                          onChange={handleChange}
+                          disabled={loading}
+                          required
+                        >
+                          <option value="" disabled>Select Industry</option>
+                          {industries.map((ind) => (
+                            <option key={ind} value={ind}>{ind}</option>
+                          ))}
+                        </select>
+                        <span className="select-trailing-arrow" aria-hidden="true">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="6 9 12 15 18 9" />
                           </svg>
                         </span>
-                        <input
-                          type="hidden"
-                          id="industry"
-                          name="industry"
-                          value={formData.industry}
-                          required
-                        />
-
-                        {isIndustryOpen && (
-                          <ul id="industry-options-list" className="custom-dropdown-menu" role="listbox">
-                            {industries.map((ind) => {
-                              const isSelected = formData.industry === ind;
-                              return (
-                                <li
-                                  key={ind}
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  className={`custom-dropdown-item ${isSelected ? "is-selected" : ""}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setFormData((prev) => ({ ...prev, industry: ind }));
-                                    setError("");
-                                    setIsIndustryOpen(false);
-                                  }}
-                                >
-                                  <span>{ind}</span>
-                                  {isSelected && (
-                                    <svg
-                                      className="dropdown-item-check"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2.5"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      aria-hidden="true"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
                       </div>
                     </div>
 

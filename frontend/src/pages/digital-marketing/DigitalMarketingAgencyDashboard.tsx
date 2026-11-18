@@ -21,6 +21,7 @@ import { prototypeCampaigns, prototypeBudgetOverview } from "../../data/digitalM
 import { useTheme } from "../../context/ThemeContext";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import heroImg from "../../assets/marketing_hero.jpg";
 import "./DigitalMarketingAgencyDashboard.css";
 
@@ -258,7 +259,7 @@ export default function DigitalMarketingAgencyDashboard() {
       { name: "New Inquiries", stage: "New", count: stageCounts.New, color: "#3b82f6", pct: Math.round((stageCounts.New / max) * 100) },
       { name: "Contacted", stage: "Contacted", count: stageCounts.Contacted, color: "#f59e0b", pct: Math.round((stageCounts.Contacted / max) * 100) },
       { name: "Qualified", stage: "Qualified", count: stageCounts.Qualified, color: "#8b5cf6", pct: Math.round((stageCounts.Qualified / max) * 100) },
-      { name: "Converted Clients", stage: "Converted", count: stageCounts.Converted, color: "#10b981", pct: Math.round((stageCounts.Converted / max) * 100) },
+      { name: "Won Clients", stage: "Converted", count: stageCounts.Converted, color: "#10b981", pct: Math.round((stageCounts.Converted / max) * 100) },
       { name: "Lost / Disqualified", stage: "Lost", count: stageCounts.Lost, color: "#ef4444", pct: Math.round((stageCounts.Lost / max) * 100) },
     ];
   }, [filteredLeads, totalMarketingLeads]);
@@ -788,7 +789,7 @@ export default function DigitalMarketingAgencyDashboard() {
                       </td>
                       <td>
                         <span className={`dma-lead-status dma-status-${(lead.status || "new").toLowerCase()}`}>
-                          {lead.status}
+                          {getLeadStatusLabel(lead.status)}
                         </span>
                       </td>
                       <td><span className="dma-table-primary-text">{lead.assigned_to ? userMap.get(lead.assigned_to) || "Unassigned" : "Unassigned"}</span></td>

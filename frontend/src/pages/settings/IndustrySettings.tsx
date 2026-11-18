@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   getTenantIndustryConfig,
-  getIndustryPacks,
   updateTenantIndustryConfig,
 } from "../../services/industryService";
 import type {
   TenantIndustryConfigResponse,
-  IndustryPackSummary,
   IndustryPackObject,
+  IndustryModuleInfo,
 } from "../../types/industryConfig";
+import { canManageIndustryConfig } from "../../utils/industryAccess";
 import "./Settings.css";
 
 function getPackName(
@@ -26,17 +26,8 @@ function getPackVersion(
   return pack.version || null;
 }
 
-function getPackKey(
-  pack: string | IndustryPackObject | null | undefined
-): string {
-  if (!pack) return "";
-  if (typeof pack === "string") return pack;
-  return pack.key || "";
-}
-
 export default function IndustrySettings() {
   const [config, setConfig] = useState<TenantIndustryConfigResponse | null>(null);
-  const [packs, setPacks] = useState<IndustryPackSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,41 +37,45 @@ export default function IndustrySettings() {
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [customLabels, setCustomLabels] = useState<Record<string, string>>({});
 
-  // Check permission
-  const canUpdate = useMemo(() => {
-    try {
-      const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
-      if (!userStr) return false;
-      const user = JSON.parse(userStr);
-      const rawRole =
-        typeof user.role === "string"
-          ? user.role
-          : user.role?.name || user.role_name || "";
-      const roleUpper = String(rawRole).trim().toUpperCase();
-      if (roleUpper === "ADMIN" || roleUpper.includes("ADMIN") || user.is_super_admin) return true;
-      const perms: string[] = user.permissions || [];
-      return perms.includes("industry_config.update") || perms.includes("*");
-    } catch {
-      return false;
-    }
-  }, []);
+  // UI gating only; the API enforces industry_config.update for the caller's own tenant.
+  const canUpdate = useMemo(() => canManageIndustryConfig(), []);
+
+  // Last values loaded from the API, used for unsaved-change tracking and Cancel.
+  const [savedModules, setSavedModules] = useState<string[]>([]);
+  const [savedLabels, setSavedLabels] = useState<Record<string, string>>({});
+
+  const isDirty = useMemo(() => {
+    const sameModules =
+      enabledModules.length === savedModules.length &&
+      enabledModules.every((key) => savedModules.includes(key));
+    const keys = new Set([...Object.keys(customLabels), ...Object.keys(savedLabels)]);
+    const sameLabels = Array.from(keys).every(
+      (key) => (customLabels[key] ?? "") === (savedLabels[key] ?? "")
+    );
+    return !(sameModules && sameLabels);
+  }, [enabledModules, savedModules, customLabels, savedLabels]);
 
   const isFetchingRef = useRef(false);
 
-  const loadData = useCallback(async () => {
-    if (isFetchingRef.current) return;
+  const loadData = useCallback(async (): Promise<boolean> => {
+    if (isFetchingRef.current) return false;
     isFetchingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      const [cfg, allPacks] = await Promise.all([
-        getTenantIndustryConfig(),
-        getIndustryPacks().catch(() => []),
-      ]);
+      const cfg = await getTenantIndustryConfig();
       setConfig(cfg);
-      setPacks(Array.isArray(allPacks) ? allPacks : []);
-      setEnabledModules(cfg?.enabled_modules || []);
-      setCustomLabels(cfg?.custom_labels || {});
+      const modules = cfg?.enabled_modules || [];
+      // The API returns labels inside `configuration`; keep the legacy top-level field as a fallback.
+      const labels: Record<string, string> =
+        (cfg?.configuration?.custom_labels as Record<string, string> | undefined) ||
+        cfg?.custom_labels ||
+        {};
+      setEnabledModules(modules);
+      setSavedModules(modules);
+      setCustomLabels({ ...labels });
+      setSavedLabels({ ...labels });
+      return true;
     } catch (err: any) {
       console.error("Failed to load industry configuration:", err);
       if (err?.response?.status === 401 || err?.status === 401) {
@@ -94,6 +89,7 @@ export default function IndustrySettings() {
             "Failed to load tenant industry configuration"
         );
       }
+      return false;
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
@@ -111,28 +107,58 @@ export default function IndustrySettings() {
     );
   };
 
-  const handleSave = async () => {
+  const handleLabelChange = (modKey: string, value: string) => {
     if (!canUpdate) return;
+    setCustomLabels((prev) => ({ ...prev, [modKey]: value }));
+  };
+
+  const handleCancel = () => {
+    setEnabledModules(savedModules);
+    setCustomLabels({ ...savedLabels });
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  const handleSave = async () => {
+    if (!canUpdate || !isDirty) return;
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
     try {
+      // Blank labels mean "use the default label", so they are not sent.
+      const labelsToSave = Object.fromEntries(
+        Object.entries(customLabels)
+          .map(([key, value]) => [key, value.trim()] as const)
+          .filter(([, value]) => value !== "")
+      );
       const updated = await updateTenantIndustryConfig({
         enabled_modules: enabledModules,
-        custom_labels: customLabels,
+        custom_labels: labelsToSave,
       });
-      // Re-fetch configuration to preserve full modules list and synchronization
-      await loadData();
-      setSuccessMessage(
+      // The API confirmed the save. Re-fetch so the page shows what is actually stored.
+      const refreshed = await loadData();
+      const base =
         typeof updated?.message === "string"
           ? updated.message
-          : "Industry and module configuration updated successfully."
-      );
+          : "Industry and module configuration updated successfully.";
+      if (refreshed) {
+        setSuccessMessage(base);
+      } else {
+        setSuccessMessage(`${base} (The latest configuration could not be reloaded; use Refresh.)`);
+      }
     } catch (err: any) {
       if (err?.response?.status === 401 || err?.status === 401) {
         setError("Your session has expired. Please sign in again.");
       } else if (err?.response?.status === 403 || err?.status === 403) {
-        setError("You do not have permission to update industry settings.");
+        const detail = err?.response?.data?.detail;
+        const serverMessage =
+          typeof detail === "string" ? detail : detail?.message || "Forbidden";
+        // The UI treated this account as authorized, so a 403 means the server disagrees.
+        setError(
+          `The server rejected this change (HTTP 403: ${serverMessage}). Your role is allowed to manage ` +
+            "industry settings in the interface, but backend authorization for it is missing or " +
+            "the industry_config.update permission is not granted. No changes were saved."
+        );
       } else {
         const detail = err?.response?.data?.detail;
         if (typeof detail === "string") {
@@ -253,6 +279,52 @@ export default function IndustrySettings() {
     ? config.industry_modules
     : (config.modules || []).filter((m) => m.industry_specific);
 
+  const renderModuleCard = (mod: IndustryModuleInfo, showPreview: boolean) => {
+    const isChecked = enabledModules.includes(mod.key);
+    const customLabel = customLabels[mod.key] ?? "";
+    const displayName = customLabel.trim() || mod.label;
+    return (
+      <div
+        className={`module-toggle-card${canUpdate ? "" : " is-readonly"}`}
+        key={mod.key}
+      >
+        <div className="module-card-head">
+          <div className="module-info">
+            <h4 title={displayName}>{displayName}</h4>
+            <span className="module-key" title={mod.key}>
+              {mod.key}
+            </span>
+            {showPreview && !mod.api_available && (
+              <div className="module-preview-note">(API in Preview)</div>
+            )}
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={isChecked}
+              disabled={!canUpdate || saving}
+              aria-label={`Enable ${displayName}`}
+              onChange={() => handleToggleModule(mod.key)}
+            />
+            <span className="slider"></span>
+          </label>
+        </div>
+        {canUpdate && (
+          <input
+            type="text"
+            className="module-label-input"
+            value={customLabel}
+            maxLength={80}
+            placeholder={`Custom label (default: ${mod.label})`}
+            aria-label={`Custom label for ${mod.label}`}
+            disabled={saving}
+            onChange={(e) => handleLabelChange(mod.key, e.target.value)}
+          />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="settings-container">
       {/* Page Header */}
@@ -262,13 +334,29 @@ export default function IndustrySettings() {
           <p>Configure tenant industry pack, activate business modules, and customize labels.</p>
         </div>
         {canUpdate && (
-          <button
-            className="settings-btn-save"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving Changes..." : "Save Configuration"}
-          </button>
+          <div className="settings-header-actions">
+            {isDirty && !saving && (
+              <span className="settings-unsaved-chip" role="status">
+                Unsaved changes
+              </span>
+            )}
+            <button
+              type="button"
+              className="settings-btn-cancel"
+              onClick={handleCancel}
+              disabled={saving || !isDirty}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="settings-btn-save"
+              onClick={handleSave}
+              disabled={saving || !isDirty}
+            >
+              {saving ? "Saving Changes..." : "Save Configuration"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -333,44 +421,31 @@ export default function IndustrySettings() {
       <div className="settings-meta-grid">
         <div className="settings-meta-card">
           <div className="settings-meta-label">Tenant Industry</div>
-          <div className="settings-meta-value" style={{ textTransform: "capitalize" }}>
+          <div className="settings-meta-value is-capitalized">
             {config.industry ? config.industry.replace(/_/g, " ") : "Software Company"}
           </div>
         </div>
 
         <div className="settings-meta-card">
           <div className="settings-meta-label">Active Industry Pack</div>
-          <div className="settings-meta-value">
-            {getPackName(config.industry_pack)}
+          <div className="settings-meta-value settings-meta-pack">
+            <span className="settings-meta-pack-name">{getPackName(config.industry_pack)}</span>
             {getPackVersion(config.industry_pack) && (
-              <span
-                style={{
-                  marginLeft: "8px",
-                  fontSize: "0.75rem",
-                  padding: "2px 8px",
-                  borderRadius: "9999px",
-                  background: "rgba(14, 165, 233, 0.15)",
-                  color: "#38bdf8",
-                  fontWeight: 600,
-                  display: "inline-block",
-                }}
-              >
-                v{getPackVersion(config.industry_pack)}
-              </span>
+              <span className="settings-version-badge">v{getPackVersion(config.industry_pack)}</span>
             )}
           </div>
         </div>
 
         <div className="settings-meta-card">
           <div className="settings-meta-label">Enabled Modules</div>
-          <div className="settings-meta-value" style={{ color: "#10b981" }}>
+          <div className="settings-meta-value is-success">
             {enabledModules.length} Active
           </div>
         </div>
 
         <div className="settings-meta-card">
           <div className="settings-meta-label">Total Available Modules</div>
-          <div className="settings-meta-value" style={{ color: "#64748b" }}>
+          <div className="settings-meta-value is-muted">
             {config.modules?.length || (commonMods.length + industryMods.length)} Modules
           </div>
         </div>
@@ -387,31 +462,7 @@ export default function IndustrySettings() {
           </p>
 
           <div className="modules-grid">
-            {industryMods.map((mod) => {
-              const isChecked = enabledModules.includes(mod.key);
-              return (
-                <div className="module-toggle-card" key={mod.key}>
-                  <div className="module-info">
-                    <h4>{mod.label}</h4>
-                    <span>{mod.key}</span>
-                    {!mod.api_available && (
-                      <div style={{ fontSize: "0.7rem", color: "#f59e0b", marginTop: "2px" }}>
-                        (API in Preview)
-                      </div>
-                    )}
-                  </div>
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={!canUpdate}
-                      onChange={() => handleToggleModule(mod.key)}
-                    />
-                    <span className="slider"></span>
-                  </label>
-                </div>
-              );
-            })}
+            {industryMods.map((mod) => renderModuleCard(mod, true))}
           </div>
         </div>
       )}
@@ -424,89 +475,9 @@ export default function IndustrySettings() {
         </p>
 
         <div className="modules-grid">
-          {commonMods.map((mod) => {
-            const isChecked = enabledModules.includes(mod.key);
-            return (
-              <div className="module-toggle-card" key={mod.key}>
-                <div className="module-info">
-                  <h4>{mod.label}</h4>
-                  <span>{mod.key}</span>
-                </div>
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    disabled={!canUpdate}
-                    onChange={() => handleToggleModule(mod.key)}
-                  />
-                  <span className="slider"></span>
-                </label>
-              </div>
-            );
-          })}
+          {commonMods.map((mod) => renderModuleCard(mod, false))}
         </div>
       </div>
-
-      {/* Available Industry Packs Reference */}
-      {packs.length > 0 && (
-        <div className="settings-section-card">
-          <h2 className="settings-section-title">Installed Industry Packs</h2>
-          <p className="settings-section-desc">
-            Available system packs for multi-tenant and industry-customized instances.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "14px" }}>
-            {packs.map((p) => {
-              const packKey = p.key || p.pack_key || p.id || "";
-              const activePackKey = getPackKey(config.industry_pack) || config.industry_key;
-              const isActive = Boolean(packKey && activePackKey && packKey === activePackKey);
-              const defaultModulesCount =
-                p.default_config?.enabled_modules?.length ??
-                p.default_modules?.length ??
-                0;
-
-              return (
-                <div
-                  key={packKey || p.name}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "8px",
-                    border: isActive
-                      ? "1px solid rgba(14, 165, 233, 0.4)"
-                      : "1px solid rgba(255, 255, 255, 0.08)",
-                    background: isActive
-                      ? "rgba(14, 165, 233, 0.08)"
-                      : "rgba(255, 255, 255, 0.02)",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <h4 style={{ margin: 0, fontWeight: 700 }}>{p.name}</h4>
-                    {isActive && (
-                      <span
-                        style={{
-                          fontSize: "0.7rem",
-                          padding: "2px 8px",
-                          background: "#0ea5e9",
-                          color: "#fff",
-                          borderRadius: "9999px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <p style={{ margin: "6px 0 0 0", fontSize: "0.82rem", color: "#94a3b8" }}>
-                    {p.description || `Industry pack for ${p.name}`}
-                  </p>
-                  <div style={{ marginTop: "10px", fontSize: "0.75rem", color: "#64748b" }}>
-                    Version: {p.version || "1.0.0"} | Default Modules: {defaultModulesCount}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

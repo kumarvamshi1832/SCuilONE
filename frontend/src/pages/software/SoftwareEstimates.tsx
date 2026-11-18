@@ -10,11 +10,6 @@ import {
 import { clearSoftwareForbidden, extractBackendDetail } from "../../services/softwareRequestManager";
 import { getSoftwareRequirements } from "../../services/softwareRequirementService";
 import { getUsers } from "../../services/userService";
-import {
-  CustomerPortalNotificationService,
-  resolvePortalTenantId,
-} from "../../services/customerPortalNotificationService";
-
 import type {
   SoftwareEstimate,
   SoftwareEstimateCreate,
@@ -550,12 +545,6 @@ export default function SoftwareEstimates() {
         };
         const created = await createSoftwareEstimate(payload);
         setEstimates((prev) => [created, ...prev]);
-        try {
-          const targetTenant = created.tenant_id || resolvePortalTenantId();
-          CustomerPortalNotificationService.notifyEstimateCreated(targetTenant, created);
-        } catch (notifErr) {
-          console.warn("Could not dispatch customer portal notification:", notifErr);
-        }
         setIsModalOpen(false);
       }
     } catch (err: any) {
@@ -586,12 +575,6 @@ export default function SoftwareEstimates() {
     try {
       const revision = await createEstimateRevision(id);
       setEstimates((prev) => [revision, ...prev]);
-      try {
-        const targetTenant = revision.tenant_id || resolvePortalTenantId();
-        CustomerPortalNotificationService.notifyEstimateCreated(targetTenant, revision);
-      } catch (notifErr) {
-        console.warn("Could not dispatch customer portal notification:", notifErr);
-      }
       handleOpenEdit(revision);
     } catch (err: any) {
       alert(err?.response?.data?.detail || err?.message || "Failed to create estimate revision");

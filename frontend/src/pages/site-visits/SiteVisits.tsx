@@ -5,9 +5,14 @@ import {
   updateSiteVisit,
 } from "../../services/siteVisitService";
 import { getBuyerRequirements } from "../../services/buyerRequirementService";
-import { getMatchesForRequirement } from "../../services/propertyMatchService";
+import { fetchApiMatchesForRequirement } from "../../services/propertyMatchService";
 import { getProperties } from "../../services/propertyService";
 import { getUsers } from "../../services/userService";
+import { getLeads } from "../../services/leadService";
+import { getContacts } from "../../services/contactService";
+import { resolveModulePermissions } from "../../utils/modulePermissions";
+import { parseBackendDate } from "../../utils/bookingJourney";
+import { classifyCrmRole } from "../../utils/authRouting";
 import type {
   SiteVisit,
   SiteVisitCreate,
@@ -21,13 +26,53 @@ import {
 import type { PropertyMatch } from "../../types/propertyMatch";
 import type { Property } from "../../types/property";
 import type { User } from "../../types/user";
+import type { BuyerRequirement } from "../../types/buyerRequirement";
+import type { Lead } from "../../types/lead";
+import type { Contact } from "../../types/contact";
 import "./SiteVisits.css";
+
+/** Values of the Schedule Site Visit form. Date and times are the raw <input> strings. */
+interface ScheduleForm {
+  requirementId: string;
+  matchId: string;
+  assignedTo: string;
+  visitDate: string;
+  startTime: string;
+  endTime: string;
+}
+
+type ScheduleFieldErrors = Partial<Record<keyof ScheduleForm, string>>;
+
+const EMPTY_SCHEDULE_FORM: ScheduleForm = {
+  requirementId: "",
+  matchId: "",
+  assignedTo: "",
+  visitDate: "",
+  startTime: "",
+  endTime: "",
+};
+
+/** Local-time instant for a date input (YYYY-MM-DD) and time input (HH:mm). */
+const toLocalDate = (date: string, time: string): Date => new Date(`${date}T${time}`);
+
+/** Today as YYYY-MM-DD in local time, for the date input's min hint. */
+const todayInputValue = (): string => {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${mm}-${dd}`;
+};
 
 export default function SiteVisits() {
   const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [requirements, setRequirements] = useState<BuyerRequirement[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [allMatches, setAllMatches] = useState<PropertyMatch[]>([]);
+  const [refsLoading, setRefsLoading] = useState(true);
+  const [matchesLoadFailed, setMatchesLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +91,9 @@ export default function SiteVisits() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Create Form match selection helpers
-  const [selectedMatchId, setSelectedMatchId] = useState<string>("");
+  // Schedule Site Visit form
+  const [scheduleForm, setScheduleForm] = useState<ScheduleForm>(EMPTY_SCHEDULE_FORM);
+  const [fieldErrors, setFieldErrors] = useState<ScheduleFieldErrors>({});
 
   // Toast
   const [toastMessage, setToastMessage] = useState<{
@@ -78,53 +124,90 @@ export default function SiteVisits() {
   };
 
   // Permissions
+  // Resolved like the other CRM modules: an explicit permission list on the stored user wins,
+  // otherwise the grants the backend seeds for the signed-in role (site_visit.create / .update).
+  // The backend still enforces require_permission on every request.
   const userPermissions = useMemo(() => {
-    try {
-      const stored = sessionStorage.getItem("user");
-      if (!stored) return { canCreate: true, canUpdate: true };
-      const parsed = JSON.parse(stored);
-      const perms: string[] = Array.isArray(parsed.permissions)
-        ? parsed.permissions
-        : parsed.role?.permissions || [];
-      const role = String(parsed.role || "").toUpperCase();
-      const isSuperOrAdmin =
-        role.includes("ADMIN") || role.includes("MANAGER") || role === "TENANT ADMIN";
-
-      const has = (p: string) =>
-        isSuperOrAdmin || perms.some((x) => x.toLowerCase() === p.toLowerCase());
-
-      return {
-        canCreate: has("site_visit.create"),
-        canUpdate: has("site_visit.update"),
-      };
-    } catch {
-      return { canCreate: true, canUpdate: true };
-    }
+    const perms = resolveModulePermissions("site_visit");
+    return { canCreate: perms.create, canUpdate: perms.update };
   }, []);
 
-  // Fetch initial datasets
+  // Fetch reference datasets (requirements, leads, contacts, properties, users, real property matches)
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
-      getBuyerRequirements().catch(() => []),
-      getProperties().catch(() => []),
-      getUsers().catch(() => []),
-    ]).then(async ([reqs, props, usrList]) => {
-      setProperties(props);
-      setUsers(usrList);
+      getBuyerRequirements().catch(() => [] as BuyerRequirement[]),
+      getLeads().catch(() => [] as Lead[]),
+      getContacts().catch(() => [] as Contact[]),
+      getProperties().catch(() => [] as Property[]),
+      getUsers().catch(() => [] as User[]),
+    ])
+      .then(async ([reqs, leadList, contactList, props, usrList]) => {
+        if (cancelled) return;
+        setRequirements(reqs);
+        setLeads(leadList);
+        setContacts(contactList);
+        setProperties(props);
+        setUsers(usrList);
 
-      // Load all matches across requirements
-      const matchPromises = reqs.map((r) =>
-        getMatchesForRequirement(r.id).catch(() => [])
-      );
-      const matchResults = await Promise.all(matchPromises);
-      const flatMatches = matchResults.flat();
-      setAllMatches(flatMatches);
-      const firstMatch = flatMatches[0];
-      if (firstMatch) {
-        setSelectedMatchId(firstMatch.id);
-      }
-    });
+        // Matches come from the backend only: a site visit can only be created for a real match id.
+        let failed = false;
+        const matchResults = await Promise.all(
+          reqs.map((r) =>
+            fetchApiMatchesForRequirement(r.id).catch(() => {
+              failed = true;
+              return [] as PropertyMatch[];
+            })
+          )
+        );
+        if (cancelled) return;
+        setAllMatches(matchResults.flat());
+        setMatchesLoadFailed(failed);
+      })
+      .finally(() => {
+        if (!cancelled) setRefsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const leadMap = useMemo(() => {
+    const map = new Map<string, string>();
+    leads.forEach((l) => map.set(l.id, l.full_name || l.email || "Lead"));
+    return map;
+  }, [leads]);
+
+  const contactMap = useMemo(() => {
+    const map = new Map<string, string>();
+    contacts.forEach((c) => map.set(c.id, c.full_name || c.email || "Contact"));
+    return map;
+  }, [contacts]);
+
+  /** Agents the backend will accept: active users of this tenant who are not read-only auditors. */
+  const eligibleAgents = useMemo(
+    () =>
+      users.filter((u) => {
+        const status = String(u.status || "").toLowerCase();
+        if (status && status !== "active") return false;
+        return classifyCrmRole(u.role) !== "AUDITOR";
+      }),
+    [users]
+  );
+
+  const requirementLabel = useCallback(
+    (r: BuyerRequirement): string => {
+      const buyer =
+        (r.lead_id ? leadMap.get(r.lead_id) : undefined) ||
+        (r.contact_id ? contactMap.get(r.contact_id) : undefined) ||
+        r.lead_name ||
+        r.contact_name ||
+        "Buyer";
+      const where = r.preferred_city ? ` • ${r.preferred_city}` : "";
+      return `${buyer} — ${r.property_type}${where}`;
+    },
+    [leadMap, contactMap]
+  );
 
   const propertyMap = useMemo(() => {
     const map = new Map<string, Property>();
@@ -208,8 +291,11 @@ export default function SiteVisits() {
   // Date formatters
   const formatDateTimeRange = (startStr: string, endStr: string) => {
     try {
-      const start = new Date(startStr);
-      const end = new Date(endStr);
+      // The backend returns naive UTC timestamps; parseBackendDate treats them as UTC so the
+      // scheduled time is shown in the viewer's local time (same as the booking journey screens).
+      const start = parseBackendDate(startStr);
+      const end = parseBackendDate(endStr);
+      if (!start || !end) return `${startStr} - ${endStr}`;
       return `${start.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -223,45 +309,135 @@ export default function SiteVisits() {
     }
   };
 
-  // Create Site Visit
+  // ── Schedule Site Visit ────────────────────────────────────────────────
+
+  /** Requirements (customer / lead) that have at least one real property match to visit. */
+  const schedulableRequirements = useMemo(() => {
+    const withMatches = new Set(allMatches.map((m) => m.buyer_requirement_id));
+    return requirements.filter((r) => withMatches.has(r.id));
+  }, [requirements, allMatches]);
+
+  /** Matched properties for the customer selected in the form. */
+  const matchesForSelectedRequirement = useMemo(
+    () => allMatches.filter((m) => m.buyer_requirement_id === scheduleForm.requirementId),
+    [allMatches, scheduleForm.requirementId]
+  );
+
+  const selectedMatch = useMemo(
+    () => allMatches.find((m) => m.id === scheduleForm.matchId) || null,
+    [allMatches, scheduleForm.matchId]
+  );
+
+  /** When no agent is picked the backend assigns the property match's own salesperson. */
+  const defaultAgentName = selectedMatch?.assigned_to
+    ? userMap.get(selectedMatch.assigned_to) || "assigned salesperson"
+    : null;
+
+  const openScheduleModal = () => {
+    setScheduleForm(EMPTY_SCHEDULE_FORM);
+    setFieldErrors({});
+    setFormError(null);
+    setIsCreateOpen(true);
+  };
+
+  const closeScheduleModal = () => {
+    if (submitting) return;
+    setIsCreateOpen(false);
+    setScheduleForm(EMPTY_SCHEDULE_FORM);
+    setFieldErrors({});
+    setFormError(null);
+  };
+
+  const updateScheduleField = (field: keyof ScheduleForm, value: string) => {
+    setScheduleForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "requirementId") {
+        // The property list depends on the customer: reset it, and pre-select when there is only one.
+        const options = allMatches.filter((m) => m.buyer_requirement_id === value);
+        next.matchId = options.length === 1 && options[0] ? options[0].id : "";
+      }
+      return next;
+    });
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      if (field === "requirementId") delete next.matchId;
+      if (field === "startTime") delete next.endTime;
+      return next;
+    });
+    setFormError(null);
+  };
+
+  const validateScheduleForm = (form: ScheduleForm): ScheduleFieldErrors => {
+    const errors: ScheduleFieldErrors = {};
+    if (!form.requirementId) errors.requirementId = "Select a customer / lead.";
+    if (!form.matchId) errors.matchId = "Select a property.";
+    if (!form.visitDate) errors.visitDate = "Select the visit date.";
+    if (!form.startTime) errors.startTime = "Select a start time.";
+    if (!form.endTime) errors.endTime = "Select an end time.";
+
+    if (form.visitDate && form.startTime && form.endTime) {
+      const start = toLocalDate(form.visitDate, form.startTime);
+      const end = toLocalDate(form.visitDate, form.endTime);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        errors.visitDate = "Enter a valid date and time.";
+      } else if (end <= start) {
+        errors.endTime = "End time must be after the start time.";
+      }
+    }
+    return errors;
+  };
+
+  // Create Site Visit — POST /api/v1/site-visits/ { property_match_id, scheduled_start, scheduled_end, assigned_to }
   const handleCreateVisit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting) return;
     setFormError(null);
+
+    const errors = validateScheduleForm(scheduleForm);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setSubmitting(true);
-
-    const formData = new FormData(e.currentTarget);
-    const property_match_id = selectedMatchId;
-    const startDate = String(formData.get("scheduled_start") || "");
-    const endDate = String(formData.get("scheduled_end") || "");
-    const assigned_to = String(formData.get("assigned_to") || "").trim() || null;
-
-    if (!property_match_id || !startDate || !endDate) {
-      setFormError("Please select a Property Match, Start Time, and End Time.");
-      setSubmitting(false);
-      return;
-    }
-
-    if (new Date(endDate) <= new Date(startDate)) {
-      setFormError("Scheduled end time must be after scheduled start time.");
-      setSubmitting(false);
-      return;
-    }
-
     try {
       const payload: SiteVisitCreate = {
-        property_match_id,
-        scheduled_start: new Date(startDate).toISOString(),
-        scheduled_end: new Date(endDate).toISOString(),
-        assigned_to,
+        property_match_id: scheduleForm.matchId,
+        scheduled_start: toLocalDate(scheduleForm.visitDate, scheduleForm.startTime).toISOString(),
+        scheduled_end: toLocalDate(scheduleForm.visitDate, scheduleForm.endTime).toISOString(),
+        // null lets the backend fall back to the property match's own salesperson.
+        assigned_to: scheduleForm.assignedTo || null,
       };
 
       const created = await createSiteVisit(payload);
-      setSiteVisits((prev) => [created, ...prev]);
-      showToast("Site visit scheduled successfully!");
+
       setIsCreateOpen(false);
+      setScheduleForm(EMPTY_SCHEDULE_FORM);
+      setFieldErrors({});
+      showToast("Site visit scheduled successfully!");
+
+      // Make sure the new appointment is not hidden by an active filter, then reload from the server
+      // so the table, grid and every statistic (all derived from the list) are refreshed together.
+      const hiddenByStatus = !!statusFilter && statusFilter !== created.status;
+      const hiddenByAgent = !!assignedFilter && assignedFilter !== (created.assigned_to || "");
+      if (hiddenByStatus) setStatusFilter("");
+      if (hiddenByAgent) setAssignedFilter("");
+      if (searchQuery) setSearchQuery("");
+      if (hiddenByStatus || hiddenByAgent) {
+        // The filter state change triggers fetchVisitsList through its effect.
+        return;
+      }
+      await fetchVisitsList();
     } catch (err: any) {
       console.error("Create site visit error:", err);
-      setFormError(err?.response?.data?.detail || "Failed to schedule site visit.");
+      const status = err?.response?.status;
+      const message = formatApiError(err, "Failed to schedule site visit.");
+      setFormError(
+        status === 409
+          ? `Scheduling conflict: ${message}`
+          : status === 403
+          ? "You do not have permission to schedule site visits."
+          : message
+      );
     } finally {
       setSubmitting(false);
     }
@@ -410,17 +586,16 @@ export default function SiteVisits() {
 
           {userPermissions.canCreate && (
             <button
+              type="button"
               className="btn-schedule-visit"
-              onClick={() => {
-                setFormError(null);
-                setIsCreateOpen(true);
-              }}
+              onClick={openScheduleModal}
+              title="Schedule a new site visit"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
-              Schedule Visit
+              Schedule Site Visit
             </button>
           )}
         </div>
@@ -576,13 +751,7 @@ export default function SiteVisits() {
               : "No property visits have been scheduled yet. Schedule appointments to showcase properties to interested buyers."}
           </p>
           {userPermissions.canCreate && !searchQuery && !statusFilter && !assignedFilter && (
-            <button
-              className="btn-schedule-visit"
-              onClick={() => {
-                setFormError(null);
-                setIsCreateOpen(true);
-              }}
-            >
+            <button type="button" className="btn-schedule-visit" onClick={openScheduleModal}>
               Schedule Site Visit
             </button>
           )}
@@ -802,76 +971,158 @@ export default function SiteVisits() {
 
       {/* ─── Schedule Site Visit Modal ─── */}
       {isCreateOpen && (
-        <div className="modal-overlay" onClick={() => setIsCreateOpen(false)}>
-          <div className="modal-card" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={closeScheduleModal}>
+          <div
+            className="modal-card sv-schedule-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sv-schedule-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
-              <h2>Schedule Site Visit</h2>
-              <button className="modal-close-btn" onClick={() => setIsCreateOpen(false)}>
+              <h2 id="sv-schedule-title">Schedule Site Visit</h2>
+              <button
+                type="button"
+                className="modal-close-btn"
+                aria-label="Close"
+                onClick={closeScheduleModal}
+              >
                 &times;
               </button>
             </div>
 
-            <form onSubmit={handleCreateVisit} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+            <form onSubmit={handleCreateVisit} noValidate className="sv-modal-form">
               <div className="modal-body">
                 {formError && (
-                  <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "16px", fontSize: "0.85rem" }}>
+                  <div className="sv-form-alert" role="alert">
                     {formError}
                   </div>
                 )}
 
+                {!refsLoading && schedulableRequirements.length === 0 && (
+                  <div className="sv-form-notice">
+                    {matchesLoadFailed
+                      ? "Property matches could not be loaded. Close this window and try again."
+                      : "No buyer has a matched property yet. Go to Buyer Requirements > Find Matches and match a property first."}
+                  </div>
+                )}
+
                 <div className="form-group">
-                  <label>Select Property Match *</label>
-                  {allMatches.length === 0 ? (
-                    <div style={{ padding: "12px", background: "#fef3c7", color: "#92400e", borderRadius: "8px", fontSize: "0.85rem" }}>
-                      No Property Matches exist yet. Go to Buyer Requirements &gt; Find Matches &gt; Match a Property first!
-                    </div>
-                  ) : (
-                    <select
-                      value={selectedMatchId}
-                      onChange={(e) => setSelectedMatchId(e.target.value)}
-                      required
-                    >
-                      {allMatches.map((m) => {
-                        const prop = propertyMap.get(m.property_id);
-                        return (
-                          <option key={m.id} value={m.id}>
-                            {prop ? `${prop.name} (${prop.city})` : `Match #${m.id.substring(0, 8)}`}
-                          </option>
-                        );
-                      })}
-                    </select>
+                  <label htmlFor="sv-requirement">Customer / Lead *</label>
+                  <select
+                    id="sv-requirement"
+                    value={scheduleForm.requirementId}
+                    onChange={(e) => updateScheduleField("requirementId", e.target.value)}
+                    disabled={refsLoading || submitting}
+                    aria-invalid={!!fieldErrors.requirementId}
+                  >
+                    <option value="">
+                      {refsLoading ? "Loading customers..." : "Select customer / lead"}
+                    </option>
+                    {schedulableRequirements.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {requirementLabel(r)}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.requirementId && (
+                    <span className="sv-field-error">{fieldErrors.requirementId}</span>
                   )}
                 </div>
 
-                <div className="form-grid-2">
-                  <div className="form-group">
-                    <label>Start Date & Time *</label>
-                    <input
-                      type="datetime-local"
-                      name="scheduled_start"
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>End Date & Time *</label>
-                    <input
-                      type="datetime-local"
-                      name="scheduled_end"
-                      required
-                    />
-                  </div>
+                <div className="form-group">
+                  <label htmlFor="sv-property">Property *</label>
+                  <select
+                    id="sv-property"
+                    value={scheduleForm.matchId}
+                    onChange={(e) => updateScheduleField("matchId", e.target.value)}
+                    disabled={!scheduleForm.requirementId || submitting}
+                    aria-invalid={!!fieldErrors.matchId}
+                  >
+                    <option value="">
+                      {scheduleForm.requirementId ? "Select property" : "Select a customer first"}
+                    </option>
+                    {matchesForSelectedRequirement.map((m) => {
+                      const prop = propertyMap.get(m.property_id);
+                      return (
+                        <option key={m.id} value={m.id}>
+                          {prop
+                            ? `${prop.name}${prop.city ? ` (${prop.city})` : ""}`
+                            : `Property match #${m.id.substring(0, 8)}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {fieldErrors.matchId && <span className="sv-field-error">{fieldErrors.matchId}</span>}
                 </div>
 
                 <div className="form-group">
-                  <label>Assigned Salesperson (Optional)</label>
-                  <select name="assigned_to">
-                    <option value="">Default Match Salesperson</option>
-                    {users.map((u) => (
+                  <label htmlFor="sv-agent">Assigned Sales Agent</label>
+                  <select
+                    id="sv-agent"
+                    value={scheduleForm.assignedTo}
+                    onChange={(e) => updateScheduleField("assignedTo", e.target.value)}
+                    disabled={submitting}
+                  >
+                    <option value="">
+                      {defaultAgentName
+                        ? `Default — ${defaultAgentName}`
+                        : "Default — property match salesperson"}
+                    </option>
+                    {eligibleAgents.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.full_name || u.email}
                       </option>
                     ))}
                   </select>
+                  <span className="sv-field-hint">
+                    Leave on default to use the salesperson already assigned to the match. An agent
+                    cannot have two overlapping visits.
+                  </span>
+                </div>
+
+                <div className="sv-schedule-grid">
+                  <div className="form-group">
+                    <label htmlFor="sv-date">Visit Date *</label>
+                    <input
+                      id="sv-date"
+                      type="date"
+                      value={scheduleForm.visitDate}
+                      onChange={(e) => updateScheduleField("visitDate", e.target.value)}
+                      min={todayInputValue()}
+                      disabled={submitting}
+                      aria-invalid={!!fieldErrors.visitDate}
+                    />
+                    {fieldErrors.visitDate && (
+                      <span className="sv-field-error">{fieldErrors.visitDate}</span>
+                    )}
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="sv-start">Start Time *</label>
+                    <input
+                      id="sv-start"
+                      type="time"
+                      value={scheduleForm.startTime}
+                      onChange={(e) => updateScheduleField("startTime", e.target.value)}
+                      disabled={submitting}
+                      aria-invalid={!!fieldErrors.startTime}
+                    />
+                    {fieldErrors.startTime && (
+                      <span className="sv-field-error">{fieldErrors.startTime}</span>
+                    )}
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="sv-end">End Time *</label>
+                    <input
+                      id="sv-end"
+                      type="time"
+                      value={scheduleForm.endTime}
+                      onChange={(e) => updateScheduleField("endTime", e.target.value)}
+                      disabled={submitting}
+                      aria-invalid={!!fieldErrors.endTime}
+                    />
+                    {fieldErrors.endTime && <span className="sv-field-error">{fieldErrors.endTime}</span>}
+                  </div>
                 </div>
               </div>
 
@@ -879,7 +1130,7 @@ export default function SiteVisits() {
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setIsCreateOpen(false)}
+                  onClick={closeScheduleModal}
                   disabled={submitting}
                 >
                   Cancel
@@ -887,7 +1138,7 @@ export default function SiteVisits() {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={submitting || allMatches.length === 0}
+                  disabled={submitting || refsLoading || schedulableRequirements.length === 0}
                 >
                   {submitting ? "Scheduling..." : "Schedule Appointment"}
                 </button>

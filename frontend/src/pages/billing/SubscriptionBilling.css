@@ -457,3 +457,164 @@
   border-left: 3px solid #3b82f6;
   padding-left: 14px;
 }
+
+
+/* ---------- My Active Subscriptions (per-subscription cards) ---------- */
+.sub-subscription-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sub-subscription-card {
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-left: 4px solid #3b82f6;
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--card-background, #ffffff);
+}
+
+.sub-subscription-card.scheduled {
+  border-left-color: #f59e0b;
+}
+
+.sub-subscription-card.inactive {
+  border-left-color: #94a3b8;
+  opacity: 0.85;
+}
+
+.sub-subscription-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sub-subscription-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary, #172033);
+}
+
+.sub-subscription-id {
+  margin-top: 2px;
+  max-width: 100%;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #64748b);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.sub-subscription-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sub-subscription-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+}
+
+.sub-subscription-facts dt {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #64748b);
+  margin-bottom: 2px;
+}
+
+.sub-subscription-facts dd {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary, #172033);
+}
+
+.sub-subscription-note {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: #ef4444;
+}
+
+.sub-subscription-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+/* Cancellation confirmation modal */
+.sub-cancel-target {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.sub-cancel-target-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #64748b);
+}
+
+.sub-cancel-target-name {
+  display: block;
+  font-size: 1.05rem;
+  color: var(--text-primary, #172033);
+}
+
+.sub-cancel-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sub-cancel-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.sub-cancel-option.selected {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sub-cancel-option input {
+  margin-top: 3px;
+}
+
+.sub-cancel-option small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #64748b);
+}
+
+@media (max-width: 600px) {
+  .sub-subscription-actions {
+    justify-content: stretch;
+  }
+
+  .sub-subscription-actions .sub-btn {
+    width: 100%;
+  }
+}

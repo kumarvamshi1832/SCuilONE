@@ -405,6 +405,15 @@ export const formatAuditDateTime = (dateStr?: string | null): string => {
   }
 };
 
+// Health API returns the service label under `service`; older shapes used
+// `service_name` / `name`. Returns "" when no usable name is present.
+const getHealthServiceName = (svc: any): string => {
+  for (const key of ["service", "service_name", "name", "label"]) {
+    const v = svc?.[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+};
 
 type OpsTab =
   | "health"
@@ -922,16 +931,20 @@ export default function PlatformTechSecurityAuditPage() {
                     </thead>
                     <tbody>
                       {health.services.map((svc: any, i: number) => (
-                        <tr key={svc.service_name || svc.name || i}>
+                        <tr key={getHealthServiceName(svc) || i}>
                           <td>
-                            <strong>{svc.service_name || svc.name}</strong>
+                            <strong>
+                              {getHealthServiceName(svc) || "Unknown Service"}
+                            </strong>
                           </td>
                           <td>
                             <span
                               className={`platform-badge ${
                                 svc.status === "Healthy" || svc.status === "ok"
                                   ? "green"
-                                  : "yellow"
+                                  : svc.status === "Unavailable"
+                                    ? "red"
+                                    : "yellow"
                               }`}
                             >
                               {svc.status}
@@ -941,7 +954,7 @@ export default function PlatformTechSecurityAuditPage() {
                             {svc.latency_ms !== undefined
                               ? `${svc.latency_ms} ms`
                               : ""}{" "}
-                            {svc.detail || svc.message || ""}
+                            {svc.detail || svc.message || svc.error_message || ""}
                           </td>
                         </tr>
                       ))}
@@ -2091,76 +2104,6 @@ export default function PlatformTechSecurityAuditPage() {
                   {inspectingLog.description || "No description recorded"}
                 </div>
               </div>
-
-              {inspectingLog.before_data || inspectingLog.after_data ? (
-                <div className="platform-field">
-                  <label>State Diff / Change Payload</label>
-                  <div className="platform-diff-container">
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 11.5,
-                          fontWeight: 700,
-                          color: "var(--plat-muted)",
-                          marginBottom: 4,
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        BEFORE STATE
-                      </div>
-                      <pre
-                        style={{
-                          margin: 0,
-                          padding: 10,
-                          background: "rgba(0, 0, 0, 0.35)",
-                          borderRadius: 6,
-                          border: "1px solid var(--plat-border)",
-                          fontSize: 11.5,
-                          maxHeight: 200,
-                          overflow: "auto",
-                        }}
-                      >
-                        {inspectingLog.before_data
-                          ? JSON.stringify(inspectingLog.before_data, null, 2)
-                          : "// No prior state"}
-                      </pre>
-                    </div>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 11.5,
-                          fontWeight: 700,
-                          color: "var(--plat-muted)",
-                          marginBottom: 4,
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        AFTER STATE / METADATA
-                      </div>
-                      <pre
-                        style={{
-                          margin: 0,
-                          padding: 10,
-                          background: "rgba(0, 0, 0, 0.35)",
-                          borderRadius: 6,
-                          border: "1px solid var(--plat-border)",
-                          fontSize: 11.5,
-                          maxHeight: 200,
-                          overflow: "auto",
-                        }}
-                      >
-                        {inspectingLog.after_data
-                          ? JSON.stringify(inspectingLog.after_data, null, 2)
-                          : "// No mutation payload"}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: "var(--plat-muted)", fontStyle: "italic" }}>
-                  No structured before/after state diff was recorded for this event.
-                </div>
-              )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
                 <button

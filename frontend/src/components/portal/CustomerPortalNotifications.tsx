@@ -18,8 +18,16 @@ import {
   PortalNotification,
   NotificationFilterTab,
 } from '../../types/customerPortalNotifications';
-import { CustomerPortalNotificationService } from '../../services/customerPortalNotificationService';
+import {
+  CustomerPortalNotificationService,
+  PORTAL_NOTIFICATIONS_UPDATED_EVENT,
+} from '../../services/customerPortalNotificationService';
+import { parseBackendDate } from '../../utils/bookingJourney';
+import { getApiErrorMessage } from '../../utils/apiError';
 import './CustomerPortalNotifications.css';
+
+/** Unread badge polling interval (cheap GET /notifications/unread-count). */
+const UNREAD_POLL_MS = 60_000;
 
 interface CustomerPortalNotificationsProps {
   currentTenantId?: string;
@@ -50,8 +58,10 @@ export const getCategoryIcon = (category: PortalNotification['category'], size =
 
 export const formatRelativeTime = (isoString: string): string => {
   try {
-    const timestamp = new Date(isoString).getTime();
-    const diff = Math.floor((Date.now() - timestamp) / 1000);
+    // The API returns naive UTC timestamps; parseBackendDate treats them as UTC.
+    const timestamp = parseBackendDate(isoString)?.getTime();
+    if (timestamp === undefined) return 'Recently';
+    const diff = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
 
     if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
@@ -69,33 +79,72 @@ export const CustomerPortalNotifications: React.FC<CustomerPortalNotificationsPr
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<NotificationFilterTab>('all');
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isOpenRef = useRef(false);
   const navigate = useNavigate();
 
-  const loadNotifications = useCallback(() => {
-    const list = CustomerPortalNotificationService.getNotifications(currentTenantId);
-    setNotifications(list);
-  }, [currentTenantId]);
-
   useEffect(() => {
-    loadNotifications();
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
-    const handleNotificationsUpdated = () => {
-      loadNotifications();
+  /** Lightweight refresh of the bell badge only. A failure keeps the previous count. */
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      setUnreadCount(await CustomerPortalNotificationService.getUnreadCount());
+    } catch {
+      /* keep the last known count */
+    }
+  }, []);
+
+  /** Full list refresh (dropdown). A failure keeps the previously loaded list. */
+  const loadNotifications = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await CustomerPortalNotificationService.getNotifications(30, 0);
+      setNotifications(result.items);
+      setUnreadCount(result.unreadCount);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not load notifications.'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Badge: load on mount / workspace change, poll, and refresh on focus or when something changed.
+  useEffect(() => {
+    void refreshUnreadCount();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshUnreadCount();
+    }, UNREAD_POLL_MS);
+
+    const handleChanged = () => {
+      void refreshUnreadCount();
+      if (isOpenRef.current) void loadNotifications();
+    };
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') void refreshUnreadCount();
     };
 
-    const handleWorkspaceSwitched = () => {
-      loadNotifications();
-    };
-
-    window.addEventListener('portal:notifications-updated', handleNotificationsUpdated);
-    window.addEventListener('portal:workspace-switched', handleWorkspaceSwitched);
+    window.addEventListener(PORTAL_NOTIFICATIONS_UPDATED_EVENT, handleChanged);
+    window.addEventListener('portal:workspace-switched', handleChanged);
+    document.addEventListener('visibilitychange', handleVisible);
 
     return () => {
-      window.removeEventListener('portal:notifications-updated', handleNotificationsUpdated);
-      window.removeEventListener('portal:workspace-switched', handleWorkspaceSwitched);
+      window.clearInterval(timer);
+      window.removeEventListener(PORTAL_NOTIFICATIONS_UPDATED_EVENT, handleChanged);
+      window.removeEventListener('portal:workspace-switched', handleChanged);
+      document.removeEventListener('visibilitychange', handleVisible);
     };
-  }, [loadNotifications]);
+  }, [currentTenantId, refreshUnreadCount, loadNotifications]);
+
+  // Opening the dropdown always fetches the latest list.
+  useEffect(() => {
+    if (isOpen) void loadNotifications();
+  }, [isOpen, loadNotifications]);
 
   // Click outside and Escape key handlers
   useEffect(() => {
@@ -122,7 +171,6 @@ export const CustomerPortalNotifications: React.FC<CustomerPortalNotificationsPr
     };
   }, [isOpen]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
   const filteredNotifications =
     activeTab === 'unread' ? notifications.filter((n) => !n.read) : notifications;
 
@@ -130,24 +178,35 @@ export const CustomerPortalNotifications: React.FC<CustomerPortalNotificationsPr
     setIsOpen((prev) => !prev);
   };
 
-  const handleMarkAsRead = (id: string, e: React.MouseEvent) => {
+  const handleMarkAsRead = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    CustomerPortalNotificationService.markAsRead(currentTenantId, id);
-    loadNotifications();
-  };
-
-  const handleMarkAllAsRead = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    CustomerPortalNotificationService.markAllAsRead(currentTenantId);
-    loadNotifications();
-  };
-
-  const handleItemClick = (notification: PortalNotification) => {
-    if (!notification.read) {
-      CustomerPortalNotificationService.markAsRead(currentTenantId, notification.id);
+    try {
+      await CustomerPortalNotificationService.markAsRead(id);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not mark the notification as read.'));
     }
+  };
+
+  const handleMarkAllAsRead = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await CustomerPortalNotificationService.markAllAsRead();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not mark notifications as read.'));
+    }
+  };
+
+  const handleItemClick = async (notification: PortalNotification) => {
     setIsOpen(false);
-    navigate(notification.link);
+    if (!notification.read) {
+      try {
+        await CustomerPortalNotificationService.markAsRead(notification.id);
+      } catch {
+        /* navigation still proceeds; the badge stays accurate on next refresh */
+      }
+    }
+    const link = await CustomerPortalNotificationService.resolveLink(notification);
+    if (link) navigate(link);
   };
 
   return (
@@ -218,21 +277,36 @@ export const CustomerPortalNotifications: React.FC<CustomerPortalNotificationsPr
           </div>
 
           {/* Notifications List */}
-          <div className="cp-notif-list" role="list">
-            {filteredNotifications.length === 0 ? (
-              <div className="cp-notif-empty">
-                <div className="cp-notif-empty-icon">
-                  <InboxIcon size={22} />
-                </div>
-                <h4 className="cp-notif-empty-title">
-                  {activeTab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
-                </h4>
-                <p className="cp-notif-empty-desc">
-                  {activeTab === 'unread'
-                    ? "You're all caught up! Check the 'All' tab for past activity."
-                    : 'Important updates regarding contracts, invoices, and projects will appear here.'}
-                </p>
+          <div className="cp-notif-list" role="list" aria-busy={loading}>
+            {error && (
+              <div className="cp-notif-empty" role="alert">
+                <h4 className="cp-notif-empty-title">Something went wrong</h4>
+                <p className="cp-notif-empty-desc">{error}</p>
+                <button type="button" className="cp-notif-mark-all-btn" onClick={() => void loadNotifications()}>
+                  <span>Retry</span>
+                </button>
               </div>
+            )}
+            {loading && notifications.length === 0 && !error ? (
+              <div className="cp-notif-empty">
+                <p className="cp-notif-empty-desc">Loading notifications…</p>
+              </div>
+            ) : filteredNotifications.length === 0 ? (
+              !error && (
+                <div className="cp-notif-empty">
+                  <div className="cp-notif-empty-icon">
+                    <InboxIcon size={22} />
+                  </div>
+                  <h4 className="cp-notif-empty-title">
+                    {activeTab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+                  </h4>
+                  <p className="cp-notif-empty-desc">
+                    {activeTab === 'unread'
+                      ? "You're all caught up! Check the 'All' tab for past activity."
+                      : 'Updates about your site visits and booking requests will appear here.'}
+                  </p>
+                </div>
+              )
             ) : (
               filteredNotifications.map((notif) => (
                 <div

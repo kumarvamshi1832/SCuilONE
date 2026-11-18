@@ -33,6 +33,7 @@ import type { User } from "../../types/user";
 import type { PropertyMatch } from "../../types/propertyMatch";
 import { resolveImageUrl, handleImageError } from "../../utils/imageUrl";
 import PropertyCard from "../../components/properties/PropertyCard";
+import { resolveModulePermissions } from "../../utils/modulePermissions";
 import "./Properties.css";
 
 interface StagedPropertyImage {
@@ -131,30 +132,14 @@ export default function Properties() {
     return err?.message || fallback;
   };
 
-  // Permissions
+  // Permissions (shared resolver: explicit permission list, else the role's seeded grants)
   const userPermissions = useMemo(() => {
-    try {
-      const stored = sessionStorage.getItem("user");
-      if (!stored) return { canCreate: true, canUpdate: true, canDelete: true };
-      const parsed = JSON.parse(stored);
-      const perms: string[] = Array.isArray(parsed.permissions)
-        ? parsed.permissions
-        : parsed.role?.permissions || [];
-      const role = String(parsed.role || "").toUpperCase();
-      const isSuperOrAdmin =
-        role.includes("ADMIN") || role.includes("MANAGER") || role === "TENANT ADMIN";
-
-      const has = (p: string) =>
-        isSuperOrAdmin || perms.some((x) => x.toLowerCase() === p.toLowerCase());
-
-      return {
-        canCreate: has("property.create"),
-        canUpdate: has("property.update"),
-        canDelete: has("property.delete"),
-      };
-    } catch {
-      return { canCreate: true, canUpdate: true, canDelete: true };
-    }
+    const perms = resolveModulePermissions("property");
+    return {
+      canCreate: perms.create,
+      canUpdate: perms.update,
+      canDelete: perms.delete,
+    };
   }, []);
 
   // Fetch Buildings and Users for dropdowns

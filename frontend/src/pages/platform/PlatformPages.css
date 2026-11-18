@@ -664,6 +664,22 @@ body.dark .platform-dash-hero-tagline {
   color: #ddd6fe;
 }
 
+.platform-dash-hero-user {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--plat-muted);
+  overflow-wrap: anywhere;
+}
+
+.platform-dash-hero-user strong {
+  color: var(--plat-text);
+  font-weight: 600;
+}
+
+body.dark .platform-dash-hero-user {
+  color: #cbd5e1;
+}
+
 .platform-dash-subtitle {
   margin: 5px 0 0;
   font-size: 13.5px;
@@ -2461,6 +2477,328 @@ body:not(.dark) .platform-profile-field-error {
 
 @media (max-width: 640px) {
   .platform-diff-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   Platform Roles & Permissions Matrix Styles
+   ============================================================================ */
+.platform-roles-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .platform-roles-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.platform-role-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.platform-role-search-wrap svg {
+  position: absolute;
+  left: 12px;
+  color: var(--plat-muted);
+  pointer-events: none;
+}
+
+.platform-role-search-input {
+  width: 100%;
+  padding-left: 36px !important;
+}
+
+.platform-role-item-btn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--plat-surface);
+  border: 1px solid var(--plat-border);
+  color: var(--plat-text);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.platform-role-item-btn:hover {
+  background: var(--plat-surface-alt);
+  border-color: rgba(167, 139, 250, 0.4);
+  transform: translateY(-1px);
+}
+
+.platform-role-item-btn.active {
+  background: rgba(124, 58, 237, 0.12);
+  border-color: #8b5cf6;
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.22);
+}
+
+.platform-role-item-btn.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3.5px;
+  background: #a78bfa;
+  border-radius: 0 4px 4px 0;
+}
+
+.platform-role-icon-box {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.16);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.platform-role-item-btn.active .platform-role-icon-box {
+  background: rgba(124, 58, 237, 0.3);
+  color: #fff;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
+}
+
+.platform-role-hero-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--plat-border);
+  margin-bottom: 16px;
+}
+
+.platform-perm-category-card {
+  background: var(--plat-surface-alt);
+  border: 1px solid var(--plat-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.platform-perm-category-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.platform-perm-item-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--plat-border);
+  background: var(--plat-surface);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.platform-perm-item-tile.checked {
+  border-color: rgba(139, 92, 246, 0.45);
+  background: rgba(124, 58, 237, 0.08);
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.1);
+}
+
+.platform-perm-item-tile:hover {
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.platform-perm-checkbox {
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  accent-color: #8b5cf6;
+  cursor: pointer;
+}
+
+/* Scope Tabs */
+.platform-roles-scope-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--plat-surface-alt);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--plat-border);
+  margin-bottom: 12px;
+}
+
+.platform-roles-scope-btn {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--plat-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.platform-roles-scope-btn:hover {
+  color: var(--plat-text);
+}
+
+.platform-roles-scope-btn.active {
+  background: rgba(124, 58, 237, 0.25);
+  color: #fff;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+}
+
+/* Role Item Metadata */
+.platform-role-item-meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.platform-role-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.platform-role-name {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--plat-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.platform-role-perm-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.18);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  white-space: nowrap;
+}
+
+.platform-role-dash-title {
+  font-size: 11.5px;
+  color: var(--plat-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Action Badges */
+.platform-action-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.platform-action-badge.view {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.platform-action-badge.manage {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.platform-action-badge.create {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.platform-action-badge.update {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.platform-action-badge.export {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.platform-action-badge.delete {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Unsaved Changes Banner */
+.platform-unsaved-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fef3c7;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+/* System Protected Banner */
+.platform-protected-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(124, 58, 237, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #ddd6fe;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+/* Category Grid */
+.platform-perm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .platform-perm-grid {
     grid-template-columns: 1fr;
   }
 }

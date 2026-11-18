@@ -1,16 +1,68 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   SCuilONE Industry Settings Styles — Cyan + Navy Enterprise UI
+   SCuilONE Industry & Module Settings — Cyan + Navy Enterprise UI
+
+   Layout is theme-independent. The light/dark themes only change the colour
+   tokens below (the app switches themes with `.dashboard-wrapper.dark`).
    ══════════════════════════════════════════════════════════════════════════ */
 
 .settings-container {
+  /* colour tokens – light */
+  --st-text: #0f172a;
+  --st-muted: #64748b;
+  --st-card-bg: #ffffff;
+  --st-border: #e2e8f0;
+  --st-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  --st-inner-bg: #f8fafc;
+  --st-inner-border: #e2e8f0;
+  --st-input-bg: #ffffff;
+  --st-input-border: #cbd5e1;
+  --st-slider-off: #cbd5e1;
+  --st-accent: #0ea5e9;
+  --st-accent-strong: #0284c7;
+  --st-success: #059669;
+  --st-badge-text: #0369a1;
+  --st-badge-bg: rgba(14, 165, 233, 0.15);
+  --st-btn-text: #475569;
+  --st-btn-border: #cbd5e1;
+  --st-chip-text: #b45309;
+
+  /* layout tokens – identical in both themes */
+  --st-gap: 16px;
+  --st-control-h: 40px;
+  --st-input-h: 36px;
+  --st-columns: 4;
+
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 0 0 40px 0;
+  color: var(--st-text);
   animation: settingsFadeIn 0.25s ease-out;
-  color: #0f172a;
 }
 
 .dashboard-wrapper.dark .settings-container,
 .dark .settings-container {
-  color: #f8fafc;
+  --st-text: #f8fafc;
+  --st-muted: #94a3b8;
+  --st-card-bg: #111a2e;
+  --st-border: rgba(255, 255, 255, 0.08);
+  --st-inner-bg: #0d1527;
+  --st-inner-border: rgba(255, 255, 255, 0.06);
+  --st-input-bg: #0a1122;
+  --st-input-border: rgba(255, 255, 255, 0.14);
+  --st-slider-off: #334155;
+  --st-success: #10b981;
+  --st-badge-text: #38bdf8;
+  --st-btn-text: #cbd5e1;
+  --st-btn-border: rgba(255, 255, 255, 0.18);
+  --st-chip-text: #fbbf24;
+}
+
+.settings-container *,
+.settings-container *::before,
+.settings-container *::after {
+  box-sizing: border-box;
 }
 
 @keyframes settingsFadeIn {
@@ -18,245 +70,393 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── 1. Page header ──────────────────────────────────────────────────────── */
+
 .settings-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 16px 24px;
   margin-bottom: 24px;
+}
+
+.settings-header > div:first-child {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .settings-header h1 {
   font-size: 1.65rem;
   font-weight: 700;
+  line-height: 1.25;
   margin: 0 0 4px 0;
-  color: #0f172a;
-}
-
-.dashboard-wrapper.dark .settings-header h1,
-.dark .settings-header h1 {
-  color: #f8fafc;
+  color: var(--st-text);
 }
 
 .settings-header p {
   margin: 0;
   font-size: 0.88rem;
-  color: #64748b;
+  line-height: 1.45;
+  color: var(--st-muted);
 }
 
-.dashboard-wrapper.dark .settings-header p,
-.dark .settings-header p {
-  color: #94a3b8;
+.settings-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 0 0 auto;
 }
+
+.settings-unsaved-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--st-chip-text);
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+/* Cancel and Save share one box model so they always have the same height. */
+.settings-btn-save,
+.settings-btn-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--st-control-h);
+  padding: 0 22px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-btn-save {
+  background: var(--st-accent);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
+}
+
+.settings-btn-save:hover:not(:disabled) {
+  background: var(--st-accent-strong);
+  transform: translateY(-1px);
+}
+
+.settings-btn-cancel {
+  background: transparent;
+  color: var(--st-btn-text);
+  border-color: var(--st-btn-border);
+}
+
+.settings-btn-cancel:hover:not(:disabled) {
+  border-color: var(--st-accent);
+  color: var(--st-accent);
+}
+
+.settings-btn-save:disabled,
+.settings-btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 2. Summary cards ────────────────────────────────────────────────────── */
 
 .settings-meta-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(var(--st-columns), minmax(0, 1fr));
+  gap: var(--st-gap);
   margin-bottom: 24px;
 }
 
 .settings-meta-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
   padding: 16px 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-}
-
-.dashboard-wrapper.dark .settings-meta-card,
-.dark .settings-meta-card {
-  background: #111a2e;
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--st-card-bg);
+  border: 1px solid var(--st-border);
+  border-radius: 10px;
+  box-shadow: var(--st-shadow);
 }
 
 .settings-meta-label {
+  width: 100%;
   font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.3;
   text-transform: uppercase;
-  color: #64748b;
   letter-spacing: 0.05em;
-}
-
-.dashboard-wrapper.dark .settings-meta-label,
-.dark .settings-meta-label {
-  color: #94a3b8;
+  color: var(--st-muted);
+  overflow-wrap: anywhere;
 }
 
 .settings-meta-value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  width: 100%;
+  min-width: 0;
   font-size: 1.15rem;
   font-weight: 700;
-  color: #0ea5e9;
-  margin-top: 4px;
+  line-height: 1.3;
+  color: var(--st-accent);
+  overflow-wrap: anywhere;
 }
+
+.settings-meta-value.is-capitalized { text-transform: capitalize; }
+.settings-meta-value.is-success { color: var(--st-success); }
+.settings-meta-value.is-muted { color: var(--st-muted); }
+
+.settings-meta-pack-name {
+  min-width: 0;
+}
+
+.settings-version-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--st-badge-text);
+  background: var(--st-badge-bg);
+}
+
+/* ── Section cards ───────────────────────────────────────────────────────── */
 
 .settings-section-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 24px;
+  min-width: 0;
   margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  padding: 24px;
+  background: var(--st-card-bg);
+  border: 1px solid var(--st-border);
+  border-radius: 12px;
+  box-shadow: var(--st-shadow);
 }
 
-.dashboard-wrapper.dark .settings-section-card,
-.dark .settings-section-card {
-  background: #111a2e;
-  border-color: rgba(255, 255, 255, 0.08);
+.settings-container > .settings-section-card:last-child {
+  margin-bottom: 0;
 }
 
 .settings-section-title {
+  margin: 0 0 6px 0;
   font-size: 1.15rem;
   font-weight: 700;
-  margin: 0 0 6px 0;
-  color: #0f172a;
-}
-
-.dashboard-wrapper.dark .settings-section-title,
-.dark .settings-section-title {
-  color: #f8fafc;
+  color: var(--st-text);
+  overflow-wrap: anywhere;
 }
 
 .settings-section-desc {
-  font-size: 0.85rem;
-  color: #64748b;
   margin: 0 0 20px 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--st-muted);
 }
 
-.dashboard-wrapper.dark .settings-section-desc,
-.dark .settings-section-desc {
-  color: #94a3b8;
-}
+/* ── 3. Module grid (Industry Modules and Core CRM Modules share it) ─────── */
 
 .modules-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(var(--st-columns), minmax(0, 1fr));
+  gap: var(--st-gap);
+  align-items: stretch;
 }
+
+/* ── 4. Module card: head row (name + id | switch) and label input row ───── */
 
 .module-toggle-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
   padding: 14px 16px;
+  background: var(--st-inner-bg);
+  border: 1px solid var(--st-inner-border);
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  transition: all 0.2s ease;
-}
-
-.dashboard-wrapper.dark .module-toggle-card,
-.dark .module-toggle-card {
-  background: #0d1527;
-  border-color: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s ease;
 }
 
 .module-toggle-card:hover {
-  border-color: #0ea5e9;
+  border-color: var(--st-accent);
+}
+
+.module-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  column-gap: 12px;
+}
+
+.module-info {
+  min-width: 0;
 }
 
 .module-info h4 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0 0 2px 0;
   font-size: 0.92rem;
   font-weight: 600;
-  margin: 0 0 2px 0;
-  color: #0f172a;
+  line-height: 1.35;
+  color: var(--st-text);
+  overflow-wrap: anywhere;
 }
 
-.dashboard-wrapper.dark .module-info h4,
-.dark .module-info h4 {
-  color: #f8fafc;
-}
-
-.module-info span {
+.module-key {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.75rem;
-  color: #64748b;
-  font-family: monospace;
+  line-height: 1.4;
+  color: var(--st-muted);
+  overflow-wrap: anywhere;
 }
 
-.dashboard-wrapper.dark .module-info span,
-.dark .module-info span {
-  color: #94a3b8;
+.module-preview-note {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: #f59e0b;
 }
 
-/* Switch toggle */
+/* Pinned to the card's bottom so inputs line up across a row of cards. */
+.module-label-input {
+  display: block;
+  width: 100%;
+  height: var(--st-input-h);
+  margin-top: auto;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  border-radius: 6px;
+  border: 1px solid var(--st-input-border);
+  background: var(--st-input-bg);
+  color: var(--st-text);
+  outline: none;
+}
+
+.module-label-input::placeholder {
+  text-overflow: ellipsis;
+  color: var(--st-muted);
+  opacity: 0.85;
+}
+
+.module-label-input:focus {
+  border-color: var(--st-accent);
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+}
+
+.module-label-input:disabled {
+  opacity: 0.6;
+}
+
+/* ── Switch toggle (fixed 44×24, always top-right of the card head) ─────── */
+
 .switch {
   position: relative;
   display: inline-block;
+  flex: 0 0 auto;
   width: 44px;
   height: 24px;
+  justify-self: end;
 }
 
 .switch input {
+  position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-.slider {
+.switch .slider {
   position: absolute;
+  inset: 0;
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #cbd5e1;
-  transition: .3s;
+  background-color: var(--st-slider-off);
+  transition: 0.3s;
   border-radius: 24px;
 }
 
-.dashboard-wrapper.dark .slider,
-.dark .slider {
-  background-color: #334155;
-}
-
-.slider:before {
+.switch .slider::before {
   position: absolute;
   content: "";
   height: 18px;
   width: 18px;
   left: 3px;
   bottom: 3px;
-  background-color: white;
-  transition: .3s;
+  background-color: #ffffff;
+  transition: 0.3s;
   border-radius: 50%;
 }
 
-input:checked + .slider {
-  background-color: #0ea5e9;
+.switch input:checked + .slider {
+  background-color: var(--st-accent);
 }
 
-input:focus + .slider {
-  box-shadow: 0 0 1px #0ea5e9;
-}
-
-input:checked + .slider:before {
+.switch input:checked + .slider::before {
   transform: translateX(20px);
 }
 
-.settings-btn-save {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #0ea5e9;
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 22px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
+.switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.35);
 }
 
-.settings-btn-save:hover:not(:disabled) {
-  background: #0284c7;
-  transform: translateY(-1px);
-}
-
-.settings-btn-save:disabled {
-  opacity: 0.5;
+.switch input:disabled + .slider {
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
+.module-toggle-card.is-readonly .switch {
+  opacity: 0.55;
+}
+
+/* ── 7. Responsive: 4 columns → 2 → 1 (same breakpoints for both themes) ── */
+
+@media (max-width: 1279px) {
+  .settings-container { --st-columns: 2; }
+}
+
+@media (max-width: 640px) {
+  .settings-container { --st-columns: 1; }
+
+  .settings-header h1 { font-size: 1.4rem; }
+
+  .settings-header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .settings-unsaved-chip {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .settings-header-actions .settings-btn-save,
+  .settings-header-actions .settings-btn-cancel {
+    flex: 1 1 0;
+    padding: 0 12px;
+  }
+
+  .settings-section-card { padding: 16px; }
+}

@@ -18,6 +18,7 @@ import type { DashboardSummary } from "../../types/dashboard";
 import type { Account } from "../../types/account";
 import { getAccounts } from "../../services/accountService";
 import { useTheme } from "../../context/ThemeContext";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import "./DashboardCharts.css";
 
 interface DashboardChartsProps {
@@ -332,7 +333,9 @@ export default function DashboardCharts({
                   animationDuration={900}
                   animationEasing="ease-out"
                   animationBegin={120}
-                  label={renderPieLabel}
+                  label={(entry: any) =>
+                    renderPieLabel({ ...entry, name: getLeadStatusLabel(entry?.name) })
+                  }
                   labelLine={{
                     stroke: isDark ? "#94A3B8" : "#64748B",
                     strokeWidth: 1.5,
@@ -376,7 +379,7 @@ export default function DashboardCharts({
                   itemStyle={{ color: tooltipText }}
                   formatter={(val, name) => [
                     `${val} (${Math.round(((Number(val) || 0) / Math.max(1, totalLeads)) * 100)}%)`,
-                    name,
+                    getLeadStatusLabel(String(name)),
                   ]}
                 />
 
@@ -397,7 +400,7 @@ export default function DashboardCharts({
                           fontWeight: 500,
                         }}
                       >
-                        {value} {item ? `(${item.count})` : ""}
+                        {getLeadStatusLabel(String(value))} {item ? `(${item.count})` : ""}
                       </span>
                     );
                   }}

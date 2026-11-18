@@ -15,6 +15,7 @@ import {
 import { getUsers } from "../../services/userService";
 import type { Lead } from "../../types/lead";
 import type { User } from "../../types/user";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import "./Workflows.css";
 import WorkflowAutomation from "./WorkflowAutomation";
 
@@ -526,7 +527,7 @@ export default function Workflows() {
                     <option value="">Choose a lead</option>
                     {leads.map((lead) => (
                       <option key={lead.id} value={lead.id}>
-                        {lead.full_name} — {lead.status}
+                        {lead.full_name} — {getLeadStatusLabel(lead.status)}
                       </option>
                     ))}
                   </select>
@@ -657,7 +658,7 @@ export default function Workflows() {
                               .toLowerCase()
                               .replace(/\s+/g, "-")}`}
                           >
-                            {lead.status}
+                            {getLeadStatusLabel(lead.status)}
                           </span>
                         </td>
                         <td>{formatDate(lead.created_at)}</td>

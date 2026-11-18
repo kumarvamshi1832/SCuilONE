@@ -32,6 +32,7 @@ import { normalizeTaskStatus } from "../../utils/taskStatus";
 import { useTheme } from "../../context/ThemeContext";
 
 import "./Activities.css";
+import "../../components/common/CrmActionButtons.css";
 
 /**
  * Splits formatted labels like "Fintech (PRJ-20261102-2816B787)"

@@ -11,6 +11,7 @@ import LeadViewModal from "../../components/leads/LeadViewModal";
 import ActivityViewModal from "../../components/activities/ActivityViewModal";
 import { formatDateTime } from "../../utils/dateFormatter";
 import { normalizeIndustry } from "../../utils/industryUtils";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import "./RealEstateDashboard.css";
 
 export default function SalesDashboard() {
@@ -341,7 +342,7 @@ export default function SalesDashboard() {
                             {lead.email}
                           </td>
                           <td style={{ padding: '10px 12px' }}>
-                            <span className={`status-badge ${lead.status?.toLowerCase() === 'new' ? 'active' : 'inactive'}`}>{lead.status}</span>
+                            <span className={`status-badge ${lead.status?.toLowerCase() === 'new' ? 'active' : 'inactive'}`}>{getLeadStatusLabel(lead.status)}</span>
                           </td>
                           <td style={{ padding: '10px 12px' }}>-</td>
                           <td style={{ padding: '10px 12px' }}>-</td>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { Activity } from "../../types/activity";
 import type { User } from "../../types/user";
 import type { Lead } from "../../types/lead";
@@ -28,6 +28,8 @@ import ActivityDeleteConfirm from "../../components/activities/ActivityDeleteCon
 import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import LeadViewModal from "../../components/leads/LeadViewModal";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { getIndustryConfig } from "../../config/industryConfig";
+import { hasFeaturePermission } from "../../utils/modulePermissions";
 import {
   isTask,
   isTaskOverdue,
@@ -38,11 +40,51 @@ import "../users/Users.css";
 import "../leads/Leads.css";
 import "../activities/Activities.css";
 import "./Tasks.css";
+import "../../components/common/CrmActionButtons.css";
+
+const KPI_ICONS: Record<string, JSX.Element> = {
+  all: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
+  pending: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  progress: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  ),
+  done: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  ),
+  overdue: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  ),
+};
 
 export default function Tasks() {
   /* ─── Permissions & User Context ─── */
   const userContext = useMemo(() => getActivityUserContext(), []);
   const permissions = useMemo(() => getActivityPermissions(), []);
+  const { industry } = useParams();
+  const showTrashLink = useMemo(
+    () => Boolean(industry) && getIndustryConfig(industry).modules.includes("trash") && hasFeaturePermission("trash.view"),
+    [industry]
+  );
 
   /* ─── State ─── */
   const [tasks, setTasks] = useState<Activity[]>([]);
@@ -318,9 +360,9 @@ export default function Tasks() {
 
       {/* Page Header */}
       <div className="page-header">
-        <div>
+        <div className="tasks-header-left">
           <h1>{viewMode === "my" || !userContext.canViewAllActivities ? "My Tasks" : "Tasks"}</h1>
-          <p className="text-muted" style={{ margin: "4px 0 0" }}>
+          <p className="text-muted">
             {viewMode === "my" || !userContext.canViewAllActivities
               ? "Track, manage, and complete your assigned tasks."
               : "Track and manage tasks assigned across your entire organization."}
@@ -348,6 +390,17 @@ export default function Tasks() {
             </div>
           )}
 
+          {showTrashLink && (
+            <Link to={`/${industry}/trash`} className="tasks-btn" title="Restore or permanently delete removed records">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+              </svg>
+              <span>Trash</span>
+            </Link>
+          )}
+
           <ImportExportActions
             moduleId="tasks"
             records={filteredTasks}
@@ -365,74 +418,70 @@ export default function Tasks() {
                 setIsFormOpen(true);
               }}
             >
-              <span className="btn-icon">+</span>
-              Create Task
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Create Task</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
+      {/* Summary KPI Cards (values come from the loaded task list) */}
       <div className="task-summary-cards">
-        <div
-          className={`task-kpi-card ${!statusFilter ? "active" : ""}`}
-          onClick={() => handleStatusFilterChange("")}
-          role="button"
-          tabIndex={0}
-        >
-          <span className="task-kpi-label">All Tasks</span>
-          <span className="task-kpi-value">{summaryCounts.total}</span>
-        </div>
-
-        <div
-          className={`task-kpi-card ${statusFilter.toLowerCase() === "pending" ? "active" : ""}`}
-          onClick={() => handleStatusFilterChange("Pending")}
-          role="button"
-          tabIndex={0}
-        >
-          <span className="task-kpi-label">Pending</span>
-          <span className="task-kpi-value text-amber">{summaryCounts.pending}</span>
-        </div>
-
-        <div
-          className={`task-kpi-card ${statusFilter.toLowerCase() === "in progress" || statusFilter.toLowerCase() === "in-progress"
-            ? "active"
-            : ""
-            }`}
-          onClick={() => handleStatusFilterChange("In Progress")}
-          role="button"
-          tabIndex={0}
-        >
-          <span className="task-kpi-label">In Progress</span>
-          <span className="task-kpi-value text-blue">{summaryCounts.inProgress}</span>
-        </div>
-
-        <div
-          className={`task-kpi-card ${statusFilter.toLowerCase() === "completed" ? "active" : ""}`}
-          onClick={() => handleStatusFilterChange("Completed")}
-          role="button"
-          tabIndex={0}
-        >
-          <span className="task-kpi-label">Completed</span>
-          <span className="task-kpi-value text-green">{summaryCounts.completed}</span>
-        </div>
-
-        <div
-          className={`task-kpi-card ${statusFilter.toLowerCase() === "overdue" ? "active" : ""}`}
-          onClick={() => handleStatusFilterChange("Overdue")}
-          role="button"
-          tabIndex={0}
-        >
-          <span className="task-kpi-label">Overdue</span>
-          <span className="task-kpi-value text-red">{summaryCounts.overdue}</span>
-        </div>
+        {(
+          [
+            { key: "all", tone: "tone-all", label: "All Tasks", value: summaryCounts.total, color: "", filter: "", active: !statusFilter },
+            { key: "pending", tone: "tone-pending", label: "Pending", value: summaryCounts.pending, color: "text-amber", filter: "Pending", active: statusFilter.toLowerCase() === "pending" },
+            {
+              key: "progress",
+              tone: "tone-progress",
+              label: "In Progress",
+              value: summaryCounts.inProgress,
+              color: "text-blue",
+              filter: "In Progress",
+              active: statusFilter.toLowerCase() === "in progress" || statusFilter.toLowerCase() === "in-progress",
+            },
+            { key: "done", tone: "tone-done", label: "Completed", value: summaryCounts.completed, color: "text-green", filter: "Completed", active: statusFilter.toLowerCase() === "completed" },
+            { key: "overdue", tone: "tone-overdue", label: "Overdue", value: summaryCounts.overdue, color: "text-red", filter: "Overdue", active: statusFilter.toLowerCase() === "overdue" },
+          ] as const
+        ).map((card) => (
+          <div
+            key={card.key}
+            className={`task-kpi-card ${card.tone} ${card.active ? "active" : ""}`}
+            onClick={() => handleStatusFilterChange(card.filter)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleStatusFilterChange(card.filter);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-pressed={card.active}
+          >
+            <span className="task-kpi-icon" aria-hidden="true">
+              {KPI_ICONS[card.key]}
+            </span>
+            <span className="task-kpi-text">
+              <span className="task-kpi-label">{card.label}</span>
+              <span className={`task-kpi-value ${card.color}`}>{card.value}</span>
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* Filter Toolbar */}
       <div className="filter-card">
         <div className="search-box">
+          <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
           <input
             type="text"
+            aria-label="Search tasks"
             placeholder="Search by title, description, lead, account, contact, or industry project/property..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -642,21 +691,14 @@ export default function Tasks() {
 
                         {/* Industry Related Records */}
                         {task.related_records && task.related_records.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", marginTop: "4px" }}>
+                          <div className="task-related-chips">
                             {task.related_records.map((link) => {
                               const resolved = getCachedRecordLabel(link.module, link.record_id);
                               const modName = MODULE_DISPLAY_NAMES[link.module] || link.module.replace("_", " ");
                               return (
                                 <span
                                   key={`${link.module}-${link.record_id}`}
-                                  style={{
-                                    fontSize: "0.72rem",
-                                    background: "#f1f5f9",
-                                    color: "#334155",
-                                    padding: "1px 6px",
-                                    borderRadius: "4px",
-                                    display: "inline-block",
-                                  }}
+                                  className="task-related-chip"
                                   title={`${modName}: ${resolved || link.record_id}`}
                                 >
                                   <strong>{modName}:</strong> {resolved || `#${link.record_id.slice(0, 8)}`}

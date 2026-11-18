@@ -26,7 +26,8 @@ import {
   hasPlatformPermission,
 } from "../../services/platformApiClient";
 import { signOutAndRedirect } from "../../services/authSession";
-import { PlatformBubbleBackground } from "./PlatformBubbleBackground";
+import { isPlatformManager } from "../../utils/platformManager";
+import NotificationBell from "./notifications/NotificationBell";
 import "./PlatformLayout.css";
 
 interface NavItemConfig {
@@ -126,6 +127,9 @@ export default function PlatformLayout({
       return next;
     });
   };
+
+  // Notifications are scoped to the signed-in employee; without an id the bell is not rendered.
+  const notificationIdentity = String(user?.user_id || user?.id || "").trim();
 
   const rawFullName = (user?.full_name || user?.name || "").trim();
   const headerDisplayName = rawFullName || "Account";
@@ -264,6 +268,88 @@ export default function PlatformLayout({
     },
   ];
 
+  // Platform Manager gets its own grouping and branding. Items still appear only when the
+  // session holds the matching permission, so nothing here grants access.
+  const managerMode = isPlatformManager();
+  const managerNavGroups: NavGroupConfig[] = [
+    {
+      groupLabel: "Overview",
+      items: [
+        {
+          label: "Dashboard",
+          to: "/platform/dashboard",
+          requiredAnyPermissions: ["platform.dashboard.view"],
+          icon: <LayoutDashboardIcon size={16} />,
+        },
+      ],
+    },
+    {
+      groupLabel: "Platform Operations",
+      items: [
+        {
+          label: "Tenant Companies",
+          to: "/platform/tenants",
+          requiredAnyPermissions: ["platform.tenants.view"],
+          icon: <BuildingIcon size={16} />,
+        },
+        {
+          label: "Employees & Industry Teams",
+          to: "/platform/employees",
+          requiredAnyPermissions: ["platform.employees.view", "platform.teams.view"],
+          icon: <UsersIcon size={16} />,
+        },
+        {
+          label: "Roles & Permissions",
+          to: "/platform/roles",
+          requiredAnyPermissions: ["platform.roles.view"],
+          icon: <ShieldCheckIcon size={16} />,
+        },
+      ],
+    },
+    {
+      groupLabel: "Operations & Management",
+      items: [
+        {
+          label: "Support & Knowledge Base",
+          to: "/platform/support",
+          requiredAnyPermissions: ["platform.tickets.view", "platform.kb.view"],
+          icon: <HeadphonesIcon size={16} />,
+        },
+        {
+          label: "Subscription & Billing",
+          to: "/platform/billing",
+          requiredAnyPermissions: ["platform.billing.view", "platform.plans.view"],
+          icon: <CreditCardIcon size={16} />,
+        },
+        {
+          label: "Sales & Finance",
+          to: "/platform/finance",
+          requiredAnyPermissions: ["platform.sales.view", "platform.finance.view"],
+          icon: <TrendingUpIcon size={16} />,
+        },
+      ],
+    },
+    {
+      groupLabel: "Insights & Account",
+      items: [
+        {
+          label: "Analytics & Reports",
+          to: "/platform/analytics",
+          requiredAnyPermissions: ["platform.analytics.view"],
+          icon: <FileTextIcon size={16} />,
+        },
+        {
+          label: "My Profile",
+          to: "/platform/profile",
+          icon: <UserIcon size={16} />,
+        },
+      ],
+    },
+  ];
+  const activeNavGroups = managerMode ? managerNavGroups : navGroups;
+  const brandSubtitle = managerMode ? "Platform Manager" : "Super Admin Platform";
+  const topbarTitle = managerMode ? "Platform Manager Console" : "SCuilONE Platform Control";
+
   const handleLogout = async () => {
     await signOutAndRedirect();
     clearPlatformSession();
@@ -272,7 +358,6 @@ export default function PlatformLayout({
 
   return (
     <div className={`platform-shell ${sidebarCollapsed ? "is-collapsed" : ""}`}>
-      <PlatformBubbleBackground />
       <div
         className={`platform-backdrop ${sidebarOpen ? "open" : ""}`}
         onClick={() => setSidebarOpen(false)}
@@ -284,14 +369,14 @@ export default function PlatformLayout({
         }`}
       >
         <div className="platform-brand">
-          <div className="platform-brand-title" title="SCuilONE Super Admin Platform">
+          <div className="platform-brand-title" title={`SCuilONE ${brandSubtitle}`}>
             <span className="platform-brand-logo">
               <ScuiloneBrandMark />
             </span>
             <span className="platform-brand-text">
               <span className="platform-brand-wordmark">
                 <span>SCuilONE</span>
-                <small className="platform-brand-sub">Super Admin Platform</small>
+                <small className="platform-brand-sub">{brandSubtitle}</small>
               </span>
             </span>
           </div>
@@ -322,7 +407,7 @@ export default function PlatformLayout({
         </div>
 
         <nav className="platform-nav" aria-label="Platform navigation">
-          {navGroups.map((group) => {
+          {activeNavGroups.map((group) => {
             const visibleItems = group.items.filter(
               (item) =>
                 !item.requiredAnyPermissions ||
@@ -381,12 +466,13 @@ export default function PlatformLayout({
               <MenuIcon size={18} />
             </button>
             <div className="platform-topbar-heading">
-              <h1 className="platform-topbar-title">SCuilONE Platform Control</h1>
+              <h1 className="platform-topbar-title">{topbarTitle}</h1>
             </div>
           </div>
 
           <div className="platform-topbar-right">
             <div className="platform-topbar-actions">
+              {notificationIdentity && <NotificationBell identityKey={notificationIdentity} />}
               <button
                 type="button"
                 className="platform-icon-btn"

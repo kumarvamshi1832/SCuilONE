@@ -190,6 +190,21 @@
   gap: 24px;
 }
 
+/* Subtle scrollbar for the body (thin, low-contrast, themed) */
+.crm-modal-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--crm-border-strong) transparent;
+}
+.crm-modal-body::-webkit-scrollbar { width: 8px; }
+.crm-modal-body::-webkit-scrollbar-track { background: transparent; }
+.crm-modal-body::-webkit-scrollbar-thumb {
+  background: var(--crm-border-strong);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.crm-modal-body::-webkit-scrollbar-thumb:hover { background: var(--crm-muted); background-clip: content-box; }
+
 /* Footer — pinned */
 .crm-modal-footer {
   flex: 0 0 auto;
@@ -678,3 +693,6 @@
     animation: none;
   }
 }
+
+/* Contact "Custom Form" section: keep it on the same rhythm as the other sections */
+.crm-modal .contact-custom-forms { min-width: 0; }

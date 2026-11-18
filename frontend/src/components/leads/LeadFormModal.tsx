@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type { Lead, CreateLeadRequest, UpdateLeadRequest, LeadStatus, LeadSource } from "../../types/lead";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import { User } from "../../types/user";
 import { createLead, updateLead } from "../../services/leadService";
 import { createActivity, getActivities } from "../../services/activityService";
@@ -9,7 +10,7 @@ import { getAccounts } from "../../services/accountService";
 import { friendlyAssignmentError } from "../../utils/leadPermissions";
 import UserSearchDropdown from "./UserSearchDropdown";
 import { Account } from "../../types/account";
-import "./LeadFormModal.css";
+import CrmFormModal from "../common/CrmFormModal";
 
 interface LeadFormModalProps {
   lead?: Lead | null;
@@ -218,193 +219,23 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
     }
   };
 
+  const fieldsDisabled = loading || !!createdLead;
+
   return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal-content leads-modal-content lead-form-modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{isEdit ? "Edit Lead" : "Create Lead"}</h2>
-          <button className="btn-close" onClick={handleClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-
-        <div className="modal-body">
-          {error && (
-            <div
-              className="alert-box error"
-              style={{
-                padding: "10px 14px",
-                marginBottom: "16px",
-                borderRadius: "6px",
-                background: "#fcebea",
-                color: "#cc0000",
-                fontSize: "0.875rem",
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          {taskError && (
-            <div
-              className="alert-box warning"
-              style={{
-                padding: "12px 14px",
-                marginBottom: "16px",
-                borderRadius: "6px",
-                background: "#fffbeb",
-                border: "1px solid #fde68a",
-                color: "#92400e",
-                fontSize: "0.875rem",
-                lineHeight: 1.5,
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: "4px" }}>Follow-up Task Pending</div>
-              <div>{taskError}</div>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>
-              Full Name <span style={{ color: "#e53e3e" }}>*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Rahul Sharma"
-              value={fullName}
-              onChange={(e) => {
-                setFullName(e.target.value);
-                setFieldErrors((prev) => ({ ...prev, full_name: "" }));
-                setError(null);
-              }}
-              disabled={loading || !!createdLead}
-              className={fieldErrors.full_name ? "input-error" : ""}
-            />
-            {fieldErrors.full_name && (
-              <span className="field-error">{fieldErrors.full_name}</span>
-            )}
-          </div>
-
-          <div className="form-row-2">
-            <div className="form-group">
-              <label>Email</label>
-              <input
-                type="email"
-                placeholder="e.g. rahul@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setFieldErrors((prev) => ({ ...prev, email: "" }));
-                  setError(null);
-                }}
-                disabled={loading || !!createdLead}
-                className={fieldErrors.email ? "input-error" : ""}
-              />
-              {fieldErrors.email && (
-                <span className="field-error">{fieldErrors.email}</span>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Phone</label>
-              <input
-                type="tel"
-                placeholder="e.g. +91 9876543210"
-                value={phone}
-                onChange={(e) => {
-                  setPhone(e.target.value);
-                  setError(null);
-                }}
-                disabled={loading || !!createdLead}
-              />
-            </div>
-          </div>
-
-          <div className="form-row-2">
-            <div className="form-group">
-              <label>Source</label>
-              <select
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                disabled={loading || !!createdLead}
-              >
-                <option value="">-- Select Source --</option>
-                {LEAD_SOURCES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                disabled={loading || !!createdLead}
-              >
-                {LEAD_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="form-row-2">
-            <div className="form-group">
-              <label>Account</label>
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                disabled={loading || usersLoading || !!createdLead}
-              >
-                <option value="">-- Select Account --</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Assigned To</label>
-              <UserSearchDropdown
-                users={users}
-                value={assignedTo}
-                onChange={setAssignedTo}
-                disabled={loading || !!createdLead}
-                loading={usersLoading}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Notes</label>
-            <textarea
-              placeholder="e.g. Interested in purchasing a 3BHK apartment in Hyderabad."
-              value={notes}
-              onChange={(e) => {
-                setNotes(e.target.value);
-                setError(null);
-              }}
-              disabled={loading || !!createdLead}
-              rows={3}
-            />
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={handleClose} disabled={loading}>
+    <CrmFormModal
+      title={isEdit ? "Edit Lead" : "Create Lead"}
+      description={
+        isEdit
+          ? "Update this lead's details, status and assignment."
+          : "Capture a new lead and assign it to your team."
+      }
+      onClose={handleClose}
+      footer={
+        <>
+          <button type="button" className="crm-btn crm-btn-secondary" onClick={handleClose} disabled={loading}>
             {createdLead ? "Close (Lead Saved)" : "Cancel"}
           </button>
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+          <button type="button" className="crm-btn crm-btn-primary" onClick={handleSubmit} disabled={loading}>
             {loading
               ? isEdit
                 ? "Saving…"
@@ -417,8 +248,165 @@ export default function LeadFormModal({ lead, onClose, onSuccess }: LeadFormModa
               ? "Retry Creating Follow-up Task"
               : "Create Lead"}
           </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="crm-alert crm-alert-error" role="alert">
+          {error}
         </div>
-      </div>
-    </div>
+      )}
+
+      {taskError && (
+        <div className="crm-alert crm-alert-warning" role="alert">
+          <div className="crm-alert-title">Follow-up Task Pending</div>
+          <div>{taskError}</div>
+        </div>
+      )}
+
+      <section className="crm-section">
+        <h3 className="crm-section-title">Lead Details</h3>
+        <div className="crm-form-grid">
+          <div className="crm-field crm-field-full">
+            <label htmlFor="lead-full-name">
+              Full Name <span className="crm-required">*</span>
+            </label>
+            <input
+              id="lead-full-name"
+              type="text"
+              placeholder="e.g. Rahul Sharma"
+              value={fullName}
+              onChange={(e) => {
+                setFullName(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, full_name: "" }));
+                setError(null);
+              }}
+              disabled={fieldsDisabled}
+              className={fieldErrors.full_name ? "input-error" : ""}
+            />
+            {fieldErrors.full_name && <span className="crm-field-error">{fieldErrors.full_name}</span>}
+          </div>
+
+          <div className="crm-field">
+            <label htmlFor="lead-email">Email</label>
+            <input
+              id="lead-email"
+              type="email"
+              placeholder="e.g. rahul@example.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, email: "" }));
+                setError(null);
+              }}
+              disabled={fieldsDisabled}
+              className={fieldErrors.email ? "input-error" : ""}
+            />
+            {fieldErrors.email && <span className="crm-field-error">{fieldErrors.email}</span>}
+          </div>
+
+          <div className="crm-field">
+            <label htmlFor="lead-phone">Phone</label>
+            <input
+              id="lead-phone"
+              type="tel"
+              placeholder="e.g. +91 9876543210"
+              value={phone}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                setError(null);
+              }}
+              disabled={fieldsDisabled}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="crm-section">
+        <h3 className="crm-section-title">Classification &amp; Assignment</h3>
+        <div className="crm-form-grid">
+          <div className="crm-field">
+            <label htmlFor="lead-source">Source</label>
+            <select
+              id="lead-source"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              disabled={fieldsDisabled}
+            >
+              <option value="">-- Select Source --</option>
+              {LEAD_SOURCES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="crm-field">
+            <label htmlFor="lead-status">Status</label>
+            <select
+              id="lead-status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              disabled={fieldsDisabled}
+            >
+              {LEAD_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {getLeadStatusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="crm-field">
+            <label htmlFor="lead-account">Account</label>
+            <select
+              id="lead-account"
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              disabled={loading || usersLoading || !!createdLead}
+            >
+              <option value="">-- Select Account --</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="crm-field">
+            <span className="crm-label">Assigned To</span>
+            <UserSearchDropdown
+              users={users}
+              value={assignedTo}
+              onChange={setAssignedTo}
+              disabled={fieldsDisabled}
+              loading={usersLoading}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="crm-section">
+        <h3 className="crm-section-title">Notes</h3>
+        <div className="crm-form-grid">
+          <div className="crm-field crm-field-full">
+            <label htmlFor="lead-notes">Notes</label>
+            <textarea
+              id="lead-notes"
+              placeholder="e.g. Interested in purchasing a 3BHK apartment in Hyderabad."
+              value={notes}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setError(null);
+              }}
+              disabled={fieldsDisabled}
+              rows={4}
+            />
+          </div>
+        </div>
+      </section>
+    </CrmFormModal>
   );
 }

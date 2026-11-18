@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { Lead } from "../../types/lead";
 import { User } from "../../types/user";
 import { getLeads } from "../../services/leadService";
 import { getUsers } from "../../services/userService";
+import { getLeadLeaderboard } from "../../services/leadScoringService";
+import { getIndustryConfig } from "../../config/industryConfig";
+import { hasFeaturePermission } from "../../utils/modulePermissions";
+import type { LeadScoreRow } from "../../types/leadScoring";
 import { getLeadPermissions } from "../../utils/leadPermissions";
 import LeadFormModal from "../../components/leads/LeadFormModal";
 import LeadViewModal from "../../components/leads/LeadViewModal";
@@ -11,8 +15,11 @@ import LeadDeleteConfirm from "../../components/leads/LeadDeleteConfirm";
 import { ImportExportActions } from "../../components/common/import-export/ImportExportActions";
 import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import "../users/Users.css";
 import "./Leads.css";
+import "../insights/CrmInsights.css";
+import "../../components/common/CrmActionButtons.css";
 
 const LEAD_STATUSES = ["New", "Contacted", "Qualified", "Converted", "Lost"];
 
@@ -69,6 +76,12 @@ export default function Leads() {
   }
   const currentIndustry = industry || tenantIndustry;
   const isEdu = currentIndustry === "education-consulting";
+
+  /* ─── Lead scoring (read-only integration; the Leads API itself returns no score) ─── */
+  const scoringEnabled =
+    getIndustryConfig(currentIndustry).modules.includes("lead-scoring") &&
+    hasFeaturePermission("lead.view");
+  const [scores, setScores] = useState<Record<string, LeadScoreRow> | null>(null);
 
   /* ─── State ─── */
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -141,6 +154,31 @@ export default function Leads() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Scores come from the lead-scoring leaderboard (Hot/Warm/Cold leads, best first). Failures are
+  // silent: the Score column simply stays hidden if the leaderboard is unavailable.
+  useEffect(() => {
+    if (!scoringEnabled) return;
+    let active = true;
+    (async () => {
+      try {
+        const map: Record<string, LeadScoreRow> = {};
+        for (let skip = 0; skip < 500; skip += 100) {
+          const chunk = await getLeadLeaderboard({ skip, limit: 100 });
+          chunk.forEach((row) => {
+            map[row.id] = row;
+          });
+          if (chunk.length < 100) break;
+        }
+        if (active) setScores(map);
+      } catch {
+        if (active) setScores(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [scoringEnabled, leads.length]);
 
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -290,6 +328,15 @@ export default function Leads() {
           </p>
         </div>
         <div className="header-actions">
+          {scoringEnabled && (
+            <Link
+              to={`/${currentIndustry}/lead-scoring`}
+              className="btn-secondary"
+              style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+            >
+              Lead Scoring
+            </Link>
+          )}
           <ImportExportActions
             moduleId="leads"
             records={filteredLeads}
@@ -334,7 +381,7 @@ export default function Leads() {
         >
           <option value="">All Statuses</option>
           {LEAD_STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{getLeadStatusLabel(s)}</option>
           ))}
         </select>
 
@@ -443,6 +490,7 @@ export default function Leads() {
                     <th>Source</th>
                     <th>Status</th>
                     <th>Assigned To</th>
+                    {scores && <th>Score</th>}
                     <th>Created</th>
                     <th>Actions</th>
                   </tr>
@@ -471,7 +519,7 @@ export default function Leads() {
                         </td>
                         <td>
                           <span className={`lead-status-badge ${getStatusClass(lead.status)}`}>
-                            {lead.status}
+                            {getLeadStatusLabel(lead.status)}
                           </span>
                         </td>
                         <td>
@@ -495,6 +543,29 @@ export default function Leads() {
                             );
                           })()}
                         </td>
+                        {scores && (
+                          <td>
+                            {(() => {
+                              const scored = scores[leadId];
+                              if (!scored) {
+                                return (
+                                  <span
+                                    className="text-dim"
+                                    title="Not on the scoring leaderboard (dead or converted lead, or outside the top 500)"
+                                  >
+                                    —
+                                  </span>
+                                );
+                              }
+                              const tone = (scored.score_label || "").toLowerCase();
+                              return (
+                                <span className={`ins-badge ${tone}`} title={`Score ${scored.score}/100`}>
+                                  {scored.score_label || "Scored"} · {scored.score}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        )}
                         <td className="text-dim">{formatDateTime(lead.created_at)}</td>
                         <td className="actions-cell">
                           <div className="crm-inline-actions">

@@ -212,6 +212,11 @@ apiClient.interceptors.response.use(
             }
             return apiClient(originalRequest);
           }
+
+          // Refresh answered without a usable access token: release the refresh lock so
+          // later 401s are not queued forever, and surface the original error.
+          isRefreshing = false;
+          refreshSubscribers = [];
         } catch {
           isRefreshing = false;
           refreshSubscribers = [];

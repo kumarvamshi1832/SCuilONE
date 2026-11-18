@@ -11,10 +11,8 @@ import {
   extractApiErrorMessage,
   platformService,
 } from "../../services/platformService";
-import type {
-  PlatformAnalyticsOverview,
-  PlatformSettingItem,
-} from "../../types/platform";
+import type { PlatformAnalyticsOverview } from "../../types/platform";
+import GlobalSettingsPanel from "../../components/platform/settings/GlobalSettingsPanel";
 import "./PlatformPages.css";
 
 export default function PlatformAnalyticsSettingsPage() {
@@ -35,9 +33,9 @@ export default function PlatformAnalyticsSettingsPage() {
   const [exporting, setExporting] = useState<string | null>(null);
 
   // Settings
-  const [settings, setSettings] = useState<PlatformSettingItem[]>([]);
-  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [settingsCount, setSettingsCount] = useState(0);
+  const [settingsReloadKey, setSettingsReloadKey] = useState(0);
+  const [settingsDirty, setSettingsDirty] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,29 +57,23 @@ export default function PlatformAnalyticsSettingsPage() {
     }
   };
 
-  const loadSettings = async () => {
-    if (!canManageSettings) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await platformService.listSettings();
-      const items = res.items || [];
-      setSettings(items);
-      const nextDrafts: Record<string, string> = {};
-      items.forEach((s) => {
-        nextDrafts[s.setting_key] = JSON.stringify(s.value_json, null, 2);
-      });
-      setDraftValues(nextDrafts);
-    } catch (err) {
-      setError(extractApiErrorMessage(err, "Failed to load platform settings."));
-    } finally {
-      setLoading(false);
-    }
+  const confirmDiscardSettings = (action: string) =>
+    !settingsDirty ||
+    window.confirm(`You have unsaved settings changes. Discard them and ${action}?`);
+
+  const reloadSettings = () => {
+    if (!confirmDiscardSettings("reload")) return;
+    setSettingsReloadKey((k) => k + 1);
+  };
+
+  const switchTab = (next: "analytics" | "settings") => {
+    if (next === tab) return;
+    if (tab === "settings" && !confirmDiscardSettings("leave this tab")) return;
+    setTab(next);
   };
 
   useEffect(() => {
     if (tab === "analytics") loadAnalytics();
-    else loadSettings();
   }, [tab, industryFilter]);
 
   const handleExport = async (fmt: "json" | "csv" | "pdf") => {
@@ -109,33 +101,6 @@ export default function PlatformAnalyticsSettingsPage() {
     }
   };
 
-  const handleSaveSetting = async (item: PlatformSettingItem) => {
-    setError(null);
-    setSuccess(null);
-    let parsedValue: Record<string, any>;
-    try {
-      parsedValue = JSON.parse(draftValues[item.setting_key] || "{}");
-    } catch {
-      setError(`Invalid JSON in setting "${item.setting_key}".`);
-      return;
-    }
-
-    setSavingKey(item.setting_key);
-    try {
-      await platformService.updateSetting(item.setting_key, {
-        category: item.category,
-        value_json: parsedValue,
-        description: item.description,
-      });
-      setSuccess(`Updated platform setting "${item.setting_key}".`);
-      await loadSettings();
-    } catch (err) {
-      setError(extractApiErrorMessage(err, "Failed to save setting."));
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
   return (
     <div className="platform-page">
       <div className="platform-page-header">
@@ -150,7 +115,7 @@ export default function PlatformAnalyticsSettingsPage() {
           <button
             type="button"
             className="platform-btn"
-            onClick={() => (tab === "analytics" ? loadAnalytics() : loadSettings())}
+            onClick={() => (tab === "analytics" ? loadAnalytics() : reloadSettings())}
           >
             <RefreshIcon size={15} />
             <span>Refresh</span>
@@ -197,7 +162,7 @@ export default function PlatformAnalyticsSettingsPage() {
           <button
             type="button"
             className={`platform-tab ${tab === "analytics" ? "active" : ""}`}
-            onClick={() => setTab("analytics")}
+            onClick={() => switchTab("analytics")}
           >
             Analytics & Exports
           </button>
@@ -206,9 +171,9 @@ export default function PlatformAnalyticsSettingsPage() {
           <button
             type="button"
             className={`platform-tab ${tab === "settings" ? "active" : ""}`}
-            onClick={() => setTab("settings")}
+            onClick={() => switchTab("settings")}
           >
-            Global Settings ({settings.length})
+            Global Settings{settingsCount > 0 ? ` (${settingsCount})` : ""}
           </button>
         )}
       </div>
@@ -345,62 +310,12 @@ export default function PlatformAnalyticsSettingsPage() {
       )}
 
       {tab === "settings" && canManageSettings && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {!isSuperAdmin && (
-            <div className="platform-alert info">
-              Only Platform Super Admins can modify global settings; read preview
-              is shown below.
-            </div>
-          )}
-          {loading ? (
-            <div className="platform-card platform-empty">
-              Loading settings...
-            </div>
-          ) : (
-            settings.map((item) => (
-              <div key={item.setting_key} className="platform-card">
-                <div className="platform-card-title">
-                  <span>
-                    <code>{item.setting_key}</code> — {item.category}
-                  </span>
-                  {isSuperAdmin && (
-                    <button
-                      type="button"
-                      className="platform-btn sm primary"
-                      disabled={savingKey === item.setting_key}
-                      onClick={() => handleSaveSetting(item)}
-                    >
-                      {savingKey === item.setting_key ? "Saving..." : "Save JSON"}
-                    </button>
-                  )}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--plat-muted)",
-                    marginBottom: 10,
-                  }}
-                >
-                  {item.description}
-                  {item.updated_at ? ` • Updated: ${item.updated_at}` : ""}
-                </div>
-                <textarea
-                  className="platform-textarea"
-                  rows={5}
-                  readOnly={!isSuperAdmin}
-                  style={{ fontFamily: "monospace", width: "100%" }}
-                  value={draftValues[item.setting_key] || ""}
-                  onChange={(e) =>
-                    setDraftValues((prev) => ({
-                      ...prev,
-                      [item.setting_key]: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            ))
-          )}
-        </div>
+        <GlobalSettingsPanel
+          canEdit={isSuperAdmin}
+          reloadKey={settingsReloadKey}
+          onDirtyChange={setSettingsDirty}
+          onCountChange={setSettingsCount}
+        />
       )}
     </div>
   );

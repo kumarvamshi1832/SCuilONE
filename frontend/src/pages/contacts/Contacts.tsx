@@ -14,6 +14,7 @@ import { Pagination } from "../../components/common/Pagination";
 import { formatDateTime } from "../../utils/dateFormatter";
 import "../users/Users.css";
 import "../leads/Leads.css";
+import "../../components/common/CrmActionButtons.css";
 
 export default function Contacts() {
   /* ─── Permissions ─── */

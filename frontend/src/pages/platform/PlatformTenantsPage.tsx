@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pagination } from "../../components/common/Pagination";
 import {
   EditIcon,
+  LockIcon,
   PlusIcon,
   RefreshIcon,
   SearchIcon,
@@ -63,8 +64,6 @@ export default function PlatformTenantsPage() {
 
   // Edit modal
   const [editing, setEditing] = useState<PlatformTenantCompany | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editIndustry, setEditIndustry] = useState("");
   const [editStatus, setEditStatus] = useState("Active");
 
   const canManage = hasPlatformPermission("platform.tenants.manage");
@@ -134,8 +133,6 @@ export default function PlatformTenantsPage() {
 
   const openEdit = (t: PlatformTenantCompany) => {
     setEditing(t);
-    setEditName(t.name);
-    setEditIndustry(t.industry);
     setEditStatus(t.status);
   };
 
@@ -147,15 +144,13 @@ export default function PlatformTenantsPage() {
     setSubmitting(true);
     try {
       await platformService.updateTenant(editing.id, {
-        name: editName.trim(),
-        industry: editIndustry,
         status: editStatus,
       });
-      setSuccess(`Updated tenant "${editName.trim()}".`);
+      setSuccess(`Updated status for tenant "${editing.name}" to "${editStatus}".`);
       setEditing(null);
       await fetchTenants();
     } catch (err) {
-      setError(extractApiErrorMessage(err, "Failed to update tenant."));
+      setError(extractApiErrorMessage(err, "Failed to update tenant status."));
     } finally {
       setSubmitting(false);
     }
@@ -514,48 +509,203 @@ export default function PlatformTenantsPage() {
         <div className="platform-modal-overlay">
           <div className="platform-modal">
             <div className="platform-modal-header">
-              <h3>Edit Tenant: {editing.name}</h3>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                  Edit Tenant Status
+                </h3>
+                <div style={{ fontSize: 12, color: "var(--plat-muted)", marginTop: 2 }}>
+                  Modify account status for &quot;{editing.name}&quot;
+                </div>
+              </div>
               <button
                 type="button"
                 className="platform-btn sm"
                 onClick={() => setEditing(null)}
+                aria-label="Close modal"
               >
                 <XIcon size={15} />
               </button>
             </div>
             <form
               onSubmit={handleUpdate}
-              style={{ display: "flex", flexDirection: "column", gap: 12 }}
+              style={{ display: "flex", flexDirection: "column", gap: 14 }}
             >
+              {/* Company Name (Read-Only) */}
               <div className="platform-field">
-                <label>Company Name</label>
-                <input
-                  className="platform-input"
-                  required
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-              </div>
-              <div className="platform-field">
-                <label>Industry</label>
-                <select
-                  className="platform-select"
-                  value={editIndustry}
-                  onChange={(e) => setEditIndustry(e.target.value)}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                  }}
                 >
-                  {INDUSTRY_OPTIONS.map((ind) => (
-                    <option key={ind} value={ind}>
-                      {ind}
-                    </option>
-                  ))}
-                </select>
+                  <label style={{ margin: 0 }}>Company Name</label>
+                  <span
+                    className="platform-badge"
+                    style={{
+                      fontSize: 10.5,
+                      padding: "1px 6px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      background: "rgba(255, 255, 255, 0.05)",
+                      color: "var(--plat-muted)",
+                      border: "1px solid var(--plat-border)",
+                    }}
+                  >
+                    <LockIcon size={11} />
+                    <span>Read-only</span>
+                  </span>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="platform-input"
+                    value={editing.name}
+                    readOnly
+                    disabled
+                    style={{
+                      width: "100%",
+                      cursor: "not-allowed",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      borderColor: "rgba(255, 255, 255, 0.08)",
+                      color: "var(--plat-muted)",
+                      paddingRight: 32,
+                    }}
+                  />
+                  <LockIcon
+                    size={14}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "var(--plat-muted)",
+                      opacity: 0.6,
+                      pointerEvents: "none",
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--plat-muted)",
+                    marginTop: 2,
+                    display: "block",
+                  }}
+                >
+                  Company name is fixed and governed by the tenant registration.
+                </span>
               </div>
+
+              {/* Industry (Read-Only) */}
               <div className="platform-field">
-                <label>Status</label>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                  }}
+                >
+                  <label style={{ margin: 0 }}>Industry Vertical</label>
+                  <span
+                    className="platform-badge"
+                    style={{
+                      fontSize: 10.5,
+                      padding: "1px 6px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      background: "rgba(255, 255, 255, 0.05)",
+                      color: "var(--plat-muted)",
+                      border: "1px solid var(--plat-border)",
+                    }}
+                  >
+                    <LockIcon size={11} />
+                    <span>Read-only</span>
+                  </span>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="platform-input"
+                    value={editing.industry}
+                    readOnly
+                    disabled
+                    style={{
+                      width: "100%",
+                      cursor: "not-allowed",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      borderColor: "rgba(255, 255, 255, 0.08)",
+                      color: "var(--plat-muted)",
+                      paddingRight: 32,
+                    }}
+                  />
+                  <LockIcon
+                    size={14}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "var(--plat-muted)",
+                      opacity: 0.6,
+                      pointerEvents: "none",
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--plat-muted)",
+                    marginTop: 2,
+                    display: "block",
+                  }}
+                >
+                  Industry vertical determines the CRM schema pack and cannot be modified.
+                </span>
+              </div>
+
+              {/* Status (Editable) */}
+              <div className="platform-field">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                  }}
+                >
+                  <label
+                    style={{
+                      margin: 0,
+                      fontWeight: 700,
+                      color: "var(--plat-text)",
+                    }}
+                  >
+                    <span>Tenant Status</span>
+                    <span style={{ color: "#8b5cf6", marginLeft: 4 }}>*</span>
+                  </label>
+                  <span
+                    className="platform-badge indigo"
+                    style={{ fontSize: 10.5, padding: "1px 6px" }}
+                  >
+                    Editable
+                  </span>
+                </div>
                 <select
                   className="platform-select"
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
+                  style={{
+                    width: "100%",
+                    borderColor:
+                      editStatus !== editing.status ? "#8b5cf6" : undefined,
+                    boxShadow:
+                      editStatus !== editing.status
+                        ? "0 0 10px rgba(139, 92, 246, 0.25)"
+                        : undefined,
+                  }}
                 >
                   {TENANT_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -563,19 +713,64 @@ export default function PlatformTenantsPage() {
                     </option>
                   ))}
                 </select>
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    color: "var(--plat-muted)",
+                    marginTop: 4,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {editStatus === "Active" && (
+                    <span style={{ color: "#4ade80" }}>
+                      ✓ Active: Tenant has full operational access to their workspace.
+                    </span>
+                  )}
+                  {editStatus === "Trial" && (
+                    <span style={{ color: "#38bdf8" }}>
+                      ℹ️ Trial: Tenant is evaluating features within trial period.
+                    </span>
+                  )}
+                  {editStatus === "Suspended" && (
+                    <span style={{ color: "#f87171" }}>
+                      ⚠️ Suspended: All active tenant sessions are revoked immediately.
+                    </span>
+                  )}
+                  {editStatus === "Inactive" && (
+                    <span style={{ color: "#fbbf24" }}>
+                      ⚠️ Inactive: Tenant workspace is archived and login is disabled.
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="platform-actions-row" style={{ justifyContent: "flex-end" }}>
+
+              <div
+                className="platform-actions-row"
+                style={{
+                  justifyContent: "flex-end",
+                  marginTop: 6,
+                  paddingTop: 12,
+                  borderTop: "1px solid var(--plat-border)",
+                  gap: 10,
+                }}
+              >
                 <button
                   type="button"
                   className="platform-btn"
                   onClick={() => setEditing(null)}
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="platform-btn primary"
-                  disabled={submitting}
+                  disabled={submitting || editStatus === editing.status}
+                  title={
+                    editStatus === editing.status
+                      ? "Select a different status to save"
+                      : "Save updated tenant status"
+                  }
                 >
                   {submitting ? "Saving..." : "Save Changes"}
                 </button>

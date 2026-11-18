@@ -2,6 +2,7 @@ import type { Lead } from "../../types/lead";
 import { User } from "../../types/user";
 import { getLeadPermissions } from "../../utils/leadPermissions";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 
 interface LeadViewModalProps {
   lead: Lead;
@@ -74,7 +75,7 @@ export default function LeadViewModal({ lead, users, onClose, onEdit }: LeadView
             <div className="lead-view-title">
               <h3>{lead.full_name}</h3>
               <span className={`lead-status-badge ${getStatusClass(lead.status)}`}>
-                {lead.status}
+                {getLeadStatusLabel(lead.status)}
               </span>
             </div>
           </div>

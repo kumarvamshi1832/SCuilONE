@@ -1,336 +1,139 @@
-import { PortalNotification } from '../types/customerPortalNotifications';
+import { portalApiClient } from './customerPortalAuthService';
+import { getBookingRequests } from './customerPortalJourneyService';
+import { parseBackendDate } from '../utils/bookingJourney';
+import type {
+  NotificationCategory,
+  PortalNotification,
+  PortalNotificationApiItem,
+  PortalNotificationListResponse,
+} from '../types/customerPortalNotifications';
 
-const NOTIFICATIONS_STORAGE_KEY_PREFIX = 'scuilone_cp_notifications_';
-const NOTIFICATIONS_READ_KEY_PREFIX = 'scuilone_cp_read_notifications_';
+/**
+ * Customer Portal notifications - backed by the real backend APIs, using the customer portal
+ * client (customer token) only. Tenant and customer scoping come from the portal token; nothing is
+ * persisted or generated on the client.
+ *
+ *   GET   /api/v1/customer-portal/notifications?limit&offset   -> { items, total, unread_count }
+ *   GET   /api/v1/customer-portal/notifications/unread-count   -> { unread_count }
+ *   PATCH /api/v1/customer-portal/notifications/{id}/read      -> { id, is_read }
+ *   PATCH /api/v1/customer-portal/notifications/read-all       -> { updated_count }
+ */
 
-export function resolvePortalTenantId(fallback = 'default'): string {
-  try {
-    const portalTenant =
-      sessionStorage.getItem('scuilone_portal_tenant_id') ||
-      localStorage.getItem('scuilone_portal_tenant_id');
-    if (portalTenant) return portalTenant;
+const BASE = '/api/v1/customer-portal/notifications';
 
-    const custStr =
-      sessionStorage.getItem('scuilone_portal_customer') ||
-      localStorage.getItem('scuilone_portal_customer');
-    if (custStr) {
-      const parsed = JSON.parse(custStr);
-      if (parsed?.tenant_id) return parsed.tenant_id;
-    }
+/** Fired whenever notification state changed (or may have changed) so the bell and page refetch. */
+export const PORTAL_NOTIFICATIONS_UPDATED_EVENT = 'portal:notifications-updated';
 
-    const tenantId =
-      sessionStorage.getItem('tenant_id') ||
-      localStorage.getItem('tenant_id');
-    if (tenantId) return tenantId;
-
-    const userStr =
-      sessionStorage.getItem('user') ||
-      localStorage.getItem('user');
-    if (userStr) {
-      const parsed = JSON.parse(userStr);
-      if (parsed?.tenant_id) return parsed.tenant_id;
-      if (parsed?.tenant?.id) return parsed.tenant.id;
-    }
-  } catch {
-    // ignore
-  }
-  return fallback;
-}
-
-function getStoredNotifications(tenantId: string): PortalNotification[] {
-  try {
-    const raw = localStorage.getItem(`${NOTIFICATIONS_STORAGE_KEY_PREFIX}${tenantId}`);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return arr;
-      }
-    }
-  } catch {
-
-  }
-  return [];
-}
-
-function saveStoredNotifications(tenantId: string, list: PortalNotification[]): void {
-  try {
-    localStorage.setItem(`${NOTIFICATIONS_STORAGE_KEY_PREFIX}${tenantId}`, JSON.stringify(list));
-  } catch {
-
+export function emitPortalNotificationsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PORTAL_NOTIFICATIONS_UPDATED_EVENT));
   }
 }
 
-function getReadIds(tenantId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(`${NOTIFICATIONS_READ_KEY_PREFIX}${tenantId}`);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set(arr);
-      }
-    }
-  } catch {
+const MODULE_CATEGORY: Record<string, Exclude<NotificationCategory, 'all'>> = {
+  customer_booking_requests: 'bookings',
+  bookings: 'bookings',
+  payment_plans: 'bookings',
+  payment_refunds: 'bookings',
+  cancellation_requests: 'bookings',
+  property_handovers: 'bookings',
+  customer_property_service_requests: 'bookings',
+  site_visits: 'visits',
+};
 
-  }
-  return new Set();
+function toPortalNotification(item: PortalNotificationApiItem): PortalNotification {
+  const module = item.related_module || '';
+  const category = MODULE_CATEGORY[module] ?? 'bookings';
+  return {
+    id: item.id,
+    title: item.title,
+    message: item.message,
+    notification_type: item.notification_type,
+    related_module: item.related_module,
+    related_record_id: item.related_record_id,
+    read: Boolean(item.is_read),
+    timestamp: item.created_at,
+    category,
+    actionText: getNotificationActionText(item),
+  };
 }
 
-function saveReadIds(tenantId: string, ids: Set<string>): void {
-  try {
-    localStorage.setItem(`${NOTIFICATIONS_READ_KEY_PREFIX}${tenantId}`, JSON.stringify(Array.from(ids)));
-  } catch {
-
+function getNotificationActionText(item: Pick<PortalNotificationApiItem, 'related_module'>): string | undefined {
+  switch (item.related_module) {
+    case 'customer_booking_requests':
+    case 'bookings':
+      return 'View booking request';
+    case 'site_visits':
+      return 'View site visits';
+    default:
+      return undefined;
   }
+}
+
+/** Parses created_at (the API returns naive UTC timestamps) into epoch milliseconds. */
+export function notificationTimestamp(n: Pick<PortalNotification, 'timestamp'>): number {
+  return parseBackendDate(n.timestamp)?.getTime() ?? 0;
 }
 
 export const CustomerPortalNotificationService = {
-  getNotifications(tenantId: string = 'default'): PortalNotification[] {
-    const safeTenant = tenantId || 'default';
-    const stored = getStoredNotifications(safeTenant);
-    const readSet = getReadIds(safeTenant);
-
-    return stored.map((item) => ({
-      ...item,
-      tenant_id: safeTenant,
-      read: item.read || readSet.has(item.id),
-    }));
-  },
-
-  getUnreadCount(tenantId: string = 'default'): number {
-    const list = this.getNotifications(tenantId);
-    return list.filter((n) => !n.read).length;
-  },
-
-  addNotification(
-    tenantId: string = 'default',
-    notification: Omit<PortalNotification, 'id' | 'tenant_id' | 'read' | 'timestamp'> & {
-      id?: string;
-      timestamp?: string;
-      read?: boolean;
-    }
-  ): PortalNotification {
-    const safeTenant = tenantId || resolvePortalTenantId();
-    const list = getStoredNotifications(safeTenant);
-
-    // Prevent duplicate notifications caused by repeated renders or duplicate event handling
-    if (notification.id) {
-      const existing = list.find((item) => item.id === notification.id);
-      if (existing) return existing;
-    }
-    if (
-      notification.metadata?.recordId &&
-      notification.category &&
-      notification.title
-    ) {
-      const existing = list.find(
-        (item) =>
-          item.category === notification.category &&
-          item.metadata?.recordId === notification.metadata?.recordId &&
-          item.title === notification.title
-      );
-      if (existing) return existing;
-    }
-
-    const newNotif: PortalNotification = {
-      ...notification,
-      id: notification.id || `notif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      tenant_id: safeTenant,
-      timestamp: notification.timestamp || new Date().toISOString(),
-      read: notification.read ?? false,
+  async getNotifications(
+    limit = 50,
+    offset = 0
+  ): Promise<{ items: PortalNotification[]; total: number; unreadCount: number }> {
+    const response = await portalApiClient.get<PortalNotificationListResponse>(BASE, {
+      params: { limit, offset },
+    });
+    const data = response.data;
+    const items = Array.isArray(data?.items) ? data.items.map(toPortalNotification) : [];
+    return {
+      items,
+      total: typeof data?.total === 'number' ? data.total : items.length,
+      unreadCount: typeof data?.unread_count === 'number' ? data.unread_count : 0,
     };
+  },
 
-    const updated = [newNotif, ...list];
-    saveStoredNotifications(safeTenant, updated);
-    this.emitChange(safeTenant);
-    return newNotif;
+  async getUnreadCount(): Promise<number> {
+    const response = await portalApiClient.get<{ unread_count: number }>(`${BASE}/unread-count`);
+    return typeof response.data?.unread_count === 'number' ? response.data.unread_count : 0;
+  },
+
+  async markAsRead(notificationId: string): Promise<void> {
+    await portalApiClient.patch(`${BASE}/${notificationId}/read`);
+    emitPortalNotificationsChanged();
+  },
+
+  async markAllAsRead(): Promise<number> {
+    const response = await portalApiClient.patch<{ updated_count: number }>(`${BASE}/read-all`);
+    emitPortalNotificationsChanged();
+    return response.data?.updated_count ?? 0;
   },
 
   /**
-   * Generates a frontend notification when an estimate is successfully created via API.
+   * Resolves where a notification should take the customer. Returns null when the backend record has
+   * no matching Customer Portal page (the notification is then informational only).
+   *
+   *  - customer_booking_requests -> related_record_id is the booking request id.
+   *  - bookings                  -> related_record_id is the booking id; the matching request is
+   *                                  looked up from the customer's own booking requests.
+   *  - site_visits               -> booking journey (lists the customer's visits).
    */
-  notifyEstimateCreated(
-    tenantId: string | undefined | null,
-    estimate: {
-      id: string;
-      estimate_number?: string | null;
-      title: string;
-      total_amount?: number | string | null;
-      currency?: string | null;
-      created_at?: string | null;
+  async resolveLink(notification: PortalNotification): Promise<string | null> {
+    const { related_module: module, related_record_id: recordId } = notification;
+    if (module === 'customer_booking_requests' && recordId) {
+      return `/portal/booking-requests/${recordId}`;
     }
-  ): PortalNotification {
-    const safeTenant = tenantId || resolvePortalTenantId();
-    const estRef = estimate.estimate_number
-      ? `Estimate #${estimate.estimate_number}: ${estimate.title}`
-      : `Estimate: ${estimate.title}`;
-
-    return this.addNotification(safeTenant, {
-      title: 'New estimate created',
-      message: estRef,
-      category: 'estimates',
-      link: `/portal/estimates?id=${encodeURIComponent(estimate.id)}`,
-      actionText: 'Inspect Proposal',
-      priority: 'normal',
-      timestamp: estimate.created_at || new Date().toISOString(),
-      metadata: {
-        recordId: estimate.id,
-        estimateId: estimate.id,
-        referenceNumber: estimate.estimate_number || undefined,
-        amount: estimate.total_amount != null
-          ? `${estimate.currency || 'INR'} ${Number(estimate.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-          : undefined,
-      },
-    });
-  },
-
-  /**
-   * Generates a frontend notification when an estimate is accepted or rejected.
-   */
-  notifyEstimateDecision(
-    tenantId: string | undefined | null,
-    estimate: {
-      id: string;
-      estimate_number?: string | null;
-      title: string;
-    },
-    decision: 'accepted' | 'rejected'
-  ): PortalNotification {
-    const safeTenant = tenantId || resolvePortalTenantId();
-    const actionWord = decision === 'accepted' ? 'accepted' : 'rejected';
-    const estRef = estimate.estimate_number
-      ? `Estimate #${estimate.estimate_number} has been ${actionWord}.`
-      : `Estimate "${estimate.title}" has been ${actionWord}.`;
-
-    return this.addNotification(safeTenant, {
-      title: decision === 'accepted' ? 'Estimate accepted' : 'Estimate rejected',
-      message: estRef,
-      category: 'estimates',
-      link: `/portal/estimates?id=${encodeURIComponent(estimate.id)}`,
-      actionText: 'View Estimate',
-      priority: decision === 'accepted' ? 'high' : 'normal',
-      metadata: {
-        recordId: `${estimate.id}-${decision}`,
-        estimateId: estimate.id,
-        referenceNumber: estimate.estimate_number || undefined,
-      },
-    });
-  },
-
-  /**
-   * Generates a frontend notification when a support ticket is created.
-   */
-  notifyTicketCreated(
-    tenantId: string | undefined | null,
-    ticket: {
-      id: string;
-      ticket_number?: string | null;
-      subject: string;
+    if (module === 'bookings' && recordId) {
+      try {
+        const requests = await getBookingRequests();
+        const match = requests.find((r) => r.booking_id === recordId);
+        return match ? `/portal/booking-requests/${match.id}` : '/portal/booking-requests';
+      } catch {
+        return '/portal/booking-requests';
+      }
     }
-  ): PortalNotification {
-    const safeTenant = tenantId || resolvePortalTenantId();
-    const ticketRef = ticket.ticket_number
-      ? `Ticket #${ticket.ticket_number}: ${ticket.subject}`
-      : ticket.subject;
-
-    return this.addNotification(safeTenant, {
-      title: 'Support ticket submitted',
-      message: ticketRef,
-      category: 'support',
-      link: `/portal/tickets/${encodeURIComponent(ticket.id)}`,
-      actionText: 'View Ticket',
-      priority: 'normal',
-      metadata: {
-        recordId: ticket.id,
-        ticketId: ticket.id,
-        referenceNumber: ticket.ticket_number || undefined,
-      },
-    });
-  },
-
-  /**
-   * Generates a frontend notification when a contract is signed.
-   */
-  notifyContractSigned(
-    tenantId: string | undefined | null,
-    contract: {
-      id: string;
-      contract_number?: string | null;
-      title: string;
+    if (module === 'site_visits') {
+      return '/portal/booking-journey';
     }
-  ): PortalNotification {
-    const safeTenant = tenantId || resolvePortalTenantId();
-    const contractRef = contract.contract_number
-      ? `Contract #${contract.contract_number} has been signed successfully.`
-      : `Contract "${contract.title}" signed.`;
-
-    return this.addNotification(safeTenant, {
-      title: 'Contract signed',
-      message: contractRef,
-      category: 'contracts',
-      link: `/portal/contracts?id=${encodeURIComponent(contract.id)}`,
-      actionText: 'View Contract',
-      priority: 'high',
-      metadata: {
-        recordId: `${contract.id}-signed`,
-        contractId: contract.id,
-        referenceNumber: contract.contract_number || undefined,
-      },
-    });
-  },
-
-  markAsRead(tenantId: string = 'default', notificationId: string): void {
-    const safeTenant = tenantId || 'default';
-    const readSet = getReadIds(safeTenant);
-    readSet.add(notificationId);
-    saveReadIds(safeTenant, readSet);
-
-    const list = getStoredNotifications(safeTenant);
-    if (list.length > 0) {
-      const updated = list.map((n) => (n.id === notificationId ? { ...n, read: true } : n));
-      saveStoredNotifications(safeTenant, updated);
-    }
-
-    this.emitChange(safeTenant);
-  },
-
-  markAllAsRead(tenantId: string = 'default'): void {
-    const safeTenant = tenantId || 'default';
-    const list = this.getNotifications(safeTenant);
-    const readSet = getReadIds(safeTenant);
-    list.forEach((n) => readSet.add(n.id));
-    saveReadIds(safeTenant, readSet);
-
-    const storedList = getStoredNotifications(safeTenant);
-    if (storedList.length > 0) {
-      const updated = storedList.map((n) => ({ ...n, read: true }));
-      saveStoredNotifications(safeTenant, updated);
-    }
-
-    this.emitChange(safeTenant);
-  },
-
-  deleteNotification(tenantId: string = 'default', notificationId: string): void {
-    const safeTenant = tenantId || 'default';
-    const list = getStoredNotifications(safeTenant);
-    const updated = list.filter((n) => n.id !== notificationId);
-    saveStoredNotifications(safeTenant, updated);
-    this.emitChange(safeTenant);
-  },
-
-  clearAll(tenantId: string = 'default'): void {
-    const safeTenant = tenantId || 'default';
-    saveStoredNotifications(safeTenant, []);
-    saveReadIds(safeTenant, new Set());
-    this.emitChange(safeTenant);
-  },
-
-  emitChange(tenantId: string): void {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('portal:notifications-updated', {
-          detail: { tenantId },
-        })
-      );
-    }
+    return null;
   },
 };

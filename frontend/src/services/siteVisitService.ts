@@ -140,35 +140,11 @@ export const getSiteVisit = async (id: string): Promise<SiteVisit> => {
 export const createSiteVisit = async (
   data: SiteVisitCreate
 ): Promise<SiteVisit> => {
-  try {
-    const response = await apiClient.post<SiteVisit>("/api/v1/site-visits/", data);
-    if (response.data) return response.data;
-  } catch (err: any) {
-    if (err?.response?.status !== 404) throw err;
-  }
-
-  const tenantId = getCurrentTenantId() || KNOWN_DB_TENANT;
-  const items = getLocalVisits();
-  const newVisit: SiteVisit = {
-    id: `sv-${Date.now()}`,
-    tenant_id: tenantId,
-    property_match_id: data.property_match_id,
-    assigned_to: data.assigned_to || null,
-    scheduled_start: data.scheduled_start,
-    scheduled_end: data.scheduled_end,
-    status: "Scheduled",
-    outcome: null,
-    buyer_feedback: null,
-    interest_level: null,
-    follow_up_required: false,
-    follow_up_date: null,
-    cancellation_reason: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  items.unshift(newVisit);
-  saveLocalVisits(items);
-  return newVisit;
+  // POST /api/v1/site-visits/ exists. Backend errors (404 "Property match not found", 409 scheduling
+  // conflicts, 422 validation) must reach the caller; a locally fabricated record would report success
+  // for a visit that was never saved.
+  const response = await apiClient.post<SiteVisit>("/api/v1/site-visits/", data);
+  return response.data;
 };
 
 export const updateSiteVisit = async (

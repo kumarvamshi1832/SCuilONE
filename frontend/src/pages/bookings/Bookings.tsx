@@ -48,6 +48,7 @@ import {
   getCollectionSummary,
   getOverdueCollections,
 } from "../../services/paymentPlanService";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import "./Bookings.css";
 
 export default function Bookings() {
@@ -1605,7 +1606,7 @@ export default function Bookings() {
                       const details = [
                         l.email,
                         l.phone,
-                        l.status ? `[${l.status}]` : null,
+                        l.status ? `[${getLeadStatusLabel(l.status)}]` : null,
                       ]
                         .filter(Boolean)
                         .join(" • ");

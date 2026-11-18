@@ -2122,7 +2122,15 @@
 .dashboard-page-transition-wrapper {
   width: 100%;
   min-width: 0;
-  will-change: opacity, transform;
+  /*
+   * Intentionally no `will-change` / permanent transform / filter / contain here.
+   * Every page - and therefore every `position: fixed` modal overlay rendered inside it - lives in
+   * this wrapper. A transform-type `will-change` turns the wrapper into the containing block for
+   * fixed descendants (modals get sized/positioned against the page content instead of the
+   * viewport: clipped headers, off-centre dialogs, hidden footers), and any `will-change` creates
+   * a stacking context that can leave the sidebar painted above modal backdrops.
+   * The entrance animation is handled by the motion library on the element itself.
+   */
 }
 
 /* ─── Accessibility: Prefers Reduced Motion ─── */

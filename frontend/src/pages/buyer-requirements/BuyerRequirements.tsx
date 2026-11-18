@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   getBuyerRequirements,
+  getBuyerRequirement,
   createBuyerRequirement,
   updateBuyerRequirement,
   deleteBuyerRequirement,
@@ -36,6 +37,8 @@ import type { Lead } from "../../types/lead";
 import type { Contact } from "../../types/contact";
 import type { User } from "../../types/user";
 import PropertyCard from "../../components/properties/PropertyCard";
+import ManualMatchPropertiesModal from "../../components/buyer-requirements/ManualMatchPropertiesModal";
+import type { ManualMatchSaveSummary } from "../../components/buyer-requirements/ManualMatchPropertiesModal";
 import { resolveImageUrl, handleImageError } from "../../utils/imageUrl";
 import "./BuyerRequirements.css";
 
@@ -80,11 +83,8 @@ export default function BuyerRequirements() {
   const [viewingPropertyDetail, setViewingPropertyDetail] = useState<Property | null>(null);
   const [viewTab, setViewTab] = useState<"overview" | "matches">("overview");
 
-  // Manual Matching State & Filters
-  const [manualSearch, setManualSearch] = useState("");
-  const [manualTypeFilter, setManualTypeFilter] = useState("");
-  const [manualBhkFilter, setManualBhkFilter] = useState("");
-  const [manualOnlyUnmatched, setManualOnlyUnmatched] = useState(false);
+  // Manual matching
+  const [isManualMatchOpen, setIsManualMatchOpen] = useState(false);
   const [matchingActionLoading, setMatchingActionLoading] = useState<string | null>(null);
 
   // Stable refs to prevent re-render dependency cycles and visual blinking
@@ -407,10 +407,15 @@ export default function BuyerRequirements() {
       setLoadingMatches(true);
       setMatchError(null);
       try {
-        const [existingData, potentialData] = await Promise.all([
-          getMatchesForRequirement(reqId).catch(() => []),
-          getPotentialMatches(reqId).catch(() => []),
+        const [existingResult, potentialResult] = await Promise.allSettled([
+          getMatchesForRequirement(reqId),
+          getPotentialMatches(reqId),
         ]);
+        const existingData = existingResult.status === "fulfilled" ? existingResult.value : [];
+        const potentialData = potentialResult.status === "fulfilled" ? potentialResult.value : [];
+        if (existingResult.status === "rejected") {
+          setMatchError(formatApiError(existingResult.reason, "Failed to load property matches."));
+        }
         setActiveMatches(existingData);
         setPotentialMatches(potentialData);
         await resolvePropertyDetailsAndImages(existingData, potentialData);
@@ -439,10 +444,7 @@ export default function BuyerRequirements() {
       setIsAutoMatching(false);
       setViewTab("overview");
       setViewingPropertyDetail(null);
-      setManualSearch("");
-      setManualTypeFilter("");
-      setManualBhkFilter("");
-      setManualOnlyUnmatched(false);
+      setIsManualMatchOpen(false);
       setMatchingActionLoading(null);
     }
   }, [viewingRequirementId]);
@@ -523,74 +525,58 @@ export default function BuyerRequirements() {
     await handleAutoMatch(req);
   };
 
-  // Available properties filtered for this requirement's listing type (Buy -> Sale, Rent -> Rent)
-  const availablePropertiesForRequirement = useMemo(() => {
-    if (!viewingRequirement) return [];
-    const expectedListing =
-      viewingRequirement.requirement_type === "Buy" ? "Sale" : "Rent";
-    return properties.filter(
-      (p) => p.status === "Available" && p.listing_type === expectedListing
-    );
-  }, [viewingRequirement, properties]);
+  // Re-reads the requirement and its matches from the backend (no local guesses).
+  const refreshRequirementMatches = async (requirementId: string) => {
+    const [reqResult, existingResult, potentialResult] = await Promise.allSettled([
+      getBuyerRequirement(requirementId),
+      getMatchesForRequirement(requirementId),
+      getPotentialMatches(requirementId),
+    ]);
 
-  // Filtered available properties based on user manual search & filters
-  const filteredAvailableProperties = useMemo(() => {
-    if (!viewingRequirement) return [];
-    return availablePropertiesForRequirement.filter((p) => {
-      const isMatched = activeMatches.some((m) => m.property_id === p.id);
-      if (manualOnlyUnmatched && isMatched) return false;
-
-      if (manualTypeFilter && p.property_type !== manualTypeFilter) return false;
-      if (manualBhkFilter) {
-        if (manualBhkFilter === "4") {
-          if (!p.bedrooms || p.bedrooms < 4) return false;
-        } else if (String(p.bedrooms) !== manualBhkFilter) {
-          return false;
-        }
-      }
-
-      if (manualSearch) {
-        const q = manualSearch.toLowerCase();
-        const inName = p.name?.toLowerCase().includes(q);
-        const inCity = p.city?.toLowerCase().includes(q);
-        const inAddr = p.address?.toLowerCase().includes(q);
-        const inUnit = p.unit_number?.toLowerCase().includes(q);
-        const inType = p.property_type?.toLowerCase().includes(q);
-        if (!inName && !inCity && !inAddr && !inUnit && !inType) return false;
-      }
-      return true;
-    });
-  }, [
-    viewingRequirement,
-    availablePropertiesForRequirement,
-    activeMatches,
-    manualOnlyUnmatched,
-    manualTypeFilter,
-    manualBhkFilter,
-    manualSearch,
-  ]);
-
-  // Preload property images for candidate available properties
-  useEffect(() => {
-    if (viewTab === "matches" && viewingRequirement) {
-      const candidateIds = filteredAvailableProperties.slice(0, 15).map((p) => p.id);
-      candidateIds.forEach((propId) => {
-        if (!propertyImagesMapRef.current[propId]) {
-          getPropertyImages(propId)
-            .then((imgs) => {
-              if (imgs && imgs.length > 0) {
-                setPropertyImagesMap((prev) => {
-                  const updated = { ...prev, [propId]: imgs };
-                  propertyImagesMapRef.current = updated;
-                  return updated;
-                });
-              }
-            })
-            .catch(() => {});
-        }
-      });
+    if (reqResult.status === "fulfilled") {
+      const fresh = reqResult.value;
+      setRequirements((prev) => prev.map((r) => (r.id === fresh.id ? fresh : r)));
+      setViewingRequirement((prev) => (prev && prev.id === fresh.id ? fresh : prev));
     }
-  }, [viewTab, viewingRequirement, filteredAvailableProperties]);
+
+    const existingData = existingResult.status === "fulfilled" ? existingResult.value : null;
+    const potentialData = potentialResult.status === "fulfilled" ? potentialResult.value : [];
+
+    if (existingData) {
+      setActiveMatches(existingData);
+      setPotentialMatches(potentialData);
+      await resolvePropertyDetailsAndImages(existingData, potentialData);
+    } else if (existingResult.status === "rejected") {
+      setMatchError(formatApiError(existingResult.reason, "Failed to refresh property matches."));
+    }
+  };
+
+  const openManualMatch = (requirement: BuyerRequirement) => {
+    if (!userPermissions.canMatch) {
+      showToast("You don't have permission to match properties.", "error");
+      return;
+    }
+    if (requirement.status === "Closed") {
+      showToast("Closed requirements cannot be matched.", "error");
+      return;
+    }
+    setViewingRequirement(requirement);
+    setViewTab("matches");
+    setIsManualMatchOpen(true);
+  };
+
+  const handleManualMatchesSaved = async ({ savedCount, failedCount }: ManualMatchSaveSummary) => {
+    if (!viewingRequirement) return;
+    setMatchError(null);
+    await refreshRequirementMatches(viewingRequirement.id);
+    setViewTab("matches");
+    const noun = `propert${savedCount === 1 ? "y" : "ies"}`;
+    if (failedCount === 0) {
+      showToast(`${savedCount} ${noun} matched. The customer can now see ${savedCount === 1 ? "it" : "them"} in the portal.`);
+    } else {
+      showToast(`${savedCount} ${noun} matched, ${failedCount} failed.`, "error");
+    }
+  };
 
   // Manually match a property to the current buyer requirement
   const handleManualMatch = async (property: Property) => {
@@ -620,31 +606,7 @@ export default function BuyerRequirements() {
 
       await createPropertyMatch(payload);
 
-      // Re-fetch existing and potential matches
-      const [existingData, potentialData] = await Promise.all([
-        getMatchesForRequirement(viewingRequirement.id).catch(() => []),
-        getPotentialMatches(viewingRequirement.id).catch(() => []),
-      ]);
-
-      setActiveMatches(existingData);
-      setPotentialMatches(potentialData);
-
-      // Resolve full property details and images
-      await resolvePropertyDetailsAndImages(existingData, potentialData);
-
-      // Update requirement status if it was New / Qualified
-      if (viewingRequirement.status !== "Closed") {
-        setRequirements((prev) =>
-          prev.map((r) =>
-            r.id === viewingRequirement.id && r.status !== "Closed"
-              ? { ...r, status: "Matched" }
-              : r
-          )
-        );
-        setViewingRequirement((prev) =>
-          prev && prev.status !== "Closed" ? { ...prev, status: "Matched" } : prev
-        );
-      }
+      await refreshRequirementMatches(viewingRequirement.id);
 
       showToast(`Property "${property.name}" matched successfully!`, "success");
     } catch (err: any) {
@@ -1268,14 +1230,7 @@ export default function BuyerRequirements() {
                           type="button"
                           className="btn-manual-match-mini"
                           title="Manually Match Properties"
-                          onClick={() => {
-                            setViewingRequirement(r);
-                            setViewTab("matches");
-                            setTimeout(() => {
-                              const el = document.getElementById("manual-matching-section");
-                              if (el) el.scrollIntoView({ behavior: "smooth" });
-                            }, 120);
-                          }}
+                          onClick={() => openManualMatch(r)}
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1414,14 +1369,7 @@ export default function BuyerRequirements() {
                               type="button"
                               className="btn-action-icon manual-match"
                               title="Manually Match Properties"
-                              onClick={() => {
-                                setViewingRequirement(r);
-                                setViewTab("matches");
-                                setTimeout(() => {
-                                  const el = document.getElementById("manual-matching-section");
-                                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                                }, 120);
-                              }}
+                              onClick={() => openManualMatch(r)}
                             >
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1886,16 +1834,9 @@ export default function BuyerRequirements() {
                               <button
                                 type="button"
                                 className="btn-manual-match-header"
-                                onClick={() => {
-                                  const el = document.getElementById("manual-matching-section");
-                                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                                }}
+                                onClick={() => setIsManualMatchOpen(true)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
-                                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                                <span>Manually Match Property</span>
+                                <span>+ Manually Match Property</span>
                               </button>
 
                               <button
@@ -1979,7 +1920,7 @@ export default function BuyerRequirements() {
                                 <p className="no-matches-secondary-text">
                                   {viewingRequirement.status === "Closed"
                                     ? "Closed requirements cannot be matched."
-                                    : "Click 'Find Matching Properties' above or manually select available properties below."}
+                                    : "Click 'Find Matching Properties' above or use '+ Manually Match Property' to pick available properties."}
                                 </p>
                               </div>
                             ) : (
@@ -2060,120 +2001,7 @@ export default function BuyerRequirements() {
                             )}
                           </div>
 
-                          {/* ─── 3. Manually Match Available Properties Section ─── */}
-                          <div id="manual-matching-section" className="matches-group-section manual-match-container" style={{ marginTop: "36px" }}>
-                            <div className="matches-section-header">
-                              <div className="matches-section-title-row">
-                                <span className="match-group-tag manual">Manual Match</span>
-                                <h4 className="matches-section-title">
-                                  Manually Match Available Properties ({filteredAvailableProperties.length})
-                                </h4>
-                              </div>
-                              <span className="matches-section-caption">
-                                Select and manually link any available {viewingRequirement.requirement_type === "Buy" ? "sale" : "rental"} property in your inventory directly to this requirement.
-                              </span>
-                            </div>
-
-                            {/* Manual match search & filters */}
-                            <div className="manual-match-toolbar">
-                              <div className="manual-search-box">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                  <circle cx="11" cy="11" r="8"></circle>
-                                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                </svg>
-                                <input
-                                  type="text"
-                                  placeholder="Search by property name, code, location, city..."
-                                  value={manualSearch}
-                                  onChange={(e) => setManualSearch(e.target.value)}
-                                />
-                                {manualSearch && (
-                                  <button
-                                    type="button"
-                                    className="btn-clear-search"
-                                    onClick={() => setManualSearch("")}
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="manual-filter-row">
-                                <select
-                                  value={manualTypeFilter}
-                                  onChange={(e) => setManualTypeFilter(e.target.value)}
-                                  className="manual-filter-select"
-                                >
-                                  <option value="">All Property Types</option>
-                                  {PROPERTY_TYPES.map((t) => (
-                                    <option key={t} value={t}>
-                                      {t}
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <select
-                                  value={manualBhkFilter}
-                                  onChange={(e) => setManualBhkFilter(e.target.value)}
-                                  className="manual-filter-select"
-                                >
-                                  <option value="">All Bedrooms</option>
-                                  <option value="1">1 BHK</option>
-                                  <option value="2">2 BHK</option>
-                                  <option value="3">3 BHK</option>
-                                  <option value="4">4+ BHK</option>
-                                </select>
-
-                                <label className="manual-unmatched-toggle">
-                                  <input
-                                    type="checkbox"
-                                    checked={manualOnlyUnmatched}
-                                    onChange={(e) => setManualOnlyUnmatched(e.target.checked)}
-                                  />
-                                  <span>Hide Already Matched</span>
-                                </label>
-                              </div>
-                            </div>
-
-                            {filteredAvailableProperties.length === 0 ? (
-                              <div className="no-matches-box">
-                                <p className="no-matches-primary-text">No available properties match your search.</p>
-                                <p className="no-matches-secondary-text">
-                                  {availablePropertiesForRequirement.length === 0
-                                    ? `There are currently no available properties listed for ${viewingRequirement.requirement_type === "Buy" ? "Sale" : "Rent"}.`
-                                    : "Try clearing search filters or uncheck 'Hide Already Matched'."}
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="matched-properties-grid">
-                                {filteredAvailableProperties.map((prop) => {
-                                  const cardImages = propertyImagesMap[prop.id] || [];
-                                  const isAlreadyMatched = activeMatches.some((m) => m.property_id === prop.id);
-                                  return (
-                                    <PropertyCard
-                                      key={prop.id}
-                                      property={prop}
-                                      images={cardImages}
-                                      matchType={isAlreadyMatched ? "exact" : "manual"}
-                                      matchLabel={isAlreadyMatched ? "Matched" : "Available"}
-                                      formatPrice={formatPrice}
-                                      onView={setViewingPropertyDetail}
-                                      onMatch={
-                                        userPermissions.canMatch && viewingRequirement.status !== "Closed"
-                                          ? handleManualMatch
-                                          : undefined
-                                      }
-                                      isMatched={isAlreadyMatched}
-                                      isMatching={matchingActionLoading === prop.id}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-
-                        </>
+                          </>
                       )}
                     </>
                   )}
@@ -2188,6 +2016,16 @@ export default function BuyerRequirements() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── Manual Property Matching Modal ─── */}
+      {isManualMatchOpen && viewingRequirement && userPermissions.canMatch && viewingRequirement.status !== "Closed" && (
+        <ManualMatchPropertiesModal
+          requirement={viewingRequirement}
+          buyerName={getBuyerName(viewingRequirement)}
+          onClose={() => setIsManualMatchOpen(false)}
+          onSaved={handleManualMatchesSaved}
+        />
       )}
 
       {/* ─── Property Detail Preview Modal ─── */}

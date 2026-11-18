@@ -23,6 +23,9 @@ const sharedModules = [
   "activities",
   "tasks",
   "reports",
+  "forecast",
+  "lead-scoring",
+  "trash",
 ];
 
 const adminModules = [
@@ -53,6 +56,7 @@ const industries: IndustryConfig[] = [
       "buyer-requirements",
       "site-visits",
       "bookings",
+      "customer-booking-requests",
       "payments",
       "audit-logs",
       "documents",

@@ -96,10 +96,14 @@ export const CRM_NAKED_MODULE_ROOTS = new Set<string>([
   "invoices",
   "site-visits",
   "bookings",
+  "customer-booking-requests",
   "payments",
   "activities",
   "tasks",
   "reports",
+  "forecast",
+  "lead-scoring",
+  "trash",
   "pipelines",
   "workflows",
   "form-builder",
@@ -308,3 +312,4 @@ export function clearCrmAuthStorage(options?: { keepMfaTemp?: boolean }): void {
 export function isKnownIndustrySegment(segment: string): boolean {
   return (KNOWN_INDUSTRY_SLUGS as readonly string[]).includes(segment);
 }
+

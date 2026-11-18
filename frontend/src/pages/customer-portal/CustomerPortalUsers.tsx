@@ -489,30 +489,30 @@ export default function CustomerPortalUsers() {
                 return (
                   <tr key={user.portal_user_id}>
                     <td>
-                      <div className="portal-contact-name">
+                      <div style={{ fontWeight: 600, color: "var(--text-color, #0f172a)" }}>
                         {user.contact_name}
                       </div>
                     </td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <BuildingIcon size={14} color="#64748b" />
-                        <span className="portal-account-name">{user.account_name}</span>
+                        <span>{user.account_name}</span>
                       </div>
                     </td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <MailIcon size={14} color="#64748b" />
-                        <span className="portal-user-email">{user.email}</span>
+                        <span>{user.email}</span>
                       </div>
                     </td>
                     <td>{getStatusBadge(user.status)}</td>
-                    <td className="portal-date-cell">
+                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
                       {user.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}
                     </td>
-                    <td className="portal-date-cell">
+                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
                       {user.activated_at ? new Date(user.activated_at).toLocaleDateString() : "—"}
                     </td>
-                    <td className="portal-date-cell">
+                    <td style={{ fontSize: "0.8125rem", color: "#64748b" }}>
                       {user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"}
                     </td>
                     <td style={{ textAlign: "right" }}>
@@ -675,7 +675,17 @@ export default function CustomerPortalUsers() {
                 </div>
               </div>
 
-              <div className="portal-confirmation-box">
+              <div
+                style={{
+                  background: "var(--bg-secondary, rgba(0,0,0,0.03))",
+                  padding: "12px 14px",
+                  borderRadius: "8px",
+                  fontSize: "0.8125rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
                 <div>
                   <strong>Customer Contact:</strong> {confirmAction.user.contact_name}
                 </div>

@@ -32,8 +32,9 @@ export interface NotificationReadResponse {
   is_read: boolean;
 }
 
-// Backend notifications router is commented out in main.py, so disable network calls to prevent 404s
-let isNotificationsEndpointAvailable = false;
+// The backend registers the notifications router (app.include_router(notifications_router)), so the
+// endpoints are used. If a deployment still answers 404, the flag flips to false and calls stop.
+let isNotificationsEndpointAvailable = true;
 
 export const isNotificationsSupported = (): boolean => isNotificationsEndpointAvailable;
 

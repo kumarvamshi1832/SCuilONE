@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   cancelSubscription,
   contactPlatformSupport,
@@ -18,7 +18,6 @@ import type {
   BillingCycle,
   BillingInvoice,
   BillingPayment,
-  BillingProfile,
   InvoiceDownloadResponse,
   SubscriptionEvent,
   SubscriptionPlan,
@@ -58,6 +57,47 @@ function getStatusBadgeClass(statusValue?: string | null): string {
   return "slate";
 }
 
+/**
+ * Cancellation rules mirror the existing backend (POST /subscription/cancel):
+ * - Trial / Past Due / Suspended subscriptions are always cancelled immediately.
+ * - An Active subscription is either set to stop renewing (stays Active until period end)
+ *   or cancelled immediately.
+ * - Expired / Cancelled subscriptions are terminal and cannot be cancelled again.
+ */
+const CANCELLABLE_STATUSES = new Set(["Trial", "Active", "Past Due", "Suspended"]);
+
+type CancelMode = "period_end" | "immediate";
+
+function isCancellationScheduled(sub: TenantSubscription): boolean {
+  return sub.status === "Active" && sub.auto_renew === false && Boolean(sub.cancelled_at);
+}
+
+function canCancelSubscription(sub: TenantSubscription): boolean {
+  return CANCELLABLE_STATUSES.has(sub.status);
+}
+
+function supportsPeriodEndCancel(sub: TenantSubscription): boolean {
+  return sub.status === "Active" && !isCancellationScheduled(sub);
+}
+
+function getSubscriptionPlanName(sub: TenantSubscription): string {
+  return sub.current_plan?.name || (sub.status === "Trial" ? "Free Trial" : "Subscription Plan");
+}
+
+function getSubscriptionAmount(sub: TenantSubscription): string {
+  const plan = sub.current_plan;
+  if (!plan) return "—";
+  if (plan.plan_key === "free_trial") return "Free";
+  const cycle = (sub.billing_cycle || "Monthly").toLowerCase();
+  const price = cycle === "annual" ? plan.annual_price : plan.monthly_price;
+  return price ? `${plan.currency} ${price}` : "—";
+}
+
+function getSubscriptionPeriodEnd(sub: TenantSubscription): string | null | undefined {
+  if (sub.status === "Trial") return sub.trial_end_date || sub.ends_at;
+  return sub.renewal_date || sub.ends_at;
+}
+
 function extractApiError(err: any, fallback: string): string {
   const detail = err?.response?.data?.detail;
   if (typeof detail === "string") return detail;
@@ -77,7 +117,6 @@ export default function SubscriptionBilling() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
   const [payments, setPayments] = useState<BillingPayment[]>([]);
-  const [billingProfile, setBillingProfile] = useState<BillingProfile | null>(null);
   const [events, setEvents] = useState<SubscriptionEvent[]>([]);
 
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("Monthly");
@@ -119,11 +158,13 @@ export default function SubscriptionBilling() {
   });
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Cancel modal
-  const [showCancelModal, setShowCancelModal] = useState(false);
+  // Per-subscription cancel modal (target is the exact subscription card that was clicked)
+  const [cancelTarget, setCancelTarget] = useState<TenantSubscription | null>(null);
+  const [cancelMode, setCancelMode] = useState<CancelMode>("period_end");
   const [cancelReason, setCancelReason] = useState("");
-  const [cancelImmediately, setCancelImmediately] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [cancelConfirmed, setCancelConfirmed] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // Support ticket form
   const [supportForm, setSupportForm] = useState({
@@ -156,7 +197,6 @@ export default function SubscriptionBilling() {
       setPlans(plansRes.items || []);
       setInvoices(invRes.items || []);
       setPayments(payRes.items || []);
-      setBillingProfile(profRes);
       setEvents(evRes.items || []);
       setProfileForm({
         company_name: profRes.company_name || "",
@@ -310,22 +350,103 @@ export default function SubscriptionBilling() {
     }
   };
 
+  // Subscription records actually returned by the API. The tenant API exposes a single
+  // subscription record per tenant; nothing is fabricated here.
+  const subscriptions = useMemo<TenantSubscription[]>(
+    () => (subscription && subscription.status !== "None" && subscription.subscription_id ? [subscription] : []),
+    [subscription]
+  );
+
+  const openCancelModal = (sub: TenantSubscription) => {
+    setCancelTarget(sub);
+    setCancelMode(supportsPeriodEndCancel(sub) ? "period_end" : "immediate");
+    setCancelReason("");
+    setCancelConfirmed(false);
+    setCancelError("");
+  };
+
+  const closeCancelModal = () => {
+    if (cancellingId) return;
+    setCancelTarget(null);
+  };
+
   const handleCancelSubscription = async (e: FormEvent) => {
     e.preventDefault();
-    setCancelling(true);
+    const target = cancelTarget;
+    if (!target?.subscription_id || !cancelConfirmed) return;
+
+    const effectiveMode: CancelMode = supportsPeriodEndCancel(target) ? cancelMode : "immediate";
+    const targetId = target.subscription_id;
+    const planName = getSubscriptionPlanName(target);
+
+    setCancellingId(targetId);
+    setCancelError("");
+    setToast(null);
     try {
+      // The existing cancel endpoint takes no subscription ID: it acts on the tenant's current
+      // subscription record. Re-verify that record is exactly the card the user selected before
+      // sending anything, so a different subscription can never be cancelled by mistake.
+      const fresh = await getSubscriptionStatus();
+      if (fresh.subscription_id !== targetId) {
+        setCancelTarget(null);
+        showMessage(
+          `"${planName}" was not cancelled because the subscription changed since this page was loaded. Review the refreshed list and try again.`,
+          "error"
+        );
+        await loadAll();
+        return;
+      }
+      if (!canCancelSubscription(fresh)) {
+        setCancelTarget(null);
+        showMessage(`"${planName}" is already ${fresh.status} and cannot be cancelled.`, "error");
+        await loadAll();
+        return;
+      }
+
       const res = await cancelSubscription({
         reason: cancelReason.trim() || undefined,
-        cancel_immediately: cancelImmediately,
+        cancel_immediately: effectiveMode === "immediate",
       });
-      showMessage(res.message);
-      setShowCancelModal(false);
-      setCancelReason("");
+      const updated = res.subscription;
+
+      if (updated?.subscription_id && updated.subscription_id !== targetId) {
+        setCancelTarget(null);
+        showMessage(
+          "Cancellation was processed for a different subscription than the one selected. The list has been refreshed — please verify.",
+          "error"
+        );
+        await loadAll();
+        return;
+      }
+
+      // Only report success that the API response actually confirms.
+      const confirmedImmediate = updated?.status === "Cancelled";
+      const confirmedPeriodEnd = updated?.status === "Active" && updated.auto_renew === false;
+      if (effectiveMode === "immediate" ? !confirmedImmediate : !(confirmedPeriodEnd || confirmedImmediate)) {
+        setCancelTarget(null);
+        showMessage(
+          `The cancellation request for "${planName}" did not return the expected result (status: ${updated?.status ?? "unknown"}). Please verify the subscription status.`,
+          "error"
+        );
+        await loadAll();
+        return;
+      }
+
+      if (updated) setSubscription(updated);
+      setCancelTarget(null);
+      showMessage(
+        confirmedImmediate
+          ? `"${planName}" has been cancelled. Invoices and payment history are unchanged.`
+          : `Auto-renewal for "${planName}" is turned off. It stays active until ${formatDate(
+              getSubscriptionPeriodEnd(updated)
+            )}.`
+      );
       await loadAll();
     } catch (err) {
-      showMessage(extractApiError(err, "Failed to cancel subscription."), "error");
+      // Keep the modal open so the user can retry; no success message is shown.
+      setCancelError(extractApiError(err, `Failed to cancel "${planName}".`));
     } finally {
-      setCancelling(false);
+      setCancellingId(null);
     }
   };
 
@@ -934,22 +1055,123 @@ export default function SubscriptionBilling() {
             </form>
           </div>
 
-          <div className="sub-card">
-            <h2 className="sub-card-title">Subscription Lifecycle Controls</h2>
-            <p className="sub-subtitle">
-              Current status: <strong>{billingProfile ? subscription?.status : "—"}</strong>. You can cancel
-              auto-renewal at period end or cancel immediately.
+          <div className="sub-card" aria-labelledby="my-subscriptions-title">
+            <h2 className="sub-card-title" id="my-subscriptions-title">
+              My Active Subscriptions
+            </h2>
+            <p className="sub-subtitle" style={{ marginBottom: "14px" }}>
+              Each subscription is shown separately. Cancelling affects only the subscription you select — invoices,
+              payments and subscription history are never removed.
             </p>
-            <div style={{ marginTop: "16px" }}>
-              <button
-                type="button"
-                className="sub-btn sub-btn-danger"
-                onClick={() => setShowCancelModal(true)}
-                disabled={subscription?.status === "Cancelled"}
-              >
-                {subscription?.status === "Cancelled" ? "Already Cancelled" : "Cancel Subscription"}
-              </button>
-            </div>
+
+            {loading && subscriptions.length === 0 ? (
+              <p className="sub-subtitle">Loading subscriptions...</p>
+            ) : subscriptions.length === 0 ? (
+              <p className="sub-subtitle">
+                No subscription found for this workspace. Choose a plan from the Plans tab to get started.
+              </p>
+            ) : (
+              <div className="sub-subscription-list">
+                {subscriptions.map((sub) => {
+                  const scheduled = isCancellationScheduled(sub);
+                  const cancellable = canCancelSubscription(sub);
+                  const busy = cancellingId === sub.subscription_id;
+                  const periodEnd = getSubscriptionPeriodEnd(sub);
+                  const cycle = sub.status === "Trial" ? "Free Trial" : sub.billing_cycle || "—";
+                  const startDate =
+                    sub.status === "Trial"
+                      ? sub.trial_start_date || sub.starts_at
+                      : sub.starts_at || sub.activated_at;
+                  const endLabel =
+                    sub.status === "Cancelled"
+                      ? "Ended On"
+                      : sub.status === "Expired"
+                      ? "Expired On"
+                      : scheduled
+                      ? "Access Ends"
+                      : sub.status === "Trial"
+                      ? "Trial Ends"
+                      : "Renewal Date";
+                  return (
+                    <article
+                      key={sub.subscription_id}
+                      className={`sub-subscription-card ${scheduled ? "scheduled" : ""} ${
+                        sub.status === "Cancelled" || sub.status === "Expired" ? "inactive" : ""
+                      }`}
+                      aria-label={`${getSubscriptionPlanName(sub)} subscription`}
+                    >
+                      <div className="sub-subscription-head">
+                        <div>
+                          <h3 className="sub-subscription-name">{getSubscriptionPlanName(sub)}</h3>
+                          <div className="sub-subscription-id" title={sub.subscription_id}>
+                            ID: {sub.subscription_id}
+                          </div>
+                        </div>
+                        <div className="sub-subscription-badges">
+                          <span className={`sub-badge ${getStatusBadgeClass(sub.status)}`}>{sub.status}</span>
+                          {scheduled && <span className="sub-badge amber">Cancels at period end</span>}
+                        </div>
+                      </div>
+
+                      <dl className="sub-subscription-facts">
+                        <div>
+                          <dt>Amount</dt>
+                          <dd>{getSubscriptionAmount(sub)}</dd>
+                        </div>
+                        <div>
+                          <dt>Billing Cycle</dt>
+                          <dd>{cycle}</dd>
+                        </div>
+                        <div>
+                          <dt>Start Date</dt>
+                          <dd>{formatDate(startDate)}</dd>
+                        </div>
+                        <div>
+                          <dt>{endLabel}</dt>
+                          <dd>
+                            {sub.status === "Cancelled"
+                              ? formatDate(sub.cancelled_at || sub.ends_at)
+                              : sub.status === "Expired"
+                              ? formatDate(sub.expired_at || sub.ends_at)
+                              : formatDate(periodEnd)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Auto-Renewal</dt>
+                          <dd>{sub.auto_renew ? "On" : "Off"}</dd>
+                        </div>
+                      </dl>
+
+                      {sub.suspension_reason && sub.status === "Suspended" && (
+                        <p className="sub-subscription-note">Suspension reason: {sub.suspension_reason}</p>
+                      )}
+
+                      <div className="sub-subscription-actions">
+                        {cancellable ? (
+                          <button
+                            type="button"
+                            className="sub-btn sub-btn-danger sub-btn-sm"
+                            disabled={busy}
+                            onClick={() => openCancelModal(sub)}
+                            aria-label={`${scheduled ? "Cancel immediately" : "Cancel subscription"}: ${getSubscriptionPlanName(sub)}`}
+                          >
+                            {busy ? "Cancelling..." : scheduled ? "Cancel Immediately" : "Cancel Subscription"}
+                          </button>
+                        ) : (
+                          <span className="sub-subtitle">
+                            {sub.status === "Cancelled"
+                              ? "This subscription has been cancelled."
+                              : sub.status === "Expired"
+                              ? "This subscription has expired."
+                              : "No cancellation actions available."}
+                          </span>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1121,18 +1343,6 @@ export default function SubscriptionBilling() {
                 ×
               </button>
             </div>
-            {payModalInvoice.payment_instructions && (
-              <div className="sub-instructions-box">
-                <strong>Transfer Details</strong>
-                <div style={{ marginTop: "4px", fontSize: "0.82rem" }}>
-                  {Object.entries(payModalInvoice.payment_instructions).map(([k, v]) => (
-                    <div key={k}>
-                      {k.replace(/_/g, " ")}: <strong>{String(v ?? "")}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
             <form onSubmit={handleSubmitManualPayment} className="sub-form-grid">
               <div className="sub-field">
                 <label htmlFor="pay-ref">Transaction / UTR Reference *</label>
@@ -1269,48 +1479,141 @@ export default function SubscriptionBilling() {
       )}
 
       {/* CANCEL SUBSCRIPTION MODAL */}
-      {showCancelModal && (
-        <div className="sub-modal-backdrop" onClick={() => setShowCancelModal(false)}>
-          <div className="sub-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sub-modal-header">
-              <h3>Cancel Subscription</h3>
-              <button type="button" className="sub-modal-close" onClick={() => setShowCancelModal(false)}>
-                ×
-              </button>
-            </div>
-            <form onSubmit={handleCancelSubscription} className="sub-form-grid">
-              <div className="sub-field full">
-                <label htmlFor="cancel-reason">Cancellation Reason</label>
-                <textarea
-                  id="cancel-reason"
-                  className="sub-textarea"
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="Optional reason for cancellation"
-                />
+      {cancelTarget && (() => {
+        const target = cancelTarget;
+        const targetName = getSubscriptionPlanName(target);
+        const periodEndAllowed = supportsPeriodEndCancel(target);
+        const effectiveMode: CancelMode = periodEndAllowed ? cancelMode : "immediate";
+        const busy = cancellingId === target.subscription_id;
+        const periodEndLabel = formatDate(getSubscriptionPeriodEnd(target));
+        return (
+          <div className="sub-modal-backdrop" onClick={closeCancelModal}>
+            <div
+              className="sub-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cancel-sub-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sub-modal-header">
+                <h3 id="cancel-sub-title">Cancel {targetName}?</h3>
+                <button type="button" className="sub-modal-close" onClick={closeCancelModal} disabled={busy}>
+                  ×
+                </button>
               </div>
-              <div className="sub-field full">
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={cancelImmediately}
-                    onChange={(e) => setCancelImmediately(e.target.checked)}
+
+              <div className="sub-cancel-target">
+                <div>
+                  <div className="sub-cancel-target-label">Subscription to be cancelled</div>
+                  <strong className="sub-cancel-target-name">{targetName}</strong>
+                  <div className="sub-subscription-id" title={target.subscription_id}>
+                    ID: {target.subscription_id}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span className={`sub-badge ${getStatusBadgeClass(target.status)}`}>{target.status}</span>
+                  <div className="sub-subtitle" style={{ marginTop: "4px", fontSize: "0.8rem" }}>
+                    {getSubscriptionAmount(target)} · {target.billing_cycle || "—"}
+                  </div>
+                </div>
+              </div>
+
+              <p className="sub-subtitle" style={{ margin: "12px 0" }}>
+                Only the <strong>{targetName}</strong> subscription above will be cancelled. Your billing profile,
+                invoices, payment records and subscription history are not deleted.
+              </p>
+
+              <form onSubmit={handleCancelSubscription} className="sub-form-grid">
+                <div className="sub-field full">
+                  <div className="sub-cancel-options" role="radiogroup" aria-label="Cancellation timing">
+                    {periodEndAllowed && (
+                      <label className={`sub-cancel-option ${effectiveMode === "period_end" ? "selected" : ""}`}>
+                        <input
+                          type="radio"
+                          name="cancel-mode"
+                          checked={effectiveMode === "period_end"}
+                          onChange={() => setCancelMode("period_end")}
+                          disabled={busy}
+                        />
+                        <span>
+                          <strong>Cancel at end of billing period</strong>
+                          <small>
+                            Auto-renewal is turned off. {targetName} stays active until {periodEndLabel}.
+                          </small>
+                        </span>
+                      </label>
+                    )}
+                    <label className={`sub-cancel-option ${effectiveMode === "immediate" ? "selected" : ""}`}>
+                      <input
+                        type="radio"
+                        name="cancel-mode"
+                        checked={effectiveMode === "immediate"}
+                        onChange={() => setCancelMode("immediate")}
+                        disabled={busy || !periodEndAllowed}
+                      />
+                      <span>
+                        <strong>Cancel immediately</strong>
+                        <small>
+                          {targetName} ends right now and its CRM access stops immediately.
+                          {!periodEndAllowed && !isCancellationScheduled(target)
+                            ? ` ${target.status} subscriptions can only be cancelled immediately.`
+                            : ""}
+                        </small>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="sub-field full">
+                  <label htmlFor="cancel-reason">Cancellation Reason (optional)</label>
+                  <textarea
+                    id="cancel-reason"
+                    className="sub-textarea"
+                    value={cancelReason}
+                    maxLength={500}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Optional reason for cancellation"
+                    disabled={busy}
                   />
-                  Cancel immediately (disables CRM access right away instead of stopping auto-renewal at period end)
-                </label>
-              </div>
-              <div className="sub-field full" style={{ flexDirection: "row", justifyContent: "flex-end", gap: "10px" }}>
-                <button type="button" className="sub-btn sub-btn-secondary" onClick={() => setShowCancelModal(false)}>
-                  Keep Subscription
-                </button>
-                <button type="submit" className="sub-btn sub-btn-danger" disabled={cancelling}>
-                  {cancelling ? "Cancelling..." : "Confirm Cancellation"}
-                </button>
-              </div>
-            </form>
+                </div>
+
+                <div className="sub-field full">
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={cancelConfirmed}
+                      onChange={(e) => setCancelConfirmed(e.target.checked)}
+                      disabled={busy}
+                      style={{ marginTop: "3px" }}
+                    />
+                    <span>
+                      I confirm I want to cancel the <strong>{targetName}</strong> subscription
+                      {effectiveMode === "immediate" ? " immediately" : " at the end of the billing period"}.
+                    </span>
+                  </label>
+                </div>
+
+                {cancelError && (
+                  <div className="sub-field full">
+                    <div className="sub-alert error" role="alert" style={{ marginBottom: 0 }}>
+                      {cancelError}
+                    </div>
+                  </div>
+                )}
+
+                <div className="sub-field full" style={{ flexDirection: "row", justifyContent: "flex-end", gap: "10px" }}>
+                  <button type="button" className="sub-btn sub-btn-secondary" onClick={closeCancelModal} disabled={busy}>
+                    Keep Subscription
+                  </button>
+                  <button type="submit" className="sub-btn sub-btn-danger" disabled={busy || !cancelConfirmed}>
+                    {busy ? "Cancelling..." : `Confirm — Cancel ${targetName}`}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

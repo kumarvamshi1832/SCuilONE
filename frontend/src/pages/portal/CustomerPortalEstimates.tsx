@@ -18,12 +18,7 @@ import {
   ESTIMATE_STATUS_OPTIONS,
   isEstimatePendingApproval,
 } from "../../services/customerPortalCommercialService";
-import {
-  CustomerPortalNotificationService,
-  resolvePortalTenantId,
-} from "../../services/customerPortalNotificationService";
 import { createSoftwareEstimate } from "../../services/softwareEstimateService";
-import { getPortalTenantId } from "../../services/customerPortalAuthService";
 import type { PortalEstimate } from "../../types/customerPortal";
 import type { SoftwareBillingType, SoftwareEstimateItemCreate } from "../../types/softwareEstimate";
 import "./CustomerPortalTickets.css";
@@ -142,15 +137,12 @@ export default function CustomerPortalEstimates() {
     setSubmittingDecision(true);
     try {
       let updated: PortalEstimate;
-      const activeTenant = resolvePortalTenantId(getPortalTenantId() || undefined);
       if (decisionType === "accept") {
         updated = await acceptPortalEstimate(selectedEstimate.id, decisionNotes.trim() || null);
         showToast(`Estimate #${updated.estimate_number} accepted successfully!`, "success");
-        CustomerPortalNotificationService.notifyEstimateDecision(activeTenant, updated, "accepted");
       } else {
         updated = await rejectPortalEstimate(selectedEstimate.id, decisionNotes.trim() || null);
         showToast(`Estimate #${updated.estimate_number} rejected.`, "success");
-        CustomerPortalNotificationService.notifyEstimateDecision(activeTenant, updated, "rejected");
       }
       setSelectedEstimate(updated);
       setDecisionType(null);
@@ -173,7 +165,6 @@ export default function CustomerPortalEstimates() {
     }
     setCreating(true);
     try {
-      const activeTenant = resolvePortalTenantId(getPortalTenantId() || undefined);
       const created = await createSoftwareEstimate({
         software_requirement_id: "00000000-0000-0000-0000-000000000000",
         title: createForm.title.trim(),
@@ -184,7 +175,6 @@ export default function CustomerPortalEstimates() {
         items: createForm.items,
       });
       showToast(`Estimate #${created.estimate_number || created.id} created successfully!`, "success");
-      CustomerPortalNotificationService.notifyEstimateCreated(activeTenant, created);
       setShowCreateModal(false);
       setCreateForm({
         title: "",

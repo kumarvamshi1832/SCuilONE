@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 
 import Login from "../pages/auth/Login";
@@ -55,6 +55,13 @@ import {
 } from "../pages/dashboard/Placeholders";
 import IndustrySettings from "../pages/settings/IndustrySettings";
 import Reports from "../pages/dashboard/Reports";
+import Trash from "../pages/trash/Trash";
+import CustomerBookingRequests from "../pages/booking-workflow/CustomerBookingRequests";
+import CustomerBookingRequestDetail from "../pages/booking-workflow/CustomerBookingRequestDetail";
+import InsightShortcuts from "../components/dashboard/InsightShortcuts";
+import SalesForecast from "../pages/forecast/SalesForecast";
+import LeadScoring from "../pages/lead-scoring/LeadScoring";
+import { getIndustryConfig } from "../config/industryConfig";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";
 import Projects from "../pages/projects/Projects";
@@ -95,12 +102,19 @@ import CustomerPortalTicketDetails from "../pages/portal/CustomerPortalTicketDet
 import CustomerPortalRealEstate from "../pages/portal/CustomerPortalRealEstate";
 import CustomerPortalProfile from "../pages/portal/CustomerPortalProfile";
 import CustomerPortalNotificationsPage from "../pages/portal/CustomerPortalNotificationsPage";
+import CustomerPortalBuyerRequirements from "../pages/portal/CustomerPortalBuyerRequirements";
+import CustomerPortalBuyerRequirementDetail from "../pages/portal/CustomerPortalBuyerRequirementDetail";
+import CustomerPortalShortlist from "../pages/portal/CustomerPortalShortlist";
+import CustomerPortalBookingJourney from "../pages/portal/CustomerPortalBookingJourney";
+import CustomerPortalBookingRequests from "../pages/portal/CustomerPortalBookingRequests";
+import CustomerPortalBookingRequestDetail from "../pages/portal/CustomerPortalBookingRequestDetail";
 import SubscriptionBilling from "../pages/billing/SubscriptionBilling";
 import UnsubscribeReminder from "../pages/billing/UnsubscribeReminder";
 import PlatformProtectedRoute from "../components/platform/PlatformProtectedRoute";
 import PlatformLayout from "../components/platform/PlatformLayout";
 import PlatformLogin from "../pages/platform/PlatformLogin";
 import PlatformDashboardPage from "../pages/platform/PlatformDashboardPage";
+import PlatformDashboardRoute from "../pages/platform/PlatformDashboardRoute";
 import PlatformTenantsPage from "../pages/platform/PlatformTenantsPage";
 import PlatformEmployeesTeamsPage from "../pages/platform/PlatformEmployeesTeamsPage";
 import PlatformRolesPermissionsPage from "../pages/platform/PlatformRolesPermissionsPage";
@@ -140,6 +154,22 @@ function DashboardResolver() {
     default:
       return <IndustryDashboard />;
   }
+}
+
+/**
+ * Opens a module page only for industries whose configuration (config/industryConfig.ts) enables it;
+ * otherwise the user is sent back to their dashboard. Authorization itself stays with the backend.
+ */
+function IndustryModuleGate({ module, children }: { module: string; children: ReactNode }) {
+  const { industry } = useParams();
+  const normalized = tryNormalizeIndustry(industry);
+  if (!normalized) {
+    return <Navigate to="/empty" replace />;
+  }
+  if (!getIndustryConfig(normalized).modules.includes(module)) {
+    return <Navigate to={`/${normalized}/dashboard`} replace />;
+  }
+  return <>{children}</>;
 }
 
 function ModuleRedirect({ target }: { target: string }) {
@@ -373,6 +403,12 @@ export default function AppRoutes() {
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
             <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
+            <Route path="buyer-requirements" element={<CustomerPortalBuyerRequirements />} />
+            <Route path="buyer-requirements/:requirementId" element={<CustomerPortalBuyerRequirementDetail />} />
+            <Route path="shortlist" element={<CustomerPortalShortlist />} />
+            <Route path="booking-journey" element={<CustomerPortalBookingJourney />} />
+            <Route path="booking-requests" element={<CustomerPortalBookingRequests />} />
+            <Route path="booking-requests/:requestId" element={<CustomerPortalBookingRequestDetail />} />
           </Route>
         </Route>
 
@@ -394,6 +430,12 @@ export default function AppRoutes() {
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
             <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
+            <Route path="buyer-requirements" element={<CustomerPortalBuyerRequirements />} />
+            <Route path="buyer-requirements/:requirementId" element={<CustomerPortalBuyerRequirementDetail />} />
+            <Route path="shortlist" element={<CustomerPortalShortlist />} />
+            <Route path="booking-journey" element={<CustomerPortalBookingJourney />} />
+            <Route path="booking-requests" element={<CustomerPortalBookingRequests />} />
+            <Route path="booking-requests/:requestId" element={<CustomerPortalBookingRequestDetail />} />
           </Route>
         </Route>
         <Route path="/customer_portal" element={<CustomerPortalProtectedRoute />}>
@@ -413,6 +455,12 @@ export default function AppRoutes() {
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
             <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
+            <Route path="buyer-requirements" element={<CustomerPortalBuyerRequirements />} />
+            <Route path="buyer-requirements/:requirementId" element={<CustomerPortalBuyerRequirementDetail />} />
+            <Route path="shortlist" element={<CustomerPortalShortlist />} />
+            <Route path="booking-journey" element={<CustomerPortalBookingJourney />} />
+            <Route path="booking-requests" element={<CustomerPortalBookingRequests />} />
+            <Route path="booking-requests/:requestId" element={<CustomerPortalBookingRequestDetail />} />
           </Route>
         </Route>
 
@@ -427,7 +475,7 @@ export default function AppRoutes() {
         <Route path="/platform" element={<PlatformProtectedRoute />}>
           <Route element={<PlatformLayout />}>
             <Route index element={<Navigate to="/platform/dashboard" replace />} />
-            <Route path="dashboard" element={<PlatformDashboardPage />} />
+            <Route path="dashboard" element={<PlatformDashboardRoute />} />
             <Route
               path="dashboards/:scope/:roleKey/:industryKey?"
               element={<PlatformDashboardPage />}
@@ -454,6 +502,7 @@ export default function AppRoutes() {
             element={
               <DashboardLayout>
                 <ManagerDashboard />
+                <InsightShortcuts />
               </DashboardLayout>
             }
           />
@@ -462,6 +511,7 @@ export default function AppRoutes() {
             element={
               <DashboardLayout>
                 <SalesDashboard />
+                <InsightShortcuts />
               </DashboardLayout>
             }
           />
@@ -470,6 +520,7 @@ export default function AppRoutes() {
             element={
               <DashboardLayout>
                 <OperationsDashboard />
+                <InsightShortcuts />
               </DashboardLayout>
             }
           />
@@ -478,6 +529,7 @@ export default function AppRoutes() {
             element={
               <DashboardLayout>
                 <SupportDashboard />
+                <InsightShortcuts />
               </DashboardLayout>
             }
           />
@@ -486,6 +538,7 @@ export default function AppRoutes() {
             element={
               <DashboardLayout>
                 <AuditorDashboard />
+                <InsightShortcuts />
               </DashboardLayout>
             }
           />
@@ -495,6 +548,7 @@ export default function AppRoutes() {
             element={
               <DashboardLayout>
                 <DashboardResolver />
+                <InsightShortcuts />
               </DashboardLayout>
             }
           />
@@ -569,6 +623,61 @@ export default function AppRoutes() {
               <DashboardLayout>
                 <Reports />
               </DashboardLayout>
+            }
+          />
+
+          <Route
+            path="/:industry/forecast"
+            element={
+              <IndustryModuleGate module="forecast">
+                <DashboardLayout>
+                  <SalesForecast />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/lead-scoring"
+            element={
+              <IndustryModuleGate module="lead-scoring">
+                <DashboardLayout>
+                  <LeadScoring />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/customer-booking-requests"
+            element={
+              <IndustryModuleGate module="customer-booking-requests">
+                <DashboardLayout>
+                  <CustomerBookingRequests />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/customer-booking-requests/:requestId"
+            element={
+              <IndustryModuleGate module="customer-booking-requests">
+                <DashboardLayout>
+                  <CustomerBookingRequestDetail />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/trash"
+            element={
+              <IndustryModuleGate module="trash">
+                <DashboardLayout>
+                  <Trash />
+                </DashboardLayout>
+              </IndustryModuleGate>
             }
           />
 
@@ -914,6 +1023,10 @@ export default function AppRoutes() {
           <Route path="/activities" element={<ModuleRedirect target="activities" />} />
           <Route path="/tasks" element={<ModuleRedirect target="tasks" />} />
           <Route path="/reports" element={<ModuleRedirect target="reports" />} />
+          <Route path="/forecast" element={<ModuleRedirect target="forecast" />} />
+          <Route path="/lead-scoring" element={<ModuleRedirect target="lead-scoring" />} />
+          <Route path="/trash" element={<ModuleRedirect target="trash" />} />
+          <Route path="/customer-booking-requests" element={<ModuleRedirect target="customer-booking-requests" />} />
           <Route path="/pipelines" element={<ModuleRedirect target="pipelines" />} />
           <Route path="/workflows" element={<ModuleRedirect target="workflows" />} />
           <Route path="/form-builder" element={<ModuleRedirect target="form-builder" />} />

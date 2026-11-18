@@ -18,6 +18,7 @@ import type { ReportFilters } from "../../services/reportService";
 import { useTheme } from "../../context/ThemeContext";
 import { ExportFormatMenu } from "../../components/common/import-export/ExportFormatMenu";
 import { MODULE_CONFIGS } from "../../config/importExportConfig";
+import { getLeadStatusLabel } from "../../utils/leadStatus";
 import "./Reports.css";
 
 const CHART_COLORS = [
@@ -231,7 +232,7 @@ export default function Reports() {
                     { metric: "Deals & Sales", label: "Won Revenue", value: report.sales.won_revenue, percentage: "" },
                     { metric: "Leads", label: "Total Leads", value: report.leads.total_leads, percentage: "" },
                     { metric: "Leads", label: "Qualified Leads", value: report.leads.qualified_leads, percentage: `${report.leads.conversion_rate}%` },
-                    ...report.leads.status_breakdown.map((s) => ({ metric: "Lead Status", label: s.status, value: s.count, percentage: "" })),
+                    ...report.leads.status_breakdown.map((s) => ({ metric: "Lead Status", label: getLeadStatusLabel(s.status), value: s.count, percentage: "" })),
                     { metric: "Tasks", label: "Total Tasks", value: report.tasks.total_tasks, percentage: "" },
                     { metric: "Tasks", label: "Pending Tasks", value: report.tasks.pending_tasks, percentage: "" },
                     { metric: "Tasks", label: "Completed Tasks", value: report.tasks.completed_tasks, percentage: "" },
@@ -415,7 +416,9 @@ export default function Reports() {
                         paddingAngle={activeLeadChartData.length > 1 ? 3 : 0}
                         stroke={isDark ? "#1f1f1f" : "#ffffff"}
                         strokeWidth={2}
-                        label={renderPieLabel}
+                        label={(entry: any) =>
+                          renderPieLabel({ ...entry, name: getLeadStatusLabel(entry?.name) })
+                        }
                         labelLine={{
                           stroke: isDark ? "#94a3b8" : "#64748b",
                           strokeWidth: 1.5,
@@ -431,6 +434,7 @@ export default function Reports() {
                       <Tooltip
                         contentStyle={tooltipStyle}
                         itemStyle={{ color: tooltipText }}
+                        formatter={(val, name) => [val, getLeadStatusLabel(String(name))]}
                       />
                       <Legend
                         verticalAlign="bottom"
@@ -447,7 +451,7 @@ export default function Reports() {
                               fontWeight: 500,
                             }}
                           >
-                            {value}
+                            {getLeadStatusLabel(String(value))}
                           </span>
                         )}
                       />

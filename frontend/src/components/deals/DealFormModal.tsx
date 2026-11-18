@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import CrmFormModal from "../common/CrmFormModal";
 import type { Deal, DealCreate, DealUpdate } from "../../types/deal";
 import type { User } from "../../types/user";
 import type { Lead } from "../../types/lead";
@@ -519,11 +520,11 @@ export default function DealFormModal({
     };
 
     return (
-      <div className="deal-form-group" key={field.id || field.field_key}>
+      <div className="crm-field" key={field.id || field.field_key}>
         <label htmlFor={commonProps.id}>
           {field.field_label}
           {field.is_required && (
-            <span style={{ color: "#e53e3e" }}> *</span>
+            <span className="crm-required"> *</span>
           )}
         </label>
 
@@ -560,7 +561,6 @@ export default function DealFormModal({
               type="checkbox"
               checked={Boolean(value)}
               onChange={(e) => updateCustomValue(field, e.target.checked)}
-              style={{ width: "auto", minHeight: "auto" }}
             />
             {field.field_label}
           </label>
@@ -593,7 +593,7 @@ export default function DealFormModal({
         )}
 
         {fieldError && (
-          <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+          <span className="crm-field-error">
             {fieldError}
           </span>
         )}
@@ -602,139 +602,52 @@ export default function DealFormModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <style>{`
-        .deal-form-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-        .deal-form-row-two-column {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-        }
-        .deal-form-group {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          min-width: 0;
-        }
-        .deal-form-group label {
-          font-weight: 500;
-          font-size: 0.875rem;
-          color: #4a5568;
-        }
-        .dashboard-wrapper.dark .deal-form-group label {
-          color: #e2e8f0;
-        }
-        .deal-form-group input,
-        .deal-form-group select,
-        .deal-form-group textarea {
-          box-sizing: border-box;
-          width: 100%;
-          padding: 10px 12px;
-          border: 1px solid #cbd5e0;
-          border-radius: 6px;
-          font-size: 0.95rem;
-          background: #fff;
-          color: inherit;
-          font-family: inherit;
-          min-height: 42px;
-          line-height: 1.5;
-        }
-        .deal-form-group textarea {
-          resize: vertical;
-          min-height: 80px;
-        }
-        .dashboard-wrapper.dark .deal-form-group input,
-        .dashboard-wrapper.dark .deal-form-group select,
-        .dashboard-wrapper.dark .deal-form-group textarea {
-          background: #2a2a2a;
-          border-color: #4a5568;
-        }
-        .deal-form-group input:focus,
-        .deal-form-group select:focus,
-        .deal-form-group textarea:focus {
-          border-color: #4a90e2;
-          outline: none;
-        }
-        .deal-form-group input.input-error,
-        .deal-form-group select.input-error,
-        .deal-form-group textarea.input-error {
-          border-color: #e53e3e !important;
-        }
-        .deal-modal-footer {
-          display: flex;
-          justify-content: flex-end;
-          gap: 12px;
-          margin-top: 24px;
-          padding-top: 16px;
-          border-top: 1px solid #eaeaea;
-        }
-        .dashboard-wrapper.dark .deal-modal-footer {
-          border-top-color: #333;
-        }
-        @media (max-width: 600px) {
-          .deal-form-row-two-column {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
-
-      <div
-        className="modal-content"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: "680px",
-          width: "100%",
-          maxHeight: "90vh",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div className="modal-header">
-          <h2>{isEdit ? "Edit Deal" : "Create Deal"}</h2>
-          <button className="btn-close" onClick={onClose} disabled={loading}>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="18" x2="18" y2="6" />
-            </svg>
+    <CrmFormModal
+      title={isEdit ? "Edit Deal" : "Create Deal"}
+      description={
+        isEdit
+          ? "Update this deal's details, relationships and stage."
+          : "Create a deal and link it to an account, contact and pipeline stage."
+      }
+      onClose={onClose}
+      closeDisabled={loading}
+      footer={
+        <>
+          <button
+            type="button"
+            className="crm-btn crm-btn-secondary"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
           </button>
-        </div>
-
-        <div className="modal-body" style={{ overflowY: "auto", flex: 1 }}>
+          <button
+            type="button"
+            className="crm-btn crm-btn-primary"
+            onClick={handleSubmit}
+            disabled={loading || dataLoading || stagesLoading || customFormsLoading}
+          >
+            {loading ? "Saving..." : isEdit ? "Save Changes" : "Create Deal"}
+          </button>
+        </>
+      }
+    >
           {error && (
-            <div
-              className="alert-box error"
-              style={{
-                padding: "10px 14px",
-                marginBottom: "20px",
-                borderRadius: "6px",
-                background: "#fcebea",
-                color: "#cc0000",
-                fontSize: "0.875rem",
-              }}
-            >
+            <div className="crm-alert crm-alert-error" role="alert">
               {error}
             </div>
           )}
 
           {dataLoading && (
-            <p style={{ color: "#718096", fontSize: "0.875rem" }}>
+            <p className="crm-muted-text">
               Loading deal form data...
             </p>
           )}
 
-          <div className="deal-form-grid">
-            <div className="deal-form-group">
+          <div className="crm-stack">
+            <div className="crm-field">
               <label>
-                Deal Name <span style={{ color: "#e53e3e" }}>*</span>
+                Deal Name <span className="crm-required">*</span>
               </label>
               <input
                 type="text"
@@ -749,14 +662,14 @@ export default function DealFormModal({
                 className={fieldErrors.name ? "input-error" : ""}
               />
               {fieldErrors.name && (
-                <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+                <span className="crm-field-error">
                   {fieldErrors.name}
                 </span>
               )}
             </div>
 
-            <div className="deal-form-row-two-column">
-              <div className="deal-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Account</label>
                 <select
                   value={accountId}
@@ -806,25 +719,19 @@ export default function DealFormModal({
                 </select>
 
                 {!accountId && (
-                  <span
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#718096",
-                      marginTop: "2px",
-                    }}
-                  >
+                  <span className="crm-field-help">
                     Select an Account first to choose related Leads and Contacts.
                   </span>
                 )}
 
                 {fieldErrors.accountId && (
-                  <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+                  <span className="crm-field-error">
                     {fieldErrors.accountId}
                   </span>
                 )}
               </div>
 
-              <div className="deal-form-group">
+              <div className="crm-field">
                 <label>Contact</label>
                 <select
                   value={contactId}
@@ -849,15 +756,15 @@ export default function DealFormModal({
                   )}
                 </select>
                 {fieldErrors.contactId && (
-                  <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+                  <span className="crm-field-error">
                     {fieldErrors.contactId}
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="deal-form-row-two-column">
-              <div className="deal-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Lead</label>
                 <select
                   value={leadId}
@@ -882,13 +789,13 @@ export default function DealFormModal({
                   )}
                 </select>
                 {fieldErrors.leadId && (
-                  <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+                  <span className="crm-field-error">
                     {fieldErrors.leadId}
                   </span>
                 )}
               </div>
 
-              <div className="deal-form-group">
+              <div className="crm-field">
                 <label>Assigned To</label>
                 <select
                   value={assignedTo}
@@ -905,8 +812,8 @@ export default function DealFormModal({
               </div>
             </div>
 
-            <div className="deal-form-row-two-column">
-              <div className="deal-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Amount</label>
                 <input
                   type="number"
@@ -923,13 +830,13 @@ export default function DealFormModal({
                   className={fieldErrors.amount ? "input-error" : ""}
                 />
                 {fieldErrors.amount && (
-                  <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+                  <span className="crm-field-error">
                     {fieldErrors.amount}
                   </span>
                 )}
               </div>
 
-              <div className="deal-form-group">
+              <div className="crm-field">
                 <label>Expected Close Date</label>
                 <input
                   type="date"
@@ -943,8 +850,8 @@ export default function DealFormModal({
               </div>
             </div>
 
-            <div className="deal-form-row-two-column">
-              <div className="deal-form-group">
+            <div className="crm-form-grid">
+              <div className="crm-field">
                 <label>Pipeline</label>
                 <select
                   value={pipelineId}
@@ -972,15 +879,15 @@ export default function DealFormModal({
                   ))}
                 </select>
                 {pipelines.length === 0 && !dataLoading && (
-                  <span style={{ fontSize: "0.75rem", color: "#718096" }}>
+                  <span className="crm-field-help">
                     No active pipelines found. You can still use the standard stages.
                   </span>
                 )}
               </div>
 
-              <div className="deal-form-group">
+              <div className="crm-field">
                 <label>
-                  Stage <span style={{ color: "#e53e3e" }}>*</span>
+                  Stage <span className="crm-required">*</span>
                 </label>
 
                 {pipelineId ? (
@@ -1031,14 +938,14 @@ export default function DealFormModal({
                 )}
 
                 {fieldErrors.pipelineStageId && (
-                  <span style={{ color: "#e53e3e", fontSize: "0.8rem" }}>
+                  <span className="crm-field-error">
                     {fieldErrors.pipelineStageId}
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="deal-form-group">
+            <div className="crm-field">
               <label>Description</label>
               <textarea
                 placeholder="Details about the deal..."
@@ -1050,27 +957,15 @@ export default function DealFormModal({
 
             {templates.length > 0 && (
               <>
-                <div
-                  style={{
-                    borderTop: "1px solid #e2e8f0",
-                    paddingTop: "18px",
-                    marginTop: "4px",
-                  }}
-                >
-                  <h3 style={{ margin: "0 0 6px", fontSize: "1rem" }}>
+                <div className="crm-subsection">
+                  <h3 className="crm-subsection-title">
                     Custom Fields
                   </h3>
-                  <p
-                    style={{
-                      margin: "0 0 14px",
-                      color: "#718096",
-                      fontSize: "0.85rem",
-                    }}
-                  >
+                  <p className="crm-muted-text crm-subsection-desc">
                     Choose a Deal form to enter additional information.
                   </p>
 
-                  <div className="deal-form-group">
+                  <div className="crm-field">
                     <label htmlFor="deal-custom-template">
                       Form Template
                     </label>
@@ -1091,7 +986,7 @@ export default function DealFormModal({
                 </div>
 
                 {customFormsLoading && (
-                  <p style={{ color: "#718096", fontSize: "0.85rem" }}>
+                  <p className="crm-muted-text">
                     Loading custom fields...
                   </p>
                 )}
@@ -1103,37 +998,13 @@ export default function DealFormModal({
 
                 {selectedTemplate &&
                   selectedTemplate.fields.length === 0 && (
-                    <p style={{ color: "#718096", fontSize: "0.85rem" }}>
+                    <p className="crm-muted-text">
                       This template has no fields yet.
                     </p>
                   )}
               </>
             )}
           </div>
-        </div>
-
-        <div className="deal-modal-footer" style={{ padding: "0 24px 24px" }}>
-          <button
-            className="btn-secondary"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            className="btn-primary"
-            onClick={handleSubmit}
-            disabled={
-              loading ||
-              dataLoading ||
-              stagesLoading ||
-              customFormsLoading
-            }
-          >
-            {loading ? "Saving..." : isEdit ? "Save Changes" : "Create Deal"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </CrmFormModal>
   );
 }

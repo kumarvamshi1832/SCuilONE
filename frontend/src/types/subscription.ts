@@ -266,3 +266,4 @@ export interface UnsubscribeResponse {
   company_name: string;
   email_reminders_opt_out: boolean;
 }
+

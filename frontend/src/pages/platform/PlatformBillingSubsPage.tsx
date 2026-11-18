@@ -216,7 +216,22 @@ export default function PlatformBillingSubsPage() {
         } else if (subView === "expired") {
           res = await platformService.listExpiredSubscriptions();
         } else if (subView === "active") {
-          res = await platformService.listSubscriptions({ status: "Active" });
+          const [activeRes, upcomingRes] = await Promise.all([
+            platformService.listSubscriptions({ status: "Active" }),
+            platformService.listUpcomingRenewals(365).catch(() => ({ items: [] })),
+          ]);
+          const upMap = new Map<string, PlatformSubscriptionItem>();
+          for (const item of upcomingRes.items || []) {
+            if (item.subscription_id) upMap.set(item.subscription_id, item);
+            if (item.id) upMap.set(item.id, item);
+            if (item.tenant_id) upMap.set(item.tenant_id, item);
+          }
+          res = {
+            items: (activeRes.items || []).map((s) => {
+              const match = upMap.get(s.subscription_id || s.id || s.tenant_id);
+              return match ? { ...s, starts_at: s.starts_at || match.starts_at } : s;
+            }),
+          };
         } else if (subView === "past_due") {
           res = await platformService.listSubscriptions({ status: "Past Due" });
         } else if (subView === "suspended") {
@@ -224,10 +239,11 @@ export default function PlatformBillingSubsPage() {
         } else if (subView === "cancelled") {
           res = await platformService.listSubscriptions({ status: "Cancelled" });
         } else {
-          // "all": fetch all subscriptions from /subscriptions and merge with /subscriptions/trialing
-          const [allRes, trialRes] = await Promise.all([
+          // "all": fetch all subscriptions from /subscriptions and merge with rich details from trialing & upcoming
+          const [allRes, trialRes, upcomingRes] = await Promise.all([
             platformService.listSubscriptions(),
             platformService.listTrialingSubscriptions().catch(() => ({ items: [] })),
+            platformService.listUpcomingRenewals(365).catch(() => ({ items: [] })),
           ]);
           const allItems = allRes.items || [];
           const seenIds = new Set(allItems.map((s) => s.subscription_id || s.id || s.tenant_id));
@@ -235,19 +251,23 @@ export default function PlatformBillingSubsPage() {
           const missingTrials = trialItems.filter(
             (t) => !seenIds.has(t.subscription_id || t.id || t.tenant_id)
           );
-          const trialMap = new Map(
-            trialItems.map((t) => [t.subscription_id || t.id || t.tenant_id, t])
-          );
+          const detailMap = new Map<string, PlatformSubscriptionItem>();
+          for (const item of [...(upcomingRes.items || []), ...(trialRes.items || [])]) {
+            if (item.subscription_id) detailMap.set(item.subscription_id, item);
+            if (item.id) detailMap.set(item.id, item);
+            if (item.tenant_id) detailMap.set(item.tenant_id, item);
+          }
           const merged = [
             ...allItems.map((s) => {
-              const match = trialMap.get(s.subscription_id || s.id || s.tenant_id);
+              const match = detailMap.get(s.subscription_id || s.id || s.tenant_id);
               if (match) {
                 return {
                   ...s,
+                  starts_at: s.starts_at || match.starts_at,
                   trial_start_date: s.trial_start_date || match.trial_start_date,
                   trial_end_date: s.trial_end_date || match.trial_end_date,
-                  trial_days_remaining: match.trial_days_remaining,
-                  is_in_trial: match.is_in_trial ?? true,
+                  trial_days_remaining: match.trial_days_remaining ?? s.trial_days_remaining,
+                  is_in_trial: match.is_in_trial ?? s.is_in_trial,
                   current_plan: s.current_plan || match.current_plan,
                   selected_plan: s.selected_plan || match.selected_plan,
                 };
@@ -928,6 +948,7 @@ export default function PlatformBillingSubsPage() {
                       <th>Amount</th>
                       <th>Billing Cycle</th>
                       <th>Status</th>
+                      <th>Start Date</th>
                       <th>Trial Period</th>
                       <th>Renewal Date</th>
                       <th>Actions</th>
@@ -949,6 +970,8 @@ export default function PlatformBillingSubsPage() {
                         s.selected_plan?.billing_cycle ||
                         "—";
                       const amountLabel = getSubPriceDisplay(s);
+                      const rawStart = s.starts_at || s.trial_start_date;
+                      const startDate = rawStart ? rawStart.slice(0, 10) : "—";
                       const trialStart = s.trial_start_date
                         ? s.trial_start_date.slice(0, 10)
                         : (s.status?.toLowerCase() === "trial" && s.starts_at ? s.starts_at.slice(0, 10) : null);
@@ -990,6 +1013,11 @@ export default function PlatformBillingSubsPage() {
                                 Comp
                               </span>
                             )}
+                          </td>
+                          <td style={{ fontSize: 12.5 }}>
+                            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {startDate}
+                            </span>
                           </td>
                           <td style={{ fontSize: 12.5 }}>
                             {trialStart || trialEnd ? (

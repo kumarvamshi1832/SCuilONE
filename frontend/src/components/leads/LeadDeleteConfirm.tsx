@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { deleteLead } from "../../services/leadService";
+import "./LeadDeleteConfirm.css";
 
 interface LeadDeleteConfirmProps {
   leadId: string;
@@ -98,21 +99,11 @@ export default function LeadDeleteConfirm({
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
             </div>
-            <p style={{ fontSize: "0.95rem", marginBottom: "4px" }}>
+            <p className="lead-delete-question">
               Are you sure you want to delete this lead?
             </p>
-            <p
-              style={{
-                fontWeight: 600,
-                fontSize: "1rem",
-                marginBottom: "4px",
-              }}
-            >
-              {leadName}
-            </p>
-            <p style={{ color: "#718096", fontSize: "0.85rem" }}>
-              This action cannot be undone.
-            </p>
+            <p className="lead-delete-name">{leadName}</p>
+            <p className="lead-delete-warning">This action cannot be undone.</p>
           </div>
         </div>
 
