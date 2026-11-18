@@ -17,6 +17,7 @@ from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.lead import Lead
+from app.models.mixins import soft_delete_record
 from app.models.deal import Deal
 from app.models.activity import Activity
 from app.models.document import Document
@@ -883,32 +884,6 @@ def delete_lead(
             detail="Lead not found",
         )
 
-    linked_deal = db.query(Deal.id).filter(
-        Deal.lead_id == lead.id,
-        Deal.tenant_id == tenant_id,
-    ).first()
-
-    if linked_deal:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Cannot delete this lead because it is linked to a deal. "
-                "Archive the lead or handle the linked deal first."
-            ),
-        )
-
-    blockers = get_lead_delete_blockers(db, tenant_id, lead.id)
-
-    if blockers:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Cannot delete this lead because it is linked to "
-                + ", ".join(blockers)
-                + ". Update the lead's status instead of deleting it."
-            ),
-        )
-
     try:
         log_audit(
             db=db,
@@ -928,18 +903,9 @@ def delete_lead(
                 "created_by": lead.created_by,
             },
         )
-        db.delete(lead)
+        soft_delete_record(lead, current_user["user_id"])
         db.commit()
 
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This record is still referenced by other records "
-                "and cannot be deleted."
-            ),
-        )
     except Exception:
         db.rollback()
         raise

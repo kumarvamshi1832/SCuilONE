@@ -2,14 +2,15 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, DateTime, ForeignKey, Text, Integer
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.connection import Base
+from app.models.mixins import SoftDeleteMixin, CustomFieldsMixin
 
 
-class Lead(Base):
+class Lead(SoftDeleteMixin, CustomFieldsMixin, Base):
     __tablename__ = "leads"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -72,6 +73,13 @@ class Lead(Base):
         Text,
         nullable=True
     )
+
+    # Explainable, tenant-local rule-based lead score (0-100).
+    score: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0", index=True)
+    engagement_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    score_label: Mapped[str] = mapped_column(String(20), nullable=False, default="Cold", server_default="Cold", index=True)
+    score_breakdown: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

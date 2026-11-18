@@ -156,6 +156,8 @@ permissions = [
 
     ("customer_portal.invite", "Invite customer contacts to the portal"),
     ("customer_portal.manage", "Suspend or reactivate customer portal users"),
+    ("customer_chat.access", "Access assigned independent customer conversations"),
+    ("customer_chat.manage", "Manage customer conversation assignments and participants"),
 
     ("custom_field.view", "View custom field definitions"),
     ("custom_field.manage", "Create, change and retire custom fields"),

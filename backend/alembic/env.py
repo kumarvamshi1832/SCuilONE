@@ -39,7 +39,7 @@ from app.models.building_image import BuildingImage
 from app.models.buyer_requirement import BuyerRequirement
 from app.models.property_match import PropertyMatch
 from app.models.site_visit import SiteVisit
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingNominee
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
@@ -92,6 +92,7 @@ from app.models.platform import (
     PlatformSetting,
 )
 from app.models.ai_conversation import AIConversation, AIMessage
+from app.models.customer_chat import CustomerChatConversation, CustomerChatParticipant, CustomerChatMessage, CustomerChatAssignmentHistory
 from app.models.customer_property_shortlist import CustomerPropertyShortlist
 from app.models.customer_booking_journey import CustomerBookingRequest, CustomerSiteVisitFeedback, CustomerPortalJourneyFile
 from app.models.customer_portal_lifecycle import CustomerPortalNotification, CustomerBookingCancellationRequest, PropertyHandover, CustomerPropertyServiceRequest

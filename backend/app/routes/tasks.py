@@ -165,6 +165,46 @@ def _open_task_exists(tenant_id: UUID):
     )
 
 
+@router.get("/deals-without-follow-up")
+def deals_without_follow_up(
+    mine: bool = False,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=100),
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("deal.view")),
+    db: Session = Depends(get_db),
+):
+    """Open deals that do not have an open follow-up activity assigned to an owner."""
+    tenant_id = UUID(str(current_user["tenant_id"]))
+    user_id = UUID(str(current_user["user_id"]))
+    closed = {"won", "closed won", "closed_won", "closed-won", "lost", "closed lost", "closed_lost", "closed-lost"}
+    open_task = exists().where(
+        Activity.deal_id == Deal.id,
+        Activity.tenant_id == tenant_id,
+        ~_status_norm().in_(INACTIVE),
+    )
+    q = db.query(Deal).filter(
+        Deal.tenant_id == tenant_id,
+        ~func.lower(func.trim(Deal.stage)).in_(closed),
+        ~open_task,
+    )
+    if mine:
+        q = q.filter(Deal.assigned_to == user_id)
+    total = q.count()
+    rows = q.order_by(Deal.expected_close_date.asc().nullslast(), Deal.updated_at.desc()).offset(skip).limit(limit).all()
+    owner_ids = {d.assigned_to for d in rows if d.assigned_to}
+    owners = {u.id: u.full_name for u in db.query(User.id, User.full_name).filter(User.id.in_(owner_ids)).all()} if owner_ids else {}
+    return {
+        "total": total,
+        "deals": [
+            {"id": d.id, "name": d.name, "stage": d.stage, "amount": d.amount,
+             "expected_close_date": d.expected_close_date, "assigned_to": d.assigned_to,
+             "assigned_to_name": owners.get(d.assigned_to)}
+            for d in rows
+        ],
+    }
+
+
 @router.get("/leads-without-follow-up")
 def leads_without_follow_up(
     mine: bool = False,

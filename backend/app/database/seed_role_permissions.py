@@ -61,6 +61,8 @@ role_permissions = {
 
         "support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete",
         "customer_portal.invite", "customer_portal.manage",
+        "customer_chat.access",
+        "customer_chat.manage",
     ],
 
     "Tenant Admin": [
@@ -119,6 +121,8 @@ role_permissions = {
 
         "support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete",
         "customer_portal.invite", "customer_portal.manage",
+        "customer_chat.access",
+        "customer_chat.manage",
     ],
 
     "Manager": [
@@ -176,6 +180,8 @@ role_permissions = {
 
         "support_ticket.view", "support_ticket.create", "support_ticket.update", "support_ticket.delete",
         "customer_portal.invite", "customer_portal.manage",
+        "customer_chat.access",
+        "customer_chat.manage",
     ],
 
     "Sales User": [
@@ -211,6 +217,7 @@ role_permissions = {
 
         "software_sprint.view", "software_invoice.view",
         "support_ticket.view", "support_ticket.create", "customer_portal.invite",
+        "customer_chat.access",
     ],
 
     "Operations User": [
@@ -249,6 +256,7 @@ role_permissions = {
 
         "software_time.view", "software_time.create", "software_time.update",
         "support_ticket.view", "support_ticket.create", "support_ticket.update",
+        "customer_chat.access",
     ],
 
     "Support User": [
@@ -278,6 +286,7 @@ role_permissions = {
         "software_invoice.view", "software_invoice.payment.view",
         "support_ticket.view", "support_ticket.create", "support_ticket.update",
         "customer_portal.invite",
+        "customer_chat.access",
     ],
 
     "Read-only / Auditor": [

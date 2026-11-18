@@ -26,7 +26,10 @@ MAX_BODY_CHARS = 100_000
 
 # ----------------------------------------------------------------- webhook auth
 def webhook_token(tenant_id: uuid.UUID) -> str | None:
-    secret = settings.EMAIL_WEBHOOK_SECRET
+    # A dedicated webhook secret is preferred. The required JWT secret is a safe
+    # fallback so /api/v1/emails/webhook-info does not fail with 503 on existing
+    # installations that have not yet added EMAIL_WEBHOOK_SECRET to .env.
+    secret = settings.EMAIL_WEBHOOK_SECRET or settings.JWT_SECRET_KEY
     if not secret:
         return None
     return hmac.new(secret.encode(), f"email-inbound:{tenant_id}".encode(), hashlib.sha256).hexdigest()

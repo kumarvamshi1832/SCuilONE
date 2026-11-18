@@ -58,7 +58,14 @@ class EmailRelink(EmailLinks):
 
 
 def _require_links_valid(db: Session, tenant_id: UUID, links: dict) -> None:
-    svc.validate_links(db, tenant_id, **links)
+    svc.validate_links(
+        db,
+        tenant_id,
+        lead_id=links.get("lead_id"),
+        contact_id=links.get("contact_id"),
+        account_id=links.get("account_id"),
+        deal_id=links.get("deal_id"),
+    )
 
 
 def _get_email(db: Session, tenant_id: UUID, email_id: UUID) -> EmailLog:

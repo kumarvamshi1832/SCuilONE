@@ -50,6 +50,7 @@ from app.routes.software_delivery_reports import (
 from app.routes.software_invoices import router as software_invoices_router
 from app.routes.support_tickets import router as support_tickets_router
 from app.routes.customer_portal import router as customer_portal_router
+from app.routes.customer_chat import staff_router as customer_chat_staff_router, portal_router as customer_chat_portal_router
 from app.routes.customer_booking_journey import router as customer_booking_journey_router
 from app.routes.customer_portal_lifecycle import router as customer_portal_lifecycle_router
 from app.routes.tasks import router as tasks_router
@@ -198,6 +199,8 @@ app.include_router(email_webhook_router)
 app.include_router(custom_fields_router)
 app.include_router(lead_scoring_router)
 app.include_router(customer_portal_router)
+app.include_router(customer_chat_staff_router)
+app.include_router(customer_chat_portal_router)
 app.include_router(customer_booking_journey_router)
 app.include_router(customer_portal_lifecycle_router)
 app.include_router(platform_admin_router)

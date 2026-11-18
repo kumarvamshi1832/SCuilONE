@@ -279,17 +279,19 @@ def create_activity(
 
     activity_data = data.model_dump(exclude={"related_records"})
 
-    if (
-        activity_data["activity_type"] == "Task"
-        and activity_data["assigned_to"] is None
-        and activity_data["lead_id"] is not None
-    ):
-        linked_lead = db.query(Lead).filter(
-            Lead.id == activity_data["lead_id"],
-            Lead.tenant_id == tenant_id,
-        ).first()
-        if linked_lead:
-            activity_data["assigned_to"] = linked_lead.assigned_to
+    if activity_data["activity_type"] == "Task" and activity_data["assigned_to"] is None:
+        if activity_data["lead_id"] is not None:
+            linked_lead = db.query(Lead).filter(
+                Lead.id == activity_data["lead_id"], Lead.tenant_id == tenant_id,
+            ).first()
+            if linked_lead and linked_lead.assigned_to:
+                activity_data["assigned_to"] = linked_lead.assigned_to
+        if activity_data["assigned_to"] is None and activity_data["deal_id"] is not None:
+            linked_deal = db.query(Deal).filter(
+                Deal.id == activity_data["deal_id"], Deal.tenant_id == tenant_id,
+            ).first()
+            if linked_deal:
+                activity_data["assigned_to"] = linked_deal.assigned_to
 
     validated_data = ActivityCreate(**activity_data)
     validate_related_records(validated_data, tenant_id, db)
@@ -501,17 +503,19 @@ def update_activity(
         link_inputs = [ActivityLinkInput(**item) for item in requested_links]
         validated_links = validate_activity_links(link_inputs, tenant_id, db)
 
-    if (
-        activity.activity_type == "Task"
-        and activity.assigned_to is None
-        and activity.lead_id is not None
-    ):
-        linked_lead = db.query(Lead).filter(
-            Lead.id == activity.lead_id,
-            Lead.tenant_id == tenant_id,
-        ).first()
-        if linked_lead:
-            activity.assigned_to = linked_lead.assigned_to
+    if activity.activity_type == "Task" and activity.assigned_to is None:
+        if activity.lead_id is not None:
+            linked_lead = db.query(Lead).filter(
+                Lead.id == activity.lead_id, Lead.tenant_id == tenant_id,
+            ).first()
+            if linked_lead and linked_lead.assigned_to:
+                activity.assigned_to = linked_lead.assigned_to
+        if activity.assigned_to is None and activity.deal_id is not None:
+            linked_deal = db.query(Deal).filter(
+                Deal.id == activity.deal_id, Deal.tenant_id == tenant_id,
+            ).first()
+            if linked_deal:
+                activity.assigned_to = linked_deal.assigned_to
 
     try:
         if validated_links is not None:

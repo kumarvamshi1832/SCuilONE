@@ -89,6 +89,7 @@ from app.schemas.customer_portal import (
     PortalTicketResponse,
 )
 from app.services.audit_service import log_audit
+from app.services.customer_chat_service import ensure_invitation_conversation
 from app.services.email_service import (
     send_customer_portal_invitation_email,
     send_customer_portal_password_reset_email,
@@ -483,6 +484,7 @@ async def invite_customer_contact(
         db.flush()
 
     invitation, raw_token = _issue_portal_invitation(db, tenant_id, staff_user_id, portal_user)
+    ensure_invitation_conversation(db, tenant_id=tenant_id, portal_user=portal_user, inviter_user_id=staff_user_id)
     try:
         log_audit(
             db,

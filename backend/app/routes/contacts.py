@@ -10,6 +10,7 @@ from app.database.connection import SessionLocal
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.models.contact import Contact
+from app.models.mixins import soft_delete_record
 from app.models.user import User
 from app.models.account import Account
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactResponse
@@ -552,7 +553,7 @@ def delete_contact(
             before_data=contact_audit_data(contact),
         )
 
-        db.delete(contact)
+        soft_delete_record(contact, user_id)
         db.commit()
 
     except Exception:

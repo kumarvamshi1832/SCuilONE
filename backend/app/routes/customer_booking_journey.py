@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pathlib import Path
 import io
 import cloudinary.uploader
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
@@ -16,7 +16,7 @@ from app.models.property_match import PropertyMatch
 from app.models.property import Property
 from app.models.buyer_requirement import BuyerRequirement
 from app.models.customer_portal import CustomerPortalUser
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingNominee
 from app.models.payment import Payment
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.models.payment_refund import PaymentRefund
@@ -27,6 +27,7 @@ from app.models.lead import Lead
 from app.services.audit_service import log_audit
 from app.routes.customer_portal import require_portal_user, get_db, _notify_staff_user, staff_context
 from app.services.customer_portal_notifications import notify_customer
+from app.schemas.booking import CustomerBookingDetailsUpdate
 
 router = APIRouter(tags=["Customer Portal - Real Estate Booking Journey"])
 
@@ -69,10 +70,16 @@ class AgreementVerifyIn(BaseModel):
 class PaymentSubmitIn(BaseModel):
     installment_id: UUID | None = None
     amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
-    payment_method: str = Field(pattern="^(Cash|Bank Transfer|UPI|Cheque|Card|Other)$")
+    payment_method: str = Field(pattern="^(Cash|Bank Transfer|UPI|Cheque|Demand Draft|Card|Other)$")
     transaction_reference: str | None = Field(default=None, max_length=255)
     payment_date: datetime | None = None
     notes: str | None = Field(default=None, max_length=3000)
+
+    @model_validator(mode="after")
+    def require_reference_for_traceable_modes(self):
+        if self.payment_method in ("UPI", "Bank Transfer", "Cheque", "Demand Draft", "Card") and not (self.transaction_reference or "").strip():
+            raise ValueError("Transaction/reference number is required for this payment mode.")
+        return self
 
 
 def _now():
@@ -235,7 +242,7 @@ def get_customer_booking_request(request_id: UUID, portal: dict = Depends(requir
     if row.booking_id:
         booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id).first()
         if booking:
-            data["booking"] = {"id": str(booking.id), "status": booking.status, "booking_amount": str(booking.booking_amount), "agreed_price": str(booking.agreed_price)}
+            data["booking"] = {"id": str(booking.id), "status": booking.status, "buyer_name": booking.buyer_name, "buyer_email": booking.buyer_email, "buyer_phone": booking.buyer_phone, "buyer_address": booking.buyer_address, "buyer_details_submitted_at": booking.buyer_details_submitted_at, "nominees": [{"id": str(n.id), "nominee_name": n.nominee_name, "relationship": n.relationship, "phone": n.phone, "email": n.email, "date_of_birth": n.date_of_birth, "address": n.address, "allocation_percentage": str(n.allocation_percentage) if n.allocation_percentage is not None else None, "remarks": n.remarks} for n in db.query(BookingNominee).filter(BookingNominee.tenant_id == row.tenant_id, BookingNominee.booking_id == booking.id).order_by(BookingNominee.created_at).all()], "booking_amount": str(booking.booking_amount), "agreed_price": str(booking.agreed_price)}
             payments = db.query(Payment).filter(Payment.booking_id == booking.id, Payment.tenant_id == row.tenant_id).order_by(Payment.created_at.desc()).all()
             data["payments"] = [{"id": str(p.id), "amount": str(p.amount), "method": p.payment_method, "reference": p.transaction_reference, "status": p.status, "payment_date": p.payment_date, "verified_at": p.verified_at} for p in payments]
     return data
@@ -261,6 +268,9 @@ def staff_get_customer_booking_request(request_id: UUID, current_user: dict = De
     files = db.query(CustomerPortalJourneyFile).filter(CustomerPortalJourneyFile.tenant_id == tenant_id, CustomerPortalJourneyFile.booking_request_id == row.id).order_by(CustomerPortalJourneyFile.uploaded_at.desc()).all()
     data["files"] = [{"id": str(f.id), "purpose": f.purpose, "filename": f.filename, "file_url": f.file_url, "content_type": f.content_type, "file_size": f.file_size, "payment_id": str(f.payment_id) if f.payment_id else None, "agreement_version": f.agreement_version, "uploaded_at": f.uploaded_at} for f in files]
     if row.booking_id:
+        booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == tenant_id).first()
+        if booking:
+            data["booking"] = {"id": str(booking.id), "status": booking.status, "buyer_name": booking.buyer_name, "buyer_email": booking.buyer_email, "buyer_phone": booking.buyer_phone, "buyer_address": booking.buyer_address, "buyer_details_submitted_at": booking.buyer_details_submitted_at, "booking_amount": str(booking.booking_amount), "agreed_price": str(booking.agreed_price), "nominees": [{"id": str(n.id), "nominee_name": n.nominee_name, "relationship": n.relationship, "phone": n.phone, "email": n.email, "date_of_birth": n.date_of_birth, "address": n.address, "allocation_percentage": str(n.allocation_percentage) if n.allocation_percentage is not None else None, "remarks": n.remarks} for n in db.query(BookingNominee).filter(BookingNominee.tenant_id == tenant_id, BookingNominee.booking_id == booking.id).all()]}
         payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == row.booking_id).order_by(Payment.created_at.desc()).all()
         data["payments"] = [{"id": str(p.id), "amount": str(p.amount), "status": p.status, "payment_method": p.payment_method, "transaction_reference": p.transaction_reference, "verified_at": p.verified_at} for p in payments]
     return data
@@ -303,7 +313,7 @@ def staff_decide_booking_request(request_id: UUID, payload: BookingDecisionIn, c
     row.booking_id, row.status, row.agreed_price, row.booking_amount = booking.id, "Approved", payload.agreed_price, payload.booking_amount
     row.payment_preference, row.hold_expires_at, row.staff_notes, row.customer_message = payload.payment_preference, _now() + timedelta(hours=48), payload.notes, payload.customer_message
     notify_customer(db, tenant_id, row.portal_user_id, "Booking request approved",
-                    row.customer_message or "Your booking request was approved. Review the agreement and payment instructions in your portal.",
+                    row.customer_message or f"Your booking request was approved. Booking amount: {payload.booking_amount:,.2f}. Please complete your buyer and nominee details, review the agreement, and submit payment details in your Customer Portal. Payment is subject to staff verification.",
                     "booking_request", "bookings", booking.id)
     log_audit(db, tenant_id, user_id, "CREATE", "bookings", booking.id, "Booking created from approved customer portal request.")
     log_audit(db, tenant_id, user_id, "UPDATE", "properties", prop.id, f"Property reserved for booking {booking.id}.", before_data=property_before, after_data={"id": str(prop.id), "status": prop.status})
@@ -397,6 +407,39 @@ def staff_verify_agreement(request_id: UUID, payload: AgreementVerifyIn, current
     db.commit(); return _request_payload(row)
 
 
+@router.put("/api/v1/customer-portal/booking-requests/{request_id}/buyer-details")
+def customer_update_booking_buyer_details(request_id: UUID, payload: CustomerBookingDetailsUpdate, portal: dict = Depends(require_portal_user), db: Session = Depends(get_db)):
+    row = _customer_request(db, portal, request_id, lock=True)
+    if row.status != "Approved" or not row.booking_id:
+        raise HTTPException(409, "Buyer details can be submitted only after staff approves the booking request and before final confirmation.")
+    _expire_if_needed(db, row)
+    if row.status != "Approved" or (row.hold_expires_at and row.hold_expires_at <= _now()):
+        raise HTTPException(409, "The booking hold has expired. Contact staff before updating buyer details.")
+    booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id).with_for_update().first()
+    if not booking or booking.status != "Pending":
+        raise HTTPException(409, "The booking is no longer accepting customer details.")
+    existing_submitted_payments = db.query(Payment.id).filter(
+        Payment.tenant_id == row.tenant_id,
+        Payment.booking_id == booking.id,
+        Payment.status.in_(["Pending", "Verified"]),
+    ).first()
+    if existing_submitted_payments:
+        raise HTTPException(409, "Buyer and nominee details are locked after a payment has been submitted. Contact staff if a correction is required.")
+    booking.buyer_name = payload.buyer_name.strip()
+    booking.buyer_phone = payload.buyer_phone.strip()
+    booking.buyer_email = str(payload.buyer_email) if payload.buyer_email else None
+    booking.buyer_address = payload.buyer_address.strip() if payload.buyer_address else None
+    booking.buyer_details_submitted_at = _now()
+    db.query(BookingNominee).filter(BookingNominee.tenant_id == row.tenant_id, BookingNominee.booking_id == booking.id).delete(synchronize_session=False)
+    for nominee in payload.nominees:
+        db.add(BookingNominee(tenant_id=row.tenant_id, booking_id=booking.id, nominee_name=nominee.nominee_name.strip(), relationship=nominee.relationship.strip(), phone=nominee.phone.strip() if nominee.phone else None, email=str(nominee.email) if nominee.email else None, date_of_birth=nominee.date_of_birth, address=nominee.address.strip() if nominee.address else None, allocation_percentage=nominee.allocation_percentage, remarks=nominee.remarks.strip() if nominee.remarks else None))
+    match = db.query(PropertyMatch).filter(PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == row.tenant_id).first()
+    _notify_staff_user(db, row.tenant_id, match.assigned_to if match else None, "Customer completed booking details", f"Buyer and nominee details were submitted for booking {booking.id}.", "bookings", booking.id)
+    log_audit(db, row.tenant_id, None, "UPDATE", "bookings", booking.id, "Customer submitted or updated buyer and nominee details.")
+    db.commit()
+    return {"booking_id": str(booking.id), "buyer_name": booking.buyer_name, "buyer_phone": booking.buyer_phone, "buyer_email": booking.buyer_email, "nominee_count": len(payload.nominees), "message": "Buyer and nominee details submitted successfully."}
+
+
 @router.post("/api/v1/customer-portal/booking-requests/{request_id}/payments", status_code=201)
 def customer_submit_booking_payment(request_id: UUID, payload: PaymentSubmitIn, portal: dict = Depends(require_portal_user), db: Session = Depends(get_db)):
     row = _customer_request(db, portal, request_id, lock=True)
@@ -405,15 +448,24 @@ def customer_submit_booking_payment(request_id: UUID, payload: PaymentSubmitIn, 
     booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id).with_for_update().first()
     if not booking or booking.status not in ("Pending", "Confirmed"):
         raise HTTPException(409, "This booking is not accepting payments.")
+    if row.status == "Approved" and booking.status != "Pending":
+        raise HTTPException(409, "Booking request and booking status are inconsistent. Contact staff.")
+    if row.status == "Confirmed" and booking.status != "Confirmed":
+        raise HTTPException(409, "Booking request and booking status are inconsistent. Contact staff.")
+    if row.status == "Approved" and not booking.buyer_details_submitted_at:
+        raise HTTPException(409, "Complete and submit buyer and nominee details before submitting the booking payment.")
     if row.status == "Approved" and row.hold_expires_at and row.hold_expires_at <= _now():
         raise HTTPException(409, "The booking hold has expired. Contact staff before submitting payment.")
-    if payload.amount > booking.agreed_price: raise HTTPException(422, "Payment amount cannot exceed the agreed property price.")
+    payment_cap = Decimal(str(booking.booking_amount if row.status == "Approved" else booking.agreed_price))
+    if payload.amount > payment_cap: raise HTTPException(422, f"Payment amount cannot exceed the current payable limit of {payment_cap:.2f}.")
     active_plan = db.query(PaymentPlan).filter(PaymentPlan.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").first()
     installment = None
-    if booking.payment_preference == "Installments" and not active_plan:
+    if row.status == "Confirmed" and booking.payment_preference == "Installments" and not active_plan:
         raise HTTPException(409, "The staff team must create the installment schedule before you can submit an installment payment.")
-    if active_plan and payload.installment_id is None:
+    if active_plan and row.status == "Confirmed" and payload.installment_id is None:
         raise HTTPException(422, "Select the instalment this payment is for because this booking has an active payment plan.")
+    if payload.installment_id and row.status != "Confirmed":
+        raise HTTPException(409, "Installment payments are available after the booking is finally confirmed.")
     if payload.installment_id:
         installment = db.query(PaymentPlanInstallment).join(PaymentPlan, PaymentPlan.id == PaymentPlanInstallment.payment_plan_id).filter(PaymentPlanInstallment.id == payload.installment_id, PaymentPlanInstallment.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").first()
         if not installment:
@@ -440,9 +492,13 @@ def customer_submit_booking_payment(request_id: UUID, payload: PaymentSubmitIn, 
         PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
     refunded_total = sum((Decimal(str(r.amount)) for r in processed_refunds), Decimal("0.00"))
     net_verified = max(Decimal("0.00"), verified_gross - refunded_total)
-    outstanding_after_pending = max(Decimal("0.00"), Decimal(str(booking.agreed_price)) - net_verified - pending_total)
+    outstanding_after_pending = max(Decimal("0.00"), payment_cap - net_verified - pending_total)
     if payload.amount > outstanding_after_pending:
         raise HTTPException(409, f"This payment exceeds the remaining balance after pending payments. Available balance: {outstanding_after_pending:.2f}.")
+    if payload.transaction_reference and payload.transaction_reference.strip():
+        duplicate_reference = db.query(Payment.id).filter(Payment.tenant_id == row.tenant_id, func.lower(Payment.transaction_reference) == payload.transaction_reference.strip().lower()).first()
+        if duplicate_reference:
+            raise HTTPException(409, "This transaction reference has already been submitted for another payment.")
     payment = Payment(tenant_id=row.tenant_id, booking_id=booking.id, installment_id=installment.id if installment else None, amount=payload.amount, payment_method=payload.payment_method, transaction_reference=payload.transaction_reference.strip() if payload.transaction_reference else None, status="Pending", payment_date=payload.payment_date or _now(), notes=payload.notes, created_by=None)
     db.add(payment); db.flush()
     match = db.query(PropertyMatch).filter(PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == row.tenant_id).first()
@@ -526,6 +582,7 @@ def staff_final_confirm_booking(request_id: UUID, current_user: dict = Depends(r
     processed_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(payment_ids) if payment_ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
     refunded = sum((Decimal(str(r.amount)) for r in processed_refunds), Decimal("0.00"))
     paid = max(Decimal("0.00"), paid_gross - refunded)
+    if not booking.buyer_details_submitted_at: raise HTTPException(409, "Customer buyer and nominee details must be submitted before final booking confirmation.")
     if paid < Decimal(str(booking.booking_amount)): raise HTTPException(409, f"Verified net booking payment is insufficient. Required {booking.booking_amount}; net verified {paid}.")
     booking.status = "Confirmed"; row.status = "Confirmed"; row.final_confirmed_at = _now(); row.hold_expires_at = None
     notify_customer(db, tenant_id, row.portal_user_id, "Booking confirmed",

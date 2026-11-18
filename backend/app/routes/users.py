@@ -27,6 +27,7 @@ from app.schemas.user import (
 )
 from app.services.email_service import send_user_invitation_email
 from app.services.audit_service import log_audit
+from app.services.customer_chat_service import deactivate_user_from_customer_chats
 
 
 router = APIRouter(
@@ -679,6 +680,7 @@ def delete_user(
     before_data = user_audit_data(user, role_name)
 
     user.status = "Inactive"
+    deactivate_user_from_customer_chats(db, tenant_id=tenant_id, user_id=user.id, actor_id=actor_id)
     db.query(RefreshSession).filter(RefreshSession.user_id == user.id, RefreshSession.revoked.is_(False)).update(
         {RefreshSession.revoked: True}, synchronize_session=False)
 

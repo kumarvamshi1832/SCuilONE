@@ -6,9 +6,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.connection import Base
+from app.models.mixins import SoftDeleteMixin, CustomFieldsMixin
 
 
-class Contact(Base):
+class Contact(SoftDeleteMixin, CustomFieldsMixin, Base):
     __tablename__ = "contacts"
 
     id: Mapped[uuid.UUID] = mapped_column(

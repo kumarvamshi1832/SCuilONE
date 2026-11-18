@@ -59,6 +59,7 @@ class PipelineStage(Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    probability: Mapped[int] = mapped_column(Integer, nullable=False, default=20, server_default="20")
     is_closed_won: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_closed_lost: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

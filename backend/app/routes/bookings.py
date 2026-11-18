@@ -14,7 +14,7 @@ from app.models.customer_booking_journey import CustomerBookingRequest
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingNominee
 from app.models.property import Property
 from app.models.deal import Deal
 from app.models.pipeline import Pipeline, PipelineStage
@@ -23,6 +23,8 @@ from app.schemas.booking import (
     BookingCreate,
     BookingResponse,
     BookingUpdate,
+    BookingNomineeInput,
+    validate_nominee_allocations,
 )
 from app.services.audit_service import log_audit
 from app.services.customer_portal_notifications import notify_booking_customer
@@ -70,6 +72,10 @@ def booking_snapshot(booking: Booking) -> dict:
         "buyer_name": booking.buyer_name,
         "buyer_email": booking.buyer_email,
         "buyer_phone": booking.buyer_phone,
+        "buyer_address": booking.buyer_address,
+        "buyer_details_submitted_at": booking.buyer_details_submitted_at,
+        "agreed_price": booking.agreed_price,
+        "nominees": [{"id": n.id, "tenant_id": n.tenant_id, "booking_id": n.booking_id, "nominee_name": n.nominee_name, "relationship": n.relationship, "phone": n.phone, "email": n.email, "date_of_birth": n.date_of_birth, "address": n.address, "allocation_percentage": n.allocation_percentage, "remarks": n.remarks, "created_at": n.created_at, "updated_at": n.updated_at} for n in booking.nominees],
         "payment_preference": booking.payment_preference,
         "installment_request_notes": booking.installment_request_notes,
         "booking_amount": booking.booking_amount,
@@ -333,6 +339,10 @@ def create_booking(
                     detail="Lead not found in this tenant.",
                 )
 
+        effective_agreed_price = payload.agreed_price if payload.agreed_price is not None else property_record.price
+        if payload.booking_amount <= 0 or payload.booking_amount > effective_agreed_price:
+            raise HTTPException(status_code=422, detail="Booking amount must be greater than zero and cannot exceed the agreed property price.")
+
         booking = Booking(
             tenant_id=tenant_id,
             property_id=property_record.id,
@@ -343,14 +353,11 @@ def create_booking(
             buyer_name=payload.buyer_name.strip(),
             buyer_email=payload.buyer_email,
             buyer_phone=payload.buyer_phone,
+            buyer_address=payload.buyer_address.strip() if payload.buyer_address else None,
             payment_preference=payload.payment_preference,
             installment_request_notes=(payload.installment_request_notes.strip() if payload.installment_request_notes else None),
             booking_amount=payload.booking_amount,
-            agreed_price=(
-                payload.agreed_price
-                if payload.agreed_price is not None
-                else property_record.price
-            ),
+            agreed_price=effective_agreed_price,
             refund_amount=Decimal("0.00"),
             status="Pending",
             created_by=user_id,
@@ -363,6 +370,9 @@ def create_booking(
 
         db.add(booking)
         db.flush()
+        validate_nominee_allocations(payload.nominees)
+        for nominee in payload.nominees:
+            db.add(BookingNominee(tenant_id=tenant_id, booking_id=booking.id, nominee_name=nominee.nominee_name.strip(), relationship=nominee.relationship.strip(), phone=nominee.phone.strip() if nominee.phone else None, email=str(nominee.email) if nominee.email else None, date_of_birth=nominee.date_of_birth, address=nominee.address.strip() if nominee.address else None, allocation_percentage=nominee.allocation_percentage, remarks=nominee.remarks.strip() if nominee.remarks else None))
 
         property_record.status = "Reserved"
         property_record.updated_at = datetime.utcnow()
@@ -408,6 +418,27 @@ def create_booking(
     except Exception:
         db.rollback()
         raise
+
+
+@router.put("/{booking_id}/nominees", response_model=list[dict], dependencies=[Depends(require_permission("booking.update"))])
+def replace_booking_nominees(booking_id: UUID, nominees: list[BookingNomineeInput], db: Session = Depends(get_db), current_user: dict = Depends(require_active_user)):
+    tenant_id, user_id = get_tenant_and_user(current_user)
+    if len(nominees) > 20:
+        raise HTTPException(422, "A booking can have at most 20 nominees.")
+    try:
+        validate_nominee_allocations(nominees)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    booking = get_booking_or_404(db, booking_id, tenant_id)
+    if booking.status == "Cancelled":
+        raise HTTPException(409, "Nominees cannot be changed on a cancelled booking.")
+    db.query(BookingNominee).filter(BookingNominee.tenant_id == tenant_id, BookingNominee.booking_id == booking.id).delete(synchronize_session=False)
+    for nominee in nominees:
+        db.add(BookingNominee(tenant_id=tenant_id, booking_id=booking.id, nominee_name=nominee.nominee_name.strip(), relationship=nominee.relationship.strip(), phone=nominee.phone.strip() if nominee.phone else None, email=str(nominee.email) if nominee.email else None, date_of_birth=nominee.date_of_birth, address=nominee.address.strip() if nominee.address else None, allocation_percentage=nominee.allocation_percentage, remarks=nominee.remarks.strip() if nominee.remarks else None))
+    log_audit(db, tenant_id, user_id, "UPDATE", "bookings", booking.id, "Staff replaced booking nominee details.")
+    db.commit()
+    db.refresh(booking)
+    return [{"id": str(n.id), "booking_id": str(n.booking_id), "nominee_name": n.nominee_name, "relationship": n.relationship, "phone": n.phone, "email": n.email, "date_of_birth": n.date_of_birth, "address": n.address, "allocation_percentage": str(n.allocation_percentage) if n.allocation_percentage is not None else None, "remarks": n.remarks} for n in booking.nominees]
 
 
 @router.get("/", response_model=list[BookingResponse])
@@ -511,6 +542,8 @@ def update_booking(
                 if journey:
                     if journey.status != "Approved" or not journey.hold_expires_at or journey.hold_expires_at <= datetime.utcnow():
                         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Customer portal booking hold is not active. Resolve the hold before confirming.")
+                    if not booking.buyer_details_submitted_at:
+                        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Customer buyer and nominee details must be submitted before confirmation.")
                     if journey.agreement_status != "Verified" or not journey.agreement_verified_at:
                         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Customer portal booking cannot be confirmed until the signed agreement is verified.")
                     verified_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status == "Verified").all()
@@ -526,12 +559,18 @@ def update_booking(
 
         before_data = booking_snapshot(booking)
 
-        for field in ("buyer_name", "buyer_email", "buyer_phone", "status"):
+        for field in ("buyer_name", "buyer_email", "buyer_phone", "buyer_address", "status"):
             if field in changes:
                 value = changes[field]
-                if field == "buyer_name" and value is not None:
+                if field in ("buyer_name", "buyer_email", "buyer_phone", "buyer_address") and value is not None and isinstance(value, str):
                     value = value.strip()
                 setattr(booking, field, value)
+
+        if "nominees" in changes:
+            db.query(BookingNominee).filter(BookingNominee.tenant_id == tenant_id, BookingNominee.booking_id == booking.id).delete(synchronize_session=False)
+            db.expire(booking, ["nominees"])
+            for nominee in changes["nominees"]:
+                db.add(BookingNominee(tenant_id=tenant_id, booking_id=booking.id, nominee_name=nominee.nominee_name.strip(), relationship=nominee.relationship.strip(), phone=nominee.phone.strip() if nominee.phone else None, email=str(nominee.email) if nominee.email else None, date_of_birth=nominee.date_of_birth, address=nominee.address.strip() if nominee.address else None, allocation_percentage=nominee.allocation_percentage, remarks=nominee.remarks.strip() if nominee.remarks else None))
 
         booking.updated_at = datetime.utcnow()
         db.flush()

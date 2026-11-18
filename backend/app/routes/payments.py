@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
@@ -177,6 +178,19 @@ def create_payment(
             if not installment:
                 raise HTTPException(status_code=404, detail="Active payment-plan instalment not found for this booking.")
 
+        payment_cap = Decimal(str(booking.booking_amount if booking.status == "Pending" else booking.agreed_price))
+        prior_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status.in_(["Pending", "Verified"])).all()
+        pending_or_verified = sum((Decimal(str(item.amount)) for item in prior_payments), Decimal("0.00"))
+        processed_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
+        refunded_total = sum((Decimal(str(item.amount)) for item in processed_refunds), Decimal("0.00"))
+        available = max(Decimal("0.00"), payment_cap - pending_or_verified + refunded_total)
+        if payload.amount > available:
+            raise HTTPException(409, f"Payment exceeds the current payable balance of {available:.2f}.")
+        if payload.transaction_reference and payload.transaction_reference.strip():
+            duplicate_reference = db.query(Payment.id).filter(Payment.tenant_id == tenant_id, func.lower(Payment.transaction_reference) == payload.transaction_reference.strip().lower()).first()
+            if duplicate_reference:
+                raise HTTPException(409, "This transaction reference has already been recorded for another payment.")
+
         payment_date = payload.payment_date or datetime.utcnow()
 
         payment = Payment(
@@ -334,14 +348,14 @@ def decide_payment(
 
             net_received = total_received - total_refunded
 
-            if net_received + Decimal(str(payment.amount)) > Decimal(
-                str(booking.agreed_price)
-            ):
+            payment_cap = Decimal(str(booking.booking_amount if booking.status == "Pending" else booking.agreed_price))
+            pending_other = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status == "Pending", Payment.id != payment.id).all()
+            pending_other_total = sum((Decimal(str(item.amount)) for item in pending_other), Decimal("0.00"))
+            if net_received + pending_other_total + Decimal(str(payment.amount)) > payment_cap:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        "Verifying this payment would exceed the remaining "
-                        "agreed sale price after processed refunds."
+                        "Verifying this payment would exceed the current booking payment limit after pending payments and processed refunds."
                     ),
                 )
 

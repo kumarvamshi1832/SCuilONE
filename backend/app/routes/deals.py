@@ -9,6 +9,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 
 from app.models.deal import Deal
+from app.models.mixins import soft_delete_record
 from app.models.booking import Booking
 from app.models.lead import Lead
 from app.models.contact import Contact
@@ -779,34 +780,6 @@ def delete_deal(
             detail="Deal not found"
         )
 
-    linked_to_software_workflow = any((
-        db.query(SoftwareRequirement.id).filter(
-            SoftwareRequirement.tenant_id == tenant_id,
-            SoftwareRequirement.deal_id == deal.id,
-        ).first(),
-        db.query(SoftwareEstimate.id).filter(
-            SoftwareEstimate.tenant_id == tenant_id,
-            SoftwareEstimate.deal_id == deal.id,
-        ).first(),
-        db.query(SoftwareContract.id).filter(
-            SoftwareContract.tenant_id == tenant_id,
-            SoftwareContract.deal_id == deal.id,
-        ).first(),
-        db.query(SoftwareProject.id).filter(
-            SoftwareProject.tenant_id == tenant_id,
-            SoftwareProject.deal_id == deal.id,
-        ).first(),
-    ))
-
-    if linked_to_software_workflow:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This deal is linked to the Software Services workflow. "
-                "Unlink or archive the related records before deleting it."
-            ),
-        )
-
     try:
         log_audit(
             db=db,
@@ -819,7 +792,7 @@ def delete_deal(
             before_data=deal_audit_data(deal),
         )
 
-        db.delete(deal)
+        soft_delete_record(deal, current_user["user_id"])
         db.commit()
 
     except Exception:

@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 PaymentMethod = Literal[
@@ -12,6 +12,7 @@ PaymentMethod = Literal[
     "Bank Transfer",
     "UPI",
     "Cheque",
+    "Demand Draft",
     "Card",
     "Other",
 ]
@@ -37,6 +38,12 @@ class PaymentCreate(BaseModel):
         max_length=5000,
     )
 
+    @model_validator(mode="after")
+    def require_reference_for_traceable_modes(self):
+        if self.payment_method in ("UPI", "Bank Transfer", "Cheque", "Demand Draft", "Card") and not (self.transaction_reference or "").strip():
+            raise ValueError("Transaction/reference number is required for this payment mode.")
+        return self
+
 
 class PaymentDecision(BaseModel):
     status: Literal["Verified", "Rejected"]
@@ -44,6 +51,12 @@ class PaymentDecision(BaseModel):
         default=None,
         max_length=5000,
     )
+
+    @model_validator(mode="after")
+    def rejection_requires_reason(self):
+        if self.status == "Rejected" and not (self.notes or "").strip():
+            raise ValueError("A rejection reason is required when rejecting a payment.")
+        return self
 
 
 class PaymentResponse(BaseModel):

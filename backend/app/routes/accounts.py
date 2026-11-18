@@ -11,6 +11,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 
 from app.models.account import Account
+from app.models.mixins import soft_delete_record
 from app.models.lead import Lead
 from app.models.user import User
 from app.models.contact import Contact
@@ -644,7 +645,7 @@ def delete_account(
             before_data=account_audit_data(account),
         )
 
-        db.delete(account)
+        soft_delete_record(account, current_user["user_id"])
         db.commit()
 
     except Exception:
