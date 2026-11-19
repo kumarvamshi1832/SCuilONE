@@ -15,8 +15,8 @@ import {
   JOURNEY_FILE_EXTENSIONS,
   acknowledgeAgreement,
   getBookingFileDownload,
+  getBookingHandover,
   getBookingRequest,
-  submitBookingPayment,
   uploadBookingFile,
 } from "../../services/customerPortalJourneyService";
 import {
@@ -36,13 +36,13 @@ import {
   describeJourneyUploadError,
   formatFileSize,
   validateJourneyFile,
-  validateJourneyFileBasics,
 } from "../../utils/journeyFileUpload";
-import { PAYMENT_METHODS } from "../../types/customerBookingJourney";
+import PortalBuyerDetails from "../../components/bookings/PortalBuyerDetails";
+import PortalPaymentDashboard from "../../components/bookings/PortalPaymentDashboard";
 import type {
-  BookingPaymentMethod,
   BookingRequestDetail,
   JourneyFile,
+  PortalHandover,
 } from "../../types/customerBookingJourney";
 import type { PortalBooking, PortalSiteVisit } from "../../types/customerPortal";
 import "./CustomerPortalTickets.css";
@@ -57,7 +57,11 @@ export default function CustomerPortalBookingRequestDetail() {
   const [detail, setDetail] = useState<BookingRequestDetail | null>(null);
   const [visit, setVisit] = useState<PortalSiteVisit | null>(null);
   const [booking, setBooking] = useState<PortalBooking | null>(null);
+  /** Why the portal booking (schedule, balances) is missing, so the payment section can say so instead of guessing. */
+  const [bookingError, setBookingError] = useState<string | null>(null);
   const [contactName, setContactName] = useState("");
+  /** undefined = not loaded / failed, null = none scheduled, object = the handover record. */
+  const [handover, setHandover] = useState<PortalHandover | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -83,11 +87,17 @@ export default function CustomerPortalBookingRequestDetail() {
           .then((visits) => setVisit(visits.find((v) => v.id === data.site_visit_id) ?? null))
           .catch(() => setVisit(null));
         if (data.booking_id) {
-          getPortalBooking(data.booking_id)
-            .then(setBooking)
-            .catch(() => setBooking(null));
+          // Awaited so the request and the booking (payments, schedule, balances) always change together.
+          try {
+            setBooking(await getPortalBooking(data.booking_id));
+            setBookingError(null);
+          } catch (bookingErr) {
+            setBooking(null);
+            setBookingError(getApiErrorMessage(bookingErr, "the booking details request failed"));
+          }
         } else {
           setBooking(null);
+          setBookingError(null);
         }
       } catch (err) {
         setDetail(null);
@@ -102,6 +112,62 @@ export default function CustomerPortalBookingRequestDetail() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Keep payments fresh without a manual reload: when the customer returns to the tab and once a minute while
+  // it is visible (staff verify payments and create schedules at any time). A failed background refresh keeps
+  // what is on screen instead of blanking the page.
+  useEffect(() => {
+    if (!requestId) return;
+    let busy = false;
+    const refreshQuietly = async () => {
+      if (busy || document.hidden) return;
+      busy = true;
+      try {
+        const data = await getBookingRequest(requestId);
+        setDetail(data);
+        if (data.booking_id) {
+          try {
+            setBooking(await getPortalBooking(data.booking_id));
+            setBookingError(null);
+          } catch {
+            /* keep the last good booking */
+          }
+        }
+      } catch {
+        /* keep the last good state */
+      } finally {
+        busy = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshQuietly(), 60_000);
+    const onVisible = () => {
+      if (!document.hidden) void refreshQuietly();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [requestId]);
+
+  // Handover exists only for a confirmed booking; a failed lookup leaves the stage out instead of guessing.
+  const handoverBookingId = detail?.booking_id ?? null;
+  const handoverEligible = detail?.status === "Confirmed" || detail?.status === "Completed";
+  useEffect(() => {
+    if (!handoverBookingId || !handoverEligible) {
+      setHandover(undefined);
+      return;
+    }
+    let cancelled = false;
+    getBookingHandover(handoverBookingId)
+      .then((h) => !cancelled && setHandover(h))
+      .catch(() => !cancelled && setHandover(undefined));
+    return () => {
+      cancelled = true;
+    };
+  }, [handoverBookingId, handoverEligible, detail?.updated_at]);
 
   useEffect(() => {
     getPortalProfile()
@@ -146,9 +212,21 @@ export default function CustomerPortalBookingRequestDetail() {
     .filter(Boolean)
     .join(", ");
   const canAct = detail.status === "Approved" || detail.status === "Confirmed";
-  const canPay = canAct && Boolean(detail.booking_id) && !holdExpired;
   const holdText = describeHold(detail.hold_expires_at, detail.status);
   const refresh = () => load(true);
+  const activePlan = booking?.payment_plan && booking.payment_plan.status === "Active" ? booking.payment_plan : null;
+  const timelineExtras = {
+    // Only known once the booking (and its schedule) has actually loaded.
+    schedule: booking
+      ? activePlan
+        ? {
+            total: activePlan.installments.length,
+            paid: activePlan.installments.filter((i) => (i.status || "").toLowerCase() === "paid").length,
+          }
+        : null
+      : undefined,
+    handover: handover === undefined ? undefined : handover,
+  };
 
   return (
     <div className="cp-tickets-page">
@@ -163,6 +241,10 @@ export default function CustomerPortalBookingRequestDetail() {
 
       <Link to="/portal/booking-requests" className="cp-back-link">
         <ArrowLeftIcon size={14} /> Back to booking requests
+      </Link>
+      {" "}
+      <Link to="/portal/bookings" className="cp-back-link">
+        All bookings
       </Link>
 
       <div className="cp-tickets-header">
@@ -219,10 +301,15 @@ export default function CustomerPortalBookingRequestDetail() {
             <h2 className="cp-panel-title">Overview</h2>
             <BookingFacts
               items={[
+                { label: "Booking ID", value: detail.booking_id ? `#${detail.booking_id.slice(0, 8).toUpperCase()}` : "Assigned on approval" },
                 { label: "Property", value: propertyName },
+                { label: "Unit", value: booking?.property?.unit_number ? `Unit ${booking.property.unit_number}` : "—" },
+                { label: "Booking date", value: booking?.booking_date ? formatBookingDateTime(booking.booking_date) : "—" },
                 { label: "Site visit", value: visit ? formatBookingDateTime(visit.scheduled_start) : "—" },
                 { label: "Agreed price", value: formatBookingMoney(detail.agreed_price) },
                 { label: "Booking amount", value: formatBookingMoney(detail.booking_amount) },
+                { label: "Total paid (verified)", value: booking?.verified_paid_amount !== undefined ? formatBookingMoney(booking.verified_paid_amount) : "—" },
+                { label: "Remaining balance", value: booking?.remaining_balance !== undefined ? formatBookingMoney(booking.remaining_balance) : "—" },
                 { label: "Payment preference", value: detail.payment_preference },
                 { label: "Requested on", value: formatBookingDateTime(detail.created_at) },
                 { label: "Last updated", value: formatBookingDateTime(detail.updated_at) },
@@ -264,6 +351,8 @@ export default function CustomerPortalBookingRequestDetail() {
             )}
           </section>
 
+          <PortalBuyerDetails detail={detail} holdExpired={holdExpired} onChanged={refresh} notify={showToast} />
+
           <AgreementSection
             detail={detail}
             canAct={canAct && !holdExpired}
@@ -272,10 +361,11 @@ export default function CustomerPortalBookingRequestDetail() {
             notify={showToast}
           />
 
-          <PaymentsSection
+          <PortalPaymentDashboard
             detail={detail}
             booking={booking}
-            canPay={canPay}
+            bookingError={bookingError}
+            holdExpired={holdExpired}
             onChanged={refresh}
             notify={showToast}
           />
@@ -285,7 +375,7 @@ export default function CustomerPortalBookingRequestDetail() {
 
         <aside className="cp-panel" aria-label="Booking progress">
           <h2 className="cp-panel-title">Booking progress</h2>
-          <BookingTimeline detail={detail} audience="customer" />
+          <BookingTimeline detail={detail} audience="customer" extras={timelineExtras} />
         </aside>
       </div>
     </div>
@@ -567,306 +657,6 @@ function AgreementSection({
             </div>
           )}
         </>
-      )}
-    </section>
-  );
-}
-
-/* ─── Payments ─── */
-
-interface PaymentFormState {
-  installment_id: string;
-  amount: string;
-  method: BookingPaymentMethod;
-  reference: string;
-  paymentDate: string;
-  notes: string;
-}
-
-const EMPTY_PAYMENT: PaymentFormState = {
-  installment_id: "",
-  amount: "",
-  method: "Bank Transfer",
-  reference: "",
-  paymentDate: "",
-  notes: "",
-};
-
-function PaymentsSection({
-  detail,
-  booking,
-  canPay,
-  onChanged,
-  notify,
-}: {
-  detail: BookingRequestDetail;
-  booking: PortalBooking | null;
-  canPay: boolean;
-  onChanged: () => Promise<void>;
-  notify: (message: string, type?: "success" | "error") => void;
-}) {
-  const [form, setForm] = useState<PaymentFormState>(EMPTY_PAYMENT);
-  const [proof, setProof] = useState<File | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [proofFor, setProofFor] = useState<string | null>(null);
-  const [proofFile, setProofFile] = useState<File | null>(null);
-  const [proofError, setProofError] = useState<string | null>(null);
-  const proofInput = useRef<HTMLInputElement>(null);
-
-  const plan = booking?.payment_plan && booking.payment_plan.status === "Active" ? booking.payment_plan : null;
-  const installments = (plan?.installments ?? []).filter((i) => (i.status || "").toLowerCase() !== "paid");
-  const needsPlan = detail.payment_preference === "Installments" && !plan && Boolean(booking);
-
-  const setField = <K extends keyof PaymentFormState>(key: K, value: PaymentFormState[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => {
-      if (!prev[key]) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    const nextErrors: Record<string, string> = {};
-    const amount = Number(form.amount);
-    if (!form.amount.trim() || !Number.isFinite(amount) || amount <= 0) nextErrors.amount = "Enter an amount greater than zero.";
-    else if (detail.agreed_price && amount > Number(detail.agreed_price)) nextErrors.amount = "Amount cannot exceed the agreed price.";
-    if (plan && !form.installment_id) nextErrors.installment_id = "Select the instalment this payment is for.";
-    if (form.reference.length > 255) nextErrors.reference = "Reference cannot exceed 255 characters.";
-    if (form.notes.length > 3000) nextErrors.notes = "Notes cannot exceed 3000 characters.";
-    if (proof) {
-      const problem = validateJourneyFileBasics(proof);
-      if (problem) nextErrors.proof = problem;
-    }
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const paymentDate = form.paymentDate ? new Date(form.paymentDate).toISOString() : null;
-      const result = await submitBookingPayment(detail.id, {
-        installment_id: form.installment_id || null,
-        amount,
-        payment_method: form.method,
-        transaction_reference: form.reference.trim() || null,
-        payment_date: paymentDate,
-        notes: form.notes.trim() || null,
-      });
-      if (proof) {
-        try {
-          await uploadBookingFile(detail.id, proof, "Payment Proof", result.id);
-        } catch (uploadErr) {
-          notify(
-            `Payment submitted, but the proof upload failed: ${describeJourneyUploadError(uploadErr, BOOKING_FILE_UPLOAD_ENDPOINT).message} You can attach it from the list below.`,
-            "error"
-          );
-        }
-      }
-      notify(result.message || "Payment details submitted. The finance team must verify the payment.");
-      setForm(EMPTY_PAYMENT);
-      setProof(null);
-      await onChanged();
-    } catch (err) {
-      setSubmitError(getApiErrorMessage(err, "Failed to submit the payment."));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const attachProof = async (paymentId: string) => {
-    if (!proofFile) return;
-    const problem = await validateJourneyFile(proofFile);
-    if (problem) {
-      setProofError(problem);
-      return;
-    }
-    setProofError(null);
-    try {
-      await uploadBookingFile(detail.id, proofFile, "Payment Proof", paymentId);
-      notify("Payment proof uploaded.");
-      setProofFor(null);
-      setProofFile(null);
-      if (proofInput.current) proofInput.current.value = "";
-      await onChanged();
-    } catch (err) {
-      setProofError(describeJourneyUploadError(err, BOOKING_FILE_UPLOAD_ENDPOINT).message);
-    }
-  };
-
-  const err = (key: string) =>
-    errors[key] ? (
-      <p className="bj-field-error" role="alert">
-        {errors[key]}
-      </p>
-    ) : null;
-
-  return (
-    <section className="cp-panel" aria-label="Payments">
-      <h2 className="cp-panel-title">Payments</h2>
-
-      {detail.payments.length === 0 ? (
-        <p className="cp-ticket-snippet" style={{ margin: "0 0 12px" }}>
-          No payments submitted yet.
-        </p>
-      ) : (
-        <ul className="bj-list" style={{ marginBottom: 16 }}>
-          {detail.payments.map((p) => {
-            const hasProof = detail.files.some((f) => f.payment_id === p.id);
-            return (
-              <li key={p.id}>
-                <div className="bj-list-main">
-                  <strong>
-                    {formatBookingMoney(p.amount)} · {p.method ?? "—"}
-                  </strong>
-                  <span>
-                    {p.reference ? `Ref ${p.reference} · ` : ""}
-                    {p.status === "Verified"
-                      ? `Verified ${formatBookingDateTime(p.verified_at)}`
-                      : p.status === "Pending"
-                      ? "Awaiting finance verification"
-                      : p.status}
-                  </span>
-                  {proofFor === p.id && (
-                    <span style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
-                      <input
-                        ref={proofInput}
-                        type="file"
-                        accept={JOURNEY_FILE_EXTENSIONS.join(",")}
-                        onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
-                        aria-label="Payment proof file"
-                      />
-                      <button className="btn-secondary" onClick={() => void attachProof(p.id)} disabled={!proofFile}>
-                        Upload
-                      </button>
-                      <button className="btn-secondary" onClick={() => setProofFor(null)}>
-                        Cancel
-                      </button>
-                    </span>
-                  )}
-                  {proofFor === p.id && proofError && <span className="bj-field-error">{proofError}</span>}
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <BookingStatusBadge status={p.status} />
-                  {p.status === "Pending" && !hasProof && proofFor !== p.id && (
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        setProofFor(p.id);
-                        setProofFile(null);
-                        setProofError(null);
-                      }}
-                    >
-                      Attach proof
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {canPay ? (
-        needsPlan ? (
-          <div className="bj-note bj-warn">
-            You chose to pay in instalments. Our team must create the instalment schedule before you can submit a
-            payment.
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} noValidate>
-            <h3 style={{ fontSize: "0.95rem", margin: "0 0 10px" }}>Submit payment details</h3>
-            <p className="cp-ticket-snippet" style={{ marginTop: 0 }}>
-              Pay using the instructions above, then record the payment here. It is only counted once our finance team
-              verifies it.
-            </p>
-            {submitError && (
-              <div className="support-alert error cp-inline-error" role="alert">
-                <AlertCircleIcon size={18} />
-                <span>{submitError}</span>
-              </div>
-            )}
-            <div className="bj-inline-form">
-              {plan && (
-                <div className="bj-field full">
-                  <label htmlFor="pay-installment">Instalment *</label>
-                  <select id="pay-installment" value={form.installment_id} onChange={(e) => setField("installment_id", e.target.value)}>
-                    <option value="">Select instalment…</option>
-                    {installments.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        #{i.sequence} {i.name} · {formatBookingMoney(i.amount)} · due {i.due_date ? new Date(i.due_date).toLocaleDateString() : "—"}
-                      </option>
-                    ))}
-                  </select>
-                  {err("installment_id")}
-                </div>
-              )}
-              <div className="bj-field">
-                <label htmlFor="pay-amount">Amount (INR) *</label>
-                <input
-                  id="pay-amount"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={form.amount}
-                  onChange={(e) => setField("amount", e.target.value)}
-                  aria-invalid={Boolean(errors.amount)}
-                />
-                {err("amount")}
-              </div>
-              <div className="bj-field">
-                <label htmlFor="pay-method">Payment method *</label>
-                <select id="pay-method" value={form.method} onChange={(e) => setField("method", e.target.value as BookingPaymentMethod)}>
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="bj-field">
-                <label htmlFor="pay-ref">Transaction reference</label>
-                <input id="pay-ref" type="text" maxLength={255} value={form.reference} onChange={(e) => setField("reference", e.target.value)} />
-                {err("reference")}
-              </div>
-              <div className="bj-field">
-                <label htmlFor="pay-date">Payment date</label>
-                <input id="pay-date" type="datetime-local" value={form.paymentDate} onChange={(e) => setField("paymentDate", e.target.value)} />
-              </div>
-              <div className="bj-field full">
-                <label htmlFor="pay-notes">Notes</label>
-                <textarea id="pay-notes" rows={2} maxLength={3000} value={form.notes} onChange={(e) => setField("notes", e.target.value)} />
-                {err("notes")}
-              </div>
-              <div className="bj-field full">
-                <label htmlFor="pay-proof">Payment proof (optional)</label>
-                <input
-                  id="pay-proof"
-                  type="file"
-                  accept={JOURNEY_FILE_EXTENSIONS.join(",")}
-                  onChange={(e) => setProof(e.target.files?.[0] ?? null)}
-                />
-                <span className="cp-ticket-snippet">PDF, JPG or PNG, up to 5 MB.</span>
-                {err("proof")}
-              </div>
-            </div>
-            <button type="submit" className="btn-primary" disabled={submitting}>
-              <SendIcon size={15} />
-              <span>{submitting ? "Submitting…" : "Submit payment details"}</span>
-            </button>
-          </form>
-        )
-      ) : (
-        <p className="cp-ticket-snippet" style={{ margin: 0 }}>
-          {detail.booking_id
-            ? "Payments can be submitted while the booking is approved or confirmed and the hold is active."
-            : "Payments open once your booking request is approved."}
-        </p>
       )}
     </section>
   );

@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import {
   PlusIcon,
   RefreshIcon,
   XIcon,
   SendIcon,
+  SearchIcon,
   AlertCircleIcon,
   CheckCircleIcon,
   ArrowRightIcon,
@@ -13,6 +14,7 @@ import {
 import {
   createPortalBuyerRequirement,
   getPortalBuyerRequirements,
+  getPortalRequirementMatches,
 } from "../../services/customerPortalBuyerRequirementService";
 import { formatPortalMoney } from "../../components/portal/PortalPropertyMatchCard";
 import { getPortalErrorMessage } from "../../utils/portalApiError";
@@ -96,7 +98,23 @@ const validateForm = (form: RequirementFormState): Record<string, string> => {
   return errors;
 };
 
-export default function CustomerPortalBuyerRequirements() {
+/** Statuses the backend can store for a buyer requirement (schemas/buyer_requirement.py), in lifecycle order. */
+const REQUIREMENT_STAGES = ["New", "Qualified", "Matched", "Closed"] as const;
+const STAGE_HELP: Record<string, string> = {
+  New: "Submitted and waiting for our team",
+  Qualified: "Reviewed by our team",
+  Matched: "Properties have been matched",
+  Closed: "Requirement closed",
+};
+
+interface CustomerPortalBuyerRequirementsProps {
+  /** Rendered inside the Real Estate Portfolio tab: the page heading is replaced by the tab itself. */
+  embedded?: boolean;
+  /** Reports how many requirements were loaded (for the tab label). */
+  onCountChange?: (count: number) => void;
+}
+
+export default function CustomerPortalBuyerRequirements({ embedded = false, onCountChange }: CustomerPortalBuyerRequirementsProps = {}) {
   const outlet = useOutletContext<PortalOutletContext | null>();
   const isRealEstate = outlet?.isRealEstate !== false;
 
@@ -105,6 +123,11 @@ export default function CustomerPortalBuyerRequirements() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  /** Matched-property count per requirement: number = loaded, null = lookup failed, missing = still loading. */
+  const [matchCounts, setMatchCounts] = useState<Record<string, number | null>>({});
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<RequirementFormState>(EMPTY_FORM);
@@ -124,13 +147,22 @@ export default function CustomerPortalBuyerRequirements() {
     setLoading(true);
     setError(null);
     try {
-      setRequirements(await getPortalBuyerRequirements());
+      const list = await getPortalBuyerRequirements();
+      setRequirements(list);
+      onCountChange?.(list.length);
+      // Property matching is exposed per requirement only, so counts are fetched one request per requirement.
+      setMatchCounts({});
+      list.slice(0, 30).forEach((req) => {
+        getPortalRequirementMatches(req.id)
+          .then((matches) => setMatchCounts((prev) => ({ ...prev, [req.id]: matches.length })))
+          .catch(() => setMatchCounts((prev) => ({ ...prev, [req.id]: null })));
+      });
     } catch (err) {
       setError(getPortalErrorMessage(err, "Failed to load your buyer requirements."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onCountChange]);
 
   useEffect(() => {
     loadRequirements();
@@ -182,7 +214,11 @@ export default function CustomerPortalBuyerRequirements() {
     setSubmitError(null);
     try {
       const created = await createPortalBuyerRequirement(payload);
-      setRequirements((prev) => [created, ...prev]);
+      setRequirements((prev) => {
+        const next = [created, ...prev];
+        onCountChange?.(next.length);
+        return next;
+      });
       setIsCreateOpen(false);
       showToast("Your requirement was submitted. Our team will match properties for you.");
     } catch (err) {
@@ -191,6 +227,17 @@ export default function CustomerPortalBuyerRequirements() {
       setSubmitting(false);
     }
   };
+
+  const visibleRequirements = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return requirements.filter((req) => {
+      if (statusFilter && req.status !== statusFilter) return false;
+      if (!q) return true;
+      return [req.id, req.id.slice(0, 8), req.property_type, req.preferred_city, req.preferred_location, req.requirement_type, req.status, req.bedrooms != null ? `${req.bedrooms} bhk` : ""]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [requirements, search, statusFilter]);
 
   const budgetLabel = (req: PortalBuyerRequirement): string => {
     if (req.min_budget && req.max_budget)
@@ -239,13 +286,21 @@ export default function CustomerPortalBuyerRequirements() {
         </div>
       )}
 
-      <div className="cp-tickets-header">
+      <div className="cp-tickets-header" style={embedded ? { marginBottom: 12 } : undefined}>
         <div>
-          <h1>Buyer Requirements</h1>
-          <p>
-            Tell us what you are looking for. We match available properties to each requirement and you
-            can shortlist the ones you like.
-          </p>
+          {embedded ? (
+            <p style={{ margin: 0 }}>
+              The properties you are looking for. We match available properties to each requirement and you can shortlist the ones you like.
+            </p>
+          ) : (
+            <>
+              <h1>Buyer Requirements</h1>
+              <p>
+                Tell us what you are looking for. We match available properties to each requirement and you
+                can shortlist the ones you like.
+              </p>
+            </>
+          )}
         </div>
         <button className="btn-primary" onClick={openCreate}>
           <PlusIcon size={16} />
@@ -255,8 +310,32 @@ export default function CustomerPortalBuyerRequirements() {
 
       <div className="cp-req-toolbar">
         <span className="cp-req-summary">
-          {loading ? "Loading requirements…" : `${requirements.length} requirement${requirements.length === 1 ? "" : "s"}`}
+          {loading
+            ? "Loading requirements…"
+            : visibleRequirements.length === requirements.length
+            ? `${requirements.length} requirement${requirements.length === 1 ? "" : "s"}`
+            : `${visibleRequirements.length} of ${requirements.length} requirements`}
         </span>
+        {requirements.length > 0 && (
+          <>
+            <div className="cp-search-box cp-req-search">
+              <SearchIcon size={16} className="cp-search-icon" />
+              <input
+                type="text"
+                placeholder="Search by ID, type, location, BHK or status…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search buyer requirements"
+              />
+            </div>
+            <select className="cp-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
+              <option value="">All statuses</option>
+              {REQUIREMENT_STAGES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </>
+        )}
         <button className="btn-secondary" onClick={loadRequirements} disabled={loading} aria-label="Refresh requirements">
           <RefreshIcon size={15} />
           <span>Refresh</span>
@@ -291,15 +370,24 @@ export default function CustomerPortalBuyerRequirements() {
             </button>
           </div>
         </div>
+      ) : visibleRequirements.length === 0 ? (
+        <div className="cp-table-card">
+          <div className="cp-empty-state">
+            <h3>No matching requirements</h3>
+            <p>Try a different search or status.</p>
+            <button className="btn-secondary" onClick={() => { setSearch(""); setStatusFilter(""); }}>Clear filters</button>
+          </div>
+        </div>
       ) : (
         <div className="cp-req-grid">
-          {requirements.map((req) => (
+          {visibleRequirements.map((req) => (
             <article key={req.id} className="cp-req-card">
               <div className="cp-req-card-head">
                 <div>
                   <h3 className="cp-req-card-title">
                     {req.requirement_type === "Rent" ? "Rent" : "Buy"} · {req.property_type}
                   </h3>
+                  <p className="cp-req-card-sub" style={{ fontWeight: 600 }}>Requirement #{req.id.slice(0, 8).toUpperCase()}</p>
                   <p className="cp-req-card-sub">
                     {[req.preferred_location, req.preferred_city].filter(Boolean).join(", ") || "Any location"}
                   </p>
@@ -312,8 +400,8 @@ export default function CustomerPortalBuyerRequirements() {
                   <dd>{budgetLabel(req)}</dd>
                 </div>
                 <div className="cp-req-fact">
-                  <dt>Bedrooms</dt>
-                  <dd>{req.bedrooms ?? "Any"}</dd>
+                  <dt>BHK</dt>
+                  <dd>{req.bedrooms != null ? `${req.bedrooms} BHK` : "Any"}</dd>
                 </div>
                 <div className="cp-req-fact">
                   <dt>Area</dt>
@@ -323,11 +411,28 @@ export default function CustomerPortalBuyerRequirements() {
                   <dt>Submitted</dt>
                   <dd>{new Date(req.created_at).toLocaleDateString()}</dd>
                 </div>
+                <div className="cp-req-fact">
+                  <dt>Matched properties</dt>
+                  <dd>{req.id in matchCounts ? (matchCounts[req.id] === null ? "Unavailable" : matchCounts[req.id]) : "…"}</dd>
+                </div>
               </dl>
+              <ol className="cp-req-track" aria-label={`Progress: ${req.status}`} title={STAGE_HELP[req.status] ?? req.status}>
+                {REQUIREMENT_STAGES.map((stage, i) => {
+                  const current = REQUIREMENT_STAGES.indexOf(req.status as (typeof REQUIREMENT_STAGES)[number]);
+                  const state = current === -1 ? "todo" : i < current ? "done" : i === current ? "current" : "todo";
+                  return (
+                    <li key={stage} className={`cp-req-track-step ${state}`}>
+                      <span className="cp-req-track-dot" aria-hidden="true" />
+                      <span>{stage}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="cp-req-card-sub" style={{ margin: "6px 0 0" }}>{STAGE_HELP[req.status] ?? ""}</p>
               <div className="cp-req-card-foot">
                 <span>Updated {new Date(req.updated_at).toLocaleDateString()}</span>
                 <Link className="cp-ticket-link" to={`/portal/buyer-requirements/${req.id}`}>
-                  View matches <ArrowRightIcon size={13} />
+                  View details & matches <ArrowRightIcon size={13} />
                 </Link>
               </div>
             </article>

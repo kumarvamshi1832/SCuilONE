@@ -1,0 +1,168 @@
+/* ==========================================================================
+   E-mail management (page, modals, record timeline). Builds on CrmInsights.css (ins-*) and
+   follows the CRM dark-mode convention (.dashboard-wrapper.dark).
+   ========================================================================== */
+
+.em-modal-wide { max-width: 720px; }
+.ins-modal.em-modal-wide { width: 100%; }
+
+.em-form { display: flex; flex-direction: column; gap: 14px; }
+.em-field { display: flex; flex-direction: column; gap: 5px; font-size: 0.82rem; font-weight: 600; min-width: 0; }
+.em-field small { font-weight: 400; }
+.em-field input,
+.em-field select,
+.em-field textarea {
+  font: inherit;
+  font-weight: 400;
+  font-size: 0.9rem;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid #d5dae3;
+  background: #fff;
+  color: #1a202c;
+  box-sizing: border-box;
+  width: 100%;
+}
+.em-field textarea { resize: vertical; }
+.em-field input:disabled,
+.em-field select:disabled,
+.em-field textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+.dashboard-wrapper.dark .em-field input,
+.dashboard-wrapper.dark .em-field select,
+.dashboard-wrapper.dark .em-field textarea { background: #262a33; border-color: #3a3f4b; color: #e2e8f0; }
+
+.em-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.em-muted { color: #64748b; font-size: 0.78rem; }
+.dashboard-wrapper.dark .em-muted { color: #94a3b8; }
+.em-error-text { color: #c53030; font-size: 0.78rem; font-weight: 400; }
+.dashboard-wrapper.dark .em-error-text { color: #fc8181; }
+
+.em-fieldset { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px 14px; margin: 0; min-width: 0; }
+.dashboard-wrapper.dark .em-fieldset { border-color: #3a3f4b; }
+.em-fieldset legend { font-size: 0.82rem; font-weight: 700; padding: 0 6px; }
+.em-fieldset p { margin: 0 0 10px; }
+.em-link-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.em-picker { gap: 4px; }
+.em-picker input[type="search"] { padding: 6px 9px; font-size: 0.8rem; }
+
+.em-quote {
+  padding: 8px 12px;
+  border-left: 3px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.85rem;
+}
+
+/* Badges & chips ---------------------------------------------------------- */
+.em-badge { font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.em-badge.sent { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.em-badge.received { background: rgba(59, 130, 246, 0.15); color: #1d4ed8; }
+.em-badge.logged { background: rgba(100, 116, 139, 0.18); color: #475569; }
+.em-badge.failed { background: rgba(229, 62, 62, 0.15); color: #c53030; }
+.dashboard-wrapper.dark .em-badge.sent { color: #4ade80; }
+.dashboard-wrapper.dark .em-badge.received { color: #93c5fd; }
+.dashboard-wrapper.dark .em-badge.logged { color: #cbd5e1; }
+.dashboard-wrapper.dark .em-badge.failed { color: #fc8181; }
+.em-dir { font-size: 0.74rem; font-weight: 600; white-space: nowrap; }
+.em-dir.in { color: #2563eb; }
+.em-dir.out { color: #7c3aed; }
+.dashboard-wrapper.dark .em-dir.in { color: #93c5fd; }
+.dashboard-wrapper.dark .em-dir.out { color: #c4b5fd; }
+.em-chips { display: inline-flex; gap: 5px; flex-wrap: wrap; }
+.em-chip { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: rgba(100, 116, 139, 0.15); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-chip.lead { background: rgba(245, 158, 11, 0.16); }
+.em-chip.contact { background: rgba(59, 130, 246, 0.16); }
+.em-chip.account { background: rgba(34, 197, 94, 0.16); }
+.em-chip.deal { background: rgba(168, 85, 247, 0.16); }
+.em-unlinked { font-size: 0.76rem; color: #94a3b8; font-style: italic; }
+
+/* Page ----------------------------------------------------------------- */
+.em-tabs { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: rgba(100, 116, 139, 0.12); }
+.em-tab { border: none; background: transparent; color: inherit; padding: 6px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.em-tab.active { background: #3b82f6; color: #fff; }
+.em-row-click { cursor: pointer; }
+.em-row-click:hover td { background: rgba(59, 130, 246, 0.05); }
+.em-subject { font-weight: 600; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-preview { font-size: 0.78rem; color: #64748b; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-wrapper.dark .em-preview { color: #94a3b8; }
+.em-addr { font-size: 0.8rem; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.em-webhook { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.dashboard-wrapper.dark .em-webhook { border-color: #3a3f4b; }
+.em-webhook h3 { margin: 0; font-size: 1rem; }
+.em-webhook code, .em-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; background: rgba(100, 116, 139, 0.14); padding: 3px 8px; border-radius: 6px; word-break: break-all; }
+.em-token-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.em-webhook pre { margin: 0; font-size: 0.76rem; padding: 10px 12px; border-radius: 8px; background: rgba(100, 116, 139, 0.12); overflow-x: auto; }
+
+/* Detail modal ---------------------------------------------------------- */
+.em-detail { display: flex; flex-direction: column; gap: 14px; }
+.em-detail-badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.em-meta { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 0.86rem; }
+.em-meta dt { color: #64748b; font-weight: 600; }
+.dashboard-wrapper.dark .em-meta dt { color: #94a3b8; }
+.em-meta dd { margin: 0; overflow-wrap: anywhere; }
+.em-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(100, 116, 139, 0.08);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.em-thread h4 { margin: 0 0 8px; font-size: 0.85rem; }
+.em-thread ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.em-thread-item {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.em-thread-item.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.07); }
+.em-thread-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.em-thread-from { font-size: 0.8rem; font-weight: 600; }
+.em-thread-preview { font-size: 0.78rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-footer-left { margin-right: auto; }
+
+/* Record timeline (inside Lead / Contact / Account / Deal view modals) -------- */
+.em-timeline { margin-top: 20px; border-top: 1px solid rgba(100, 116, 139, 0.25); padding-top: 14px; }
+.em-timeline-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.em-timeline-head h4 { margin: 0; font-size: 0.95rem; }
+.em-timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.em-timeline-item {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.em-timeline-item:hover { border-color: #3b82f6; }
+.em-timeline-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.em-timeline-subject { font-weight: 600; font-size: 0.86rem; }
+
+@media (max-width: 640px) {
+  .em-grid-2, .em-link-grid { grid-template-columns: 1fr; }
+  .em-meta { grid-template-columns: 1fr; }
+  .em-meta dt { margin-top: 6px; }
+  .em-subject, .em-preview { max-width: 100%; }
+}

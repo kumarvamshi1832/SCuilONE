@@ -1,0 +1,43 @@
+/* Customer portal: booking history list and dashboard summary. Uses the portal's --cp-* theme tokens. */
+.pbl-root { display: flex; flex-direction: column; gap: 14px; }
+.pbl-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pbl-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.pbl-chip {
+  border: 1px solid var(--cp-border, #d7e1ef);
+  background: var(--cp-bg-surface, transparent);
+  color: var(--cp-text-main, inherit);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.pbl-chip.active { border-color: var(--cp-primary, #3285f6); color: var(--cp-primary, #3285f6); background: rgba(50, 133, 246, 0.12); }
+.pbl-chip-count { font-size: 0.72rem; opacity: 0.85; background: rgba(100, 116, 139, 0.18); border-radius: 999px; padding: 1px 8px; }
+.pbl-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pbl-paid { color: #10b981; font-weight: 600; }
+.pbl-prop { font-weight: 600; color: var(--cp-text-main, inherit); }
+
+/* Dashboard summary */
+.pbs-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.pbs-stat {
+  border: 1px solid var(--cp-border, #d7e1ef);
+  background: var(--cp-bg-surface, transparent);
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.pbs-stat:hover { border-color: var(--cp-primary, #3285f6); }
+.pbs-stat-label { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cp-text-muted, #64748b); }
+.pbs-stat-value { font-size: 1.5rem; font-weight: 800; margin-top: 4px; color: var(--cp-text-main, inherit); }
+.pbs-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
+.pbs-head h3 { margin: 0; font-size: 1rem; }
+
+@media (max-width: 640px) {
+  .pbs-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

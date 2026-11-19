@@ -1,0 +1,52 @@
+/* Customer Portal chat. Uses the portal's own --cp-* tokens; the thread/composer come from ChatThread.css. */
+
+.cp-chat-card {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 250px);
+  min-height: 460px;
+  background: var(--cp-card-bg);
+  border: 1px solid var(--cp-border);
+  border-radius: 14px;
+  box-shadow: var(--cp-shadow-sm);
+  overflow: hidden;
+}
+
+.cp-chat-state {
+  height: auto;
+  min-height: 220px;
+  padding: 32px 24px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  color: var(--cp-text-muted);
+}
+.cp-chat-state h3 { margin: 0; color: var(--cp-text); font-size: 1.1rem; }
+.cp-chat-state p { margin: 0; max-width: 460px; line-height: 1.5; font-size: 0.9rem; }
+
+.cp-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--cp-border);
+}
+.cp-chat-contact { font-weight: 700; color: var(--cp-text); }
+.cp-chat-sub { font-size: 0.8rem; color: var(--cp-text-muted); margin-top: 2px; }
+
+.cp-chat-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cp-chat-status.open { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.cp-chat-status.closed { background: rgba(100, 116, 139, 0.2); color: var(--cp-text-muted); }
+.cp-chat-status.pending { background: rgba(245, 158, 11, 0.18); color: #b45309; }
+
+@media (max-width: 640px) {
+  .cp-chat-card { height: calc(100vh - 210px); min-height: 420px; }
+}

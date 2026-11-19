@@ -31,6 +31,9 @@ import type {
   PortalSiteVisit,
 } from "../../types/customerPortal";
 import { normalizeIndustry } from "../../utils/industryUtils";
+import PortalBookingSummary from "../../components/bookings/PortalBookingSummary";
+import { formatBookingMoney } from "../../utils/bookingJourney";
+import { sumCents, centsToNumber } from "../../utils/money";
 import "./CustomerPortalDashboard.css";
 
 function formatCurrency(value?: string | number | null): string {
@@ -178,25 +181,19 @@ export default function CustomerPortalDashboard() {
   const totalPropertiesCount = uniquePropertyIds.size || totalBookingsCount;
 
   // Calculate real estate payment totals if bookings present, fallback to billing metrics
-  const sumAgreedPrice = bookings.reduce(
-    (sum, b) => sum + (typeof b.agreed_price === "number" ? b.agreed_price : 0),
-    0
-  );
-  const sumVerifiedPaid = bookings.reduce(
-    (sum, b) => sum + (typeof b.verified_paid_amount === "number" ? b.verified_paid_amount : 0),
-    0
-  );
-  const sumRemaining = bookings.reduce(
-    (sum, b) => sum + (typeof b.remaining_balance === "number" ? b.remaining_balance : 0),
-    0
-  );
+  // Cancelled bookings no longer carry an obligation, so they are left out of the money totals.
+  const moneyBookings = bookings.filter((b) => b.status !== "Cancelled");
+  const sumAgreedPrice = centsToNumber(sumCents(moneyBookings.map((b) => b.agreed_price)));
+  const sumVerifiedPaid = centsToNumber(sumCents(moneyBookings.map((b) => b.verified_paid_amount)));
+  const sumRemaining = centsToNumber(sumCents(moneyBookings.map((b) => b.remaining_balance)));
+  const bookingCurrency = bookings.find((b) => b.property?.currency)?.property?.currency || "INR";
 
   const displayTotalAgreed =
-    sumAgreedPrice > 0 ? formatCurrency(sumAgreedPrice) : formatCurrency(billing?.total_invoiced);
+    sumAgreedPrice > 0 ? formatBookingMoney(sumAgreedPrice, bookingCurrency) : formatCurrency(billing?.total_invoiced);
   const displayVerifiedPaid =
-    sumVerifiedPaid > 0 ? formatCurrency(sumVerifiedPaid) : formatCurrency(billing?.total_paid);
+    sumVerifiedPaid > 0 ? formatBookingMoney(sumVerifiedPaid, bookingCurrency) : formatCurrency(billing?.total_paid);
   const displayRemaining =
-    sumRemaining > 0 ? formatCurrency(sumRemaining) : formatCurrency(billing?.outstanding_balance);
+    sumRemaining > 0 ? formatBookingMoney(sumRemaining, bookingCurrency) : formatCurrency(billing?.outstanding_balance);
 
   return (
     <div className="cp-dashboard">
@@ -304,6 +301,10 @@ export default function CustomerPortalDashboard() {
                     <div className="cp-kpi-sub">Title deeds, NOCs & contracts</div>
                   </div>
                 </div>
+              </div>
+
+              <div style={{ marginTop: 20 }}>
+                <PortalBookingSummary />
               </div>
             </div>
           ) : (

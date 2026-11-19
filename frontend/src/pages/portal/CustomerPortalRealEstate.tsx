@@ -9,6 +9,7 @@ import {
   EyeIcon,
   XIcon,
   ReceiptIcon,
+  FileSignatureIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalBookings,
@@ -28,8 +29,12 @@ const formatCurrency = (amount: number | string | undefined, currency = "USD") =
   }).format(num);
 };
 
+import PortalBookingsList from "../../components/bookings/PortalBookingsList";
+import CustomerPortalBuyerRequirements from "./CustomerPortalBuyerRequirements";
+import { getPortalBuyerRequirements } from "../../services/customerPortalBuyerRequirementService";
+
 export interface CustomerPortalRealEstateProps {
-  initialTab?: "properties" | "bookings" | "visits";
+  initialTab?: "properties" | "bookings" | "visits" | "requirements";
 }
 
 interface PropertySummaryItem {
@@ -47,10 +52,14 @@ interface PropertySummaryItem {
   remainingBalance?: string;
 }
 
+type PortfolioTab = "properties" | "bookings" | "visits" | "requirements";
+
 export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalRealEstateProps = {}) {
   const location = useLocation();
 
-  const resolveTab = (): "properties" | "bookings" | "visits" => {
+  const resolveTab = (): PortfolioTab => {
+    const requestedTab = new URLSearchParams(location.search).get("tab");
+    if (requestedTab === "requirements") return "requirements";
     if (initialTab) return initialTab;
     const path = location.pathname.toLowerCase();
     if (path.includes("properties")) return "properties";
@@ -64,7 +73,9 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
     return "properties";
   };
 
-  const [activeTab, setActiveTab] = useState<"properties" | "bookings" | "visits">(resolveTab);
+  const [activeTab, setActiveTab] = useState<PortfolioTab>(resolveTab);
+  /** Number of buyer requirements, reported by the embedded Buyer Requirements tab (shown once it has loaded). */
+  const [requirementCount, setRequirementCount] = useState<number | null>(null);
   const [bookings, setBookings] = useState<PortalBooking[]>([]);
   const [siteVisits, setSiteVisits] = useState<PortalSiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +99,8 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
       ]);
       setBookings(bookingsData || []);
       setSiteVisits(visitsData || []);
+      // Count for the Buyer Requirements tab label; the tab itself reports failures when it is opened.
+      getPortalBuyerRequirements().then((list) => setRequirementCount(list.length)).catch(() => undefined);
     } catch (err: any) {
       console.error("Failed to load real estate portal data:", err);
       setError(
@@ -192,14 +205,6 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
     );
   });
 
-  const filteredBookings = bookings.filter((b) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    const propName = b.property?.name?.toLowerCase() || "";
-    const buyer = b.buyer_name?.toLowerCase() || "";
-    return propName.includes(q) || buyer.includes(q) || b.id.toLowerCase().includes(q);
-  });
-
   const filteredVisits = siteVisits.filter((v) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -230,7 +235,7 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 10, borderBottom: "1px solid var(--cp-border)", marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 10, borderBottom: "1px solid var(--cp-border)", marginBottom: 20, overflowX: "auto", whiteSpace: "nowrap" }}>
         <button
           type="button"
           onClick={() => setActiveTab("properties")}
@@ -250,6 +255,28 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
         >
           <BuildingIcon size={16} />
           <span>Properties ({propertyCards.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("requirements")}
+          role="tab"
+          aria-selected={activeTab === "requirements"}
+          style={{
+            padding: "10px 18px",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "requirements" ? "2px solid var(--cp-primary)" : "2px solid transparent",
+            color: activeTab === "requirements" ? "var(--cp-primary)" : "var(--cp-text-muted)",
+            fontWeight: activeTab === "requirements" ? 600 : 500,
+            cursor: "pointer",
+            fontSize: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <FileSignatureIcon size={16} />
+          <span>Buyer Requirements{requirementCount !== null ? ` (${requirementCount})` : ""}</span>
         </button>
         <button
           type="button"
@@ -294,7 +321,7 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
       </div>
 
       {/* Filter / Search Bar */}
-      <div className="cp-filter-bar">
+      <div className="cp-filter-bar" style={activeTab === "bookings" || activeTab === "requirements" ? { display: "none" } : undefined}>
         <div className="cp-search-box">
           <SearchIcon size={16} color="var(--cp-text-muted)" />
           <input
@@ -313,7 +340,7 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
       </div>
 
       {/* Error state */}
-      {error && (
+      {error && activeTab !== "requirements" && (
         <div
           className="cp-alert cp-alert-error"
           style={{
@@ -334,7 +361,9 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
       )}
 
       {/* Content */}
-      {loading ? (
+      {activeTab === "requirements" ? (
+        <CustomerPortalBuyerRequirements embedded onCountChange={setRequirementCount} />
+      ) : loading ? (
         <div className="cp-loading-state">
           <div className="cp-spinner" />
           <p>Loading real estate details...</p>
@@ -437,89 +466,7 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
           </div>
         )
       ) : activeTab === "bookings" ? (
-        filteredBookings.length === 0 ? (
-          <div className="cp-empty-state">
-            <div className="cp-empty-icon">
-              <BuildingIcon size={44} color="var(--cp-text-muted)" />
-            </div>
-            <h3>No Property Bookings Found</h3>
-            <p>
-              {search
-                ? "No property bookings match your search query."
-                : "No active or historical property reservations are registered for your account."}
-            </p>
-          </div>
-        ) : (
-          <div className="cp-table-card">
-            <table className="cp-table">
-              <thead>
-                <tr>
-                  <th>Property</th>
-                  <th>Booking Date</th>
-                  <th>Agreed Price</th>
-                  <th>Verified Paid</th>
-                  <th>Remaining</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBookings.map((b) => (
-                  <tr key={b.id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: "var(--cp-text-main)" }}>
-                        {b.property?.name || "Property Unit"}
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--cp-text-muted)", marginTop: 2 }}>
-                        {[b.property?.unit_number && `Unit ${b.property.unit_number}`, b.property?.city]
-                          .filter(Boolean)
-                          .join(" • ") || "Unit Information"}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 13, color: "var(--cp-text-muted)" }}>
-                      {b.booking_date
-                        ? new Date(b.booking_date).toLocaleDateString()
-                        : "N/A"}
-                    </td>
-                    <td style={{ fontWeight: 600, color: "var(--cp-text-main)" }}>
-                      {formatCurrency(b.agreed_price, b.property?.currency || "USD")}
-                    </td>
-                    <td style={{ fontWeight: 600, color: "#10b981" }}>
-                      {formatCurrency(b.verified_paid_amount, b.property?.currency || "USD")}
-                    </td>
-                    <td style={{ fontWeight: 600, color: "var(--cp-text-muted)" }}>
-                      {formatCurrency(b.remaining_balance, b.property?.currency || "USD")}
-                    </td>
-                    <td>{getStatusBadge(b.status)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <button
-                        type="button"
-                        className="btn-action"
-                        onClick={() => handleOpenBooking(b.id)}
-                        disabled={loadingBookingDetail}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 12px",
-                          borderRadius: 6,
-                          border: "1px solid var(--cp-border)",
-                          background: "var(--cp-bg-surface)",
-                          color: "var(--cp-text-main)",
-                          fontSize: 13,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <EyeIcon size={14} />
-                        <span>Inspect</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+        <PortalBookingsList onInspectBooking={handleOpenBooking} />
       ) : (
         /* Site Visits Tab */
         filteredVisits.length === 0 ? (
@@ -720,6 +667,12 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
                         <th>Milestone / Term</th>
                         <th>Due Date</th>
                         <th>Amount</th>
+                        {selectedBooking.payment_plan.installments?.some((i) => i.paid_amount !== undefined) && (
+                          <>
+                            <th>Paid (verified)</th>
+                            <th>Remaining</th>
+                          </>
+                        )}
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -734,7 +687,15 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
                           <td style={{ fontWeight: 600, color: "var(--cp-text-main)" }}>
                             {formatCurrency(inst.amount, selectedBooking.property?.currency || "USD")}
                           </td>
-                          <td>{getStatusBadge(inst.status)}</td>
+                          {selectedBooking.payment_plan?.installments?.some((i) => i.paid_amount !== undefined) && (
+                            <>
+                              <td style={{ color: "#10b981", fontWeight: 600 }}>
+                                {formatCurrency(inst.paid_amount ?? "0", selectedBooking.property?.currency || "USD")}
+                              </td>
+                              <td>{formatCurrency(inst.outstanding_amount ?? inst.amount, selectedBooking.property?.currency || "USD")}</td>
+                            </>
+                          )}
+                          <td>{getStatusBadge(inst.payment_state ?? inst.status)}</td>
                         </tr>
                       ))}
                     </tbody>

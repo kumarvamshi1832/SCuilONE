@@ -23,6 +23,7 @@ import type {
   SubscriptionPlan,
   TenantSubscription,
 } from "../../types/subscription";
+import EnabledCrmModules from "../../components/billing/EnabledCrmModules";
 import "./SubscriptionBilling.css";
 
 type ActiveTab = "overview" | "plans" | "invoices" | "profile" | "support";
@@ -707,20 +708,7 @@ export default function SubscriptionBilling() {
           </div>
 
           <div className="sub-grid-2">
-            <div className="sub-card">
-              <h2 className="sub-card-title">Enabled CRM Modules</h2>
-              {resources?.enabled_modules?.length ? (
-                <div className="sub-chip-list">
-                  {resources.enabled_modules.map((mod) => (
-                    <span key={mod} className="sub-chip">
-                      {mod}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="sub-subtitle">No active modules in current subscription state.</p>
-              )}
-            </div>
+            <EnabledCrmModules planModules={resources?.enabled_modules} />
 
             <div className="sub-card">
               <h2 className="sub-card-title">Included Plan Features</h2>
@@ -1617,3 +1605,4 @@ export default function SubscriptionBilling() {
     </div>
   );
 }
+

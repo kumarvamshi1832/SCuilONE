@@ -1,3 +1,5 @@
+import type { BookingNominee, BookingNomineeInput } from "./bookingNominee";
+
 export const BOOKING_STATUSES = [
   "Pending",
   "Confirmed",
@@ -21,6 +23,10 @@ export interface Booking {
   buyer_name: string;
   buyer_email?: string | null;
   buyer_phone?: string | null;
+  buyer_address?: string | null;
+  /** Set when the customer (or staff) has submitted buyer and nominee details. */
+  buyer_details_submitted_at?: string | null;
+  nominees?: BookingNominee[];
   booking_amount: number | string;
   agreed_price: number | string;
   payment_preference?: PaymentPreference | string;
@@ -47,6 +53,8 @@ export interface BookingCreate {
   buyer_name: string;
   buyer_email?: string | null;
   buyer_phone?: string | null;
+  buyer_address?: string | null;
+  nominees?: BookingNomineeInput[];
   booking_amount: number;
   payment_preference?: PaymentPreference | string;
   installment_request_notes?: string | null;

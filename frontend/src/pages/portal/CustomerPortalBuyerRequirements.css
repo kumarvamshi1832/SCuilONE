@@ -381,3 +381,13 @@
   line-height: 1.55;
   color: var(--cp-text-muted);
 }
+
+/* Requirement tracker + toolbar filters --------------------------------------------------- */
+.cp-req-toolbar { flex-wrap: wrap; gap: 10px; }
+.cp-req-search { flex: 1; min-width: 220px; }
+.cp-req-track { list-style: none; display: flex; gap: 4px; margin: 12px 0 0; padding: 0; }
+.cp-req-track-step { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 0.72rem; color: var(--cp-text-muted); }
+.cp-req-track-step .cp-req-track-dot { height: 6px; border-radius: 999px; background: var(--cp-border, #d7e1ef); display: block; }
+.cp-req-track-step.done .cp-req-track-dot { background: #10b981; }
+.cp-req-track-step.current { color: var(--cp-text-main); font-weight: 700; }
+.cp-req-track-step.current .cp-req-track-dot { background: var(--cp-primary, #3285f6); }

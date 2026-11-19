@@ -378,7 +378,7 @@ export default function CustomerPortalNotificationsPage() {
         ) : (
           filteredNotifications.map((item) => {
             const clickable = Boolean(
-              item.related_module && ['customer_booking_requests', 'bookings', 'site_visits'].includes(item.related_module)
+              item.related_module && ['customer_booking_requests', 'bookings', 'site_visits', 'customer_chat'].includes(item.related_module)
             );
             return (
               <div

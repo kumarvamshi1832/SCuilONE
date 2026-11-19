@@ -3,9 +3,13 @@ export const PAYMENT_METHODS = [
   "Bank Transfer",
   "UPI",
   "Cheque",
+  "Demand Draft",
   "Card",
   "Other",
 ] as const;
+
+/** Methods whose transaction/reference number the backend requires (PaymentCreate validator). */
+export const PAYMENT_METHODS_REQUIRING_REFERENCE: readonly string[] = ["UPI", "Bank Transfer", "Cheque", "Demand Draft", "Card"];
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_STATUSES = ["Pending", "Verified", "Rejected"] as const;

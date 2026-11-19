@@ -4,6 +4,9 @@ import { Lead } from "../../types/lead";
 import { Contact } from "../../types/contact";
 import { Account } from "../../types/account";
 import { formatDateTime } from "../../utils/dateFormatter";
+import { getDealPermissions } from "../../utils/dealPermissions";
+import CustomFieldsPanel from "../custom-fields/CustomFieldsPanel";
+import EmailTimeline from "../emails/EmailTimeline";
 
 interface DealViewModalProps {
   deal: Deal;
@@ -131,6 +134,13 @@ export default function DealViewModal({ deal, users, leads, contacts, accounts, 
               )}
             </div>
           </div>
+
+          <CustomFieldsPanel entity="deal" recordId={deal.id} canEdit={getDealPermissions().update} />
+          <EmailTimeline
+            entity="deal"
+            recordId={deal.id}
+            recipient={contacts.find((c) => c.id === deal.contact_id)?.email ?? null}
+          />
         </div>
 
         <div className="modal-footer" style={{ padding: "16px 24px", borderTop: "1px solid #eaeaea", display: "flex", justifyContent: "flex-end" }}>

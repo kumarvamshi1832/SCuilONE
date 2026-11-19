@@ -34,6 +34,8 @@ import type {
   CollectionSummary,
   OverdueCollectionsResponse,
 } from "../../types/paymentPlan";
+import StaffPaymentForm from "../../components/bookings/StaffPaymentForm";
+import { centsToNumber, sumCents, splitCents, toCents } from "../../utils/money";
 import "./Payments.css";
 
 interface EnrichedPayment extends Payment {
@@ -69,7 +71,6 @@ export default function Payments() {
   const [bookingCollections, setBookingCollections] = useState<CollectionSummary | null>(null);
   const [loadingBookingPlan, setLoadingBookingPlan] = useState(false);
   const [selectedInstallmentId, setSelectedInstallmentId] = useState<string>("");
-  const [paymentAmount, setPaymentAmount] = useState<string>("");
 
   // Installment Plan Generator State
   const [genDuration, setGenDuration] = useState<number | "custom">(6);
@@ -411,23 +412,6 @@ export default function Payments() {
     [bookings, selectedBookingId]
   );
 
-  const selectedInstallment = useMemo(() => {
-    if (!bookingPaymentPlan || !selectedInstallmentId) return null;
-    return (
-      bookingPaymentPlan.installments.find((i) => i.id === selectedInstallmentId) || null
-    );
-  }, [bookingPaymentPlan, selectedInstallmentId]);
-
-  const selectedInstallmentRemaining = useMemo(() => {
-    if (!selectedInstallment) return 0;
-    const coll = Number(
-      selectedInstallment.net_collected ?? selectedInstallment.total_verified ?? 0
-    );
-    return selectedInstallment.outstanding_balance !== undefined
-      ? Number(selectedInstallment.outstanding_balance)
-      : Math.max(0, Number(selectedInstallment.amount) - coll);
-  }, [selectedInstallment]);
-
   // Helper for computing due dates with month rollover protection
   const computeDueDate = useCallback((baseDateStr: string, monthOffset: number): string => {
     if (!baseDateStr) return new Date().toISOString().slice(0, 10);
@@ -446,14 +430,14 @@ export default function Payments() {
 
   const generateProposedSchedule = useCallback(
     (agreedPrice: number, monthsCount: number, startDateStr: string): InstallmentCreate[] => {
+      // `agreedPrice` here is the amount to schedule (remaining balance), split to the paisa so the total is exact.
       const count = Math.max(1, Math.min(60, monthsCount));
-      const baseAmount = Math.floor(agreedPrice / count);
-      const remainder = agreedPrice - baseAmount * count;
+      const shares = splitCents(toCents(agreedPrice), count);
 
       const rows: InstallmentCreate[] = [];
       for (let i = 0; i < count; i++) {
         const seq = i + 1;
-        const amount = i === count - 1 ? baseAmount + remainder : baseAmount;
+        const amount = centsToNumber(shares[i] ?? 0);
         rows.push({
           sequence: seq,
           name: `Installment ${seq}`,
@@ -492,18 +476,28 @@ export default function Payments() {
         );
         if (firstPending) {
           setSelectedInstallmentId(firstPending.id);
-          const coll = Number(firstPending.net_collected ?? firstPending.total_verified ?? 0);
-          const rem =
-            firstPending.outstanding_balance !== undefined
-              ? Number(firstPending.outstanding_balance)
-              : Math.max(0, Number(firstPending.amount) - coll);
-          setPaymentAmount(rem > 0 ? String(rem) : String(firstPending.amount));
         }
       }
     } finally {
       setLoadingBookingPlan(false);
     }
   }, []);
+
+  /**
+   * The amount an instalment schedule has to total: agreed price minus verified money already received (net of
+   * processed refunds). The backend rejects any other total. Uses the server's collection summary when loaded.
+   */
+  const planTargetRupees = useCallback(
+    (booking?: Booking | null): number => {
+      if (!booking) return 0;
+      const net =
+        bookingCollections && bookingCollections.booking_id === booking.id
+          ? toCents(bookingCollections.net_collected)
+          : sumCents(payments.filter((p) => p.booking_id === booking.id && p.status === "Verified").map((p) => p.amount));
+      return centsToNumber(Math.max(0, toCents(booking.agreed_price) - net));
+    },
+    [bookingCollections, payments]
+  );
 
   const handleOpenRecordModal = useCallback(() => {
     const initialBookingId = bookingFilter || bookings[0]?.id || "";
@@ -512,15 +506,10 @@ export default function Payments() {
     setFormError(null);
     setPlanFormError(null);
     setSelectedInstallmentId("");
-    setPaymentAmount("");
 
-    const targetBooking = bookings.find((b) => b.id === initialBookingId);
-    if (targetBooking?.payment_preference === "Installments") {
-      loadBookingPaymentPlan(initialBookingId);
-    } else {
-      setBookingPaymentPlan(null);
-      setBookingCollections(null);
-    }
+    // Plan and collection summary are loaded for every booking: the summary carries the server's refund total
+    // that the payable-balance check needs, and a missing plan is simply a 404.
+    loadBookingPaymentPlan(initialBookingId);
     setIsRecordOpen(true);
   }, [bookingFilter, bookings, loadBookingPaymentPlan]);
 
@@ -529,40 +518,17 @@ export default function Payments() {
     setFormError(null);
     setPlanFormError(null);
     setSelectedInstallmentId("");
-    setPaymentAmount("");
-    const targetBooking = bookings.find((b) => b.id === newBookingId);
-    if (targetBooking?.payment_preference === "Installments") {
-      loadBookingPaymentPlan(newBookingId);
-    } else {
-      setBookingPaymentPlan(null);
-      setBookingCollections(null);
-    }
-  };
-
-  const handleInstallmentSelect = (instId: string) => {
-    setSelectedInstallmentId(instId);
-    if (!bookingPaymentPlan) return;
-    const inst = bookingPaymentPlan.installments.find((i) => i.id === instId);
-    if (inst) {
-      const coll = Number(inst.net_collected ?? inst.total_verified ?? 0);
-      const rem =
-        inst.outstanding_balance !== undefined
-          ? Number(inst.outstanding_balance)
-          : Math.max(0, Number(inst.amount) - coll);
-      if (!paymentAmount || Number(paymentAmount) <= 0) {
-        setPaymentAmount(rem > 0 ? String(rem) : String(inst.amount));
-      }
-    }
+    loadBookingPaymentPlan(newBookingId);
   };
 
   const initPlanGenerator = useCallback(() => {
     const targetBooking = bookings.find((b) => b.id === selectedBookingId);
-    const agreedPrice = Number(targetBooking?.agreed_price || 0);
+    const agreedPrice = planTargetRupees(targetBooking);
     const duration = genDuration === "custom" ? customMonths : Number(genDuration);
     const initialRows = generateProposedSchedule(agreedPrice, duration, genStartDate);
     setPlanInstallments(initialRows);
     setPlanFormError(null);
-  }, [bookings, selectedBookingId, genDuration, customMonths, genStartDate, generateProposedSchedule]);
+  }, [bookings, selectedBookingId, genDuration, customMonths, genStartDate, generateProposedSchedule, planTargetRupees]);
 
   // Automatically ensure schedule is generated when switching to configure_plan tab
   useEffect(() => {
@@ -575,7 +541,7 @@ export default function Payments() {
     setGenDuration(val);
     const targetBooking = bookings.find((b) => b.id === selectedBookingId);
     if (!targetBooking) return;
-    const agreedPrice = Number(targetBooking.agreed_price || 0);
+    const agreedPrice = planTargetRupees(targetBooking);
     const count = val === "custom" ? customMonths : Number(val);
     setPlanInstallments(generateProposedSchedule(agreedPrice, count, genStartDate));
     setPlanFormError(null);
@@ -585,7 +551,7 @@ export default function Payments() {
     setGenStartDate(newDate);
     const targetBooking = bookings.find((b) => b.id === selectedBookingId);
     if (!targetBooking) return;
-    const agreedPrice = Number(targetBooking.agreed_price || 0);
+    const agreedPrice = planTargetRupees(targetBooking);
     const count = genDuration === "custom" ? customMonths : Number(genDuration);
     setPlanInstallments(generateProposedSchedule(agreedPrice, count, newDate));
   };
@@ -595,7 +561,7 @@ export default function Payments() {
     setCustomMonths(clamped);
     const targetBooking = bookings.find((b) => b.id === selectedBookingId);
     if (!targetBooking) return;
-    const agreedPrice = Number(targetBooking.agreed_price || 0);
+    const agreedPrice = planTargetRupees(targetBooking);
     setPlanInstallments(generateProposedSchedule(agreedPrice, clamped, genStartDate));
     setPlanFormError(null);
   };
@@ -603,7 +569,7 @@ export default function Payments() {
   const handleRegenerateSchedule = () => {
     const targetBooking = bookings.find((b) => b.id === selectedBookingId);
     if (!targetBooking) return;
-    const agreedPrice = Number(targetBooking.agreed_price || 0);
+    const agreedPrice = planTargetRupees(targetBooking);
     const count = genDuration === "custom" ? customMonths : Number(genDuration);
     const newRows = generateProposedSchedule(agreedPrice, count, genStartDate);
     setPlanInstallments(newRows);
@@ -646,9 +612,9 @@ export default function Payments() {
   const scheduleMetrics = useMemo(() => {
     const total = planInstallments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
     const targetBooking = bookings.find((b) => b.id === selectedBookingId);
-    const target = Number(targetBooking?.agreed_price || 0);
-    const diff = target - total;
-    const isMatch = Math.abs(diff) < 0.01;
+    const target = planTargetRupees(targetBooking);
+    const diff = centsToNumber(toCents(target) - sumCents(planInstallments.map((r) => r.amount)));
+    const isMatch = diff === 0 && toCents(target) > 0;
     const hasInvalidAmount = planInstallments.some((r) => Number(r.amount) <= 0);
     const hasInvalidDate = planInstallments.some((r) => !r.due_date);
     const hasInvalidName = planInstallments.some((r) => !r.name.trim());
@@ -672,7 +638,7 @@ export default function Payments() {
         !hasInvalidName &&
         !hasDuplicateSeq,
     };
-  }, [planInstallments, selectedBookingId, bookings]);
+  }, [planInstallments, selectedBookingId, bookings, planTargetRupees]);
 
   const handleSaveInstallmentPlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -689,7 +655,7 @@ export default function Payments() {
     }
     let currentInstallments = planInstallments;
     if (currentInstallments.length === 0) {
-      const agreedPrice = Number(targetBooking.agreed_price || 0);
+      const agreedPrice = planTargetRupees(targetBooking);
       const count = genDuration === "custom" ? customMonths : Number(genDuration);
       currentInstallments = generateProposedSchedule(agreedPrice, count, genStartDate);
       setPlanInstallments(currentInstallments);
@@ -736,12 +702,16 @@ export default function Payments() {
       return;
     }
 
-    const targetPrice = Number(targetBooking.agreed_price || 0);
-    const diff = Math.round((total - targetPrice) * 100) / 100;
-    if (Math.abs(diff) > 1) {
+    const targetPrice = planTargetRupees(targetBooking);
+    const diff = centsToNumber(sumCents(currentInstallments.map((i) => i.amount)) - toCents(targetPrice));
+    if (diff !== 0) {
       setPlanFormError(
-        `The total of installments (${formatCurrency(total)}) must equal the agreed sale price (${formatCurrency(targetPrice)}). Difference: ${formatCurrency(Math.abs(diff))}`
+        `The total of installments (${formatCurrency(total)}) must equal the remaining balance (${formatCurrency(targetPrice)}) - the agreed price minus verified payments already received. Difference: ${formatCurrency(Math.abs(diff))}`
       );
+      return;
+    }
+    if (bookingCollections && bookingCollections.booking_id === targetBooking.id && toCents(bookingCollections.pending_payments) > 0) {
+      setPlanFormError("Verify or reject the pending payments before creating the installment schedule.");
       return;
     }
 
@@ -774,12 +744,6 @@ export default function Payments() {
       );
       if (firstPending) {
         setSelectedInstallmentId(firstPending.id);
-        const coll = Number(firstPending.net_collected ?? firstPending.total_verified ?? 0);
-        const rem =
-          firstPending.outstanding_balance !== undefined
-            ? Number(firstPending.outstanding_balance)
-            : Math.max(0, Number(firstPending.amount) - coll);
-        setPaymentAmount(rem > 0 ? String(rem) : String(firstPending.amount));
       }
 
       setRecordModalTab("record");
@@ -792,55 +756,21 @@ export default function Payments() {
     }
   };
 
-  // Handle Record Payment
-  const handleRecordPayment = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setFormError(null);
-    setSubmitting(true);
-
-    const formData = new FormData(e.currentTarget);
-    const booking_id = selectedBookingId || String(formData.get("booking_id") || "");
-    const amount = Number(paymentAmount || formData.get("amount") || 0);
-    const payment_method = String(formData.get("payment_method") || "Bank Transfer");
-    const transaction_reference =
-      String(formData.get("transaction_reference") || "").trim() || null;
-    const payment_date_str = String(formData.get("payment_date") || "");
-    const notes = String(formData.get("notes") || "").trim() || null;
-
-    if (!booking_id || amount <= 0) {
-      setFormError("Please select a booking and enter a valid payment amount (> 0).");
-      setSubmitting(false);
+  // Handle Record Payment (payload is built and pre-validated by StaffPaymentForm)
+  const handleRecordPayment = async (payload: PaymentCreate) => {
+    const booking_id = selectedBookingId;
+    if (!booking_id) {
+      setFormError("Please select a booking.");
       return;
     }
-
+    setFormError(null);
+    setSubmitting(true);
     const currentBooking = bookings.find((b) => b.id === booking_id);
-    if (
-      currentBooking?.payment_preference === "Installments" &&
-      bookingPaymentPlan &&
-      bookingPaymentPlan.status === "Active"
-    ) {
-      if (!selectedInstallmentId) {
-        setFormError(
-          "Please select the installment milestone this payment is allocated to (required by the active payment plan)."
-        );
-        setSubmitting(false);
-        return;
-      }
-    }
 
     try {
-      const payload: PaymentCreate = {
-        amount,
-        payment_method,
-        transaction_reference,
-        payment_date: payment_date_str ? new Date(payment_date_str).toISOString() : null,
-        notes,
-        installment_id: selectedInstallmentId || null,
-      };
-
+      // The server creates it as Pending; what comes back is the stored record.
       const created = await createPayment(booking_id, payload);
 
-      // Find booking details to enrich locally
       const selectedProp = currentBooking
         ? properties.find((p) => p.id === currentBooking.property_id)
         : undefined;
@@ -856,12 +786,10 @@ export default function Payments() {
       };
 
       setPayments((prev) => [enriched, ...prev]);
-      showToast("Payment recorded successfully! Awaiting verification.");
+      showToast("Payment recorded as PENDING. It counts as paid only after it is verified.");
       setIsRecordOpen(false);
       fetchOverdueData();
-      if (currentBooking?.payment_preference === "Installments") {
-        loadBookingPaymentPlan(booking_id);
-      }
+      loadBookingPaymentPlan(booking_id);
     } catch (err: any) {
       console.error("Create payment error:", err);
       setFormError(formatApiError(err, "Failed to record payment."));
@@ -1622,26 +1550,8 @@ export default function Payments() {
 
             {/* TAB 1: Record Payment */}
             {recordModalTab === "record" && (
-              <form
-                onSubmit={handleRecordPayment}
-                style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}
-              >
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
                 <div className="modal-body">
-                  {formError && (
-                    <div
-                      style={{
-                        background: "#fee2e2",
-                        color: "#b91c1c",
-                        padding: "10px 14px",
-                        borderRadius: "8px",
-                        fontSize: "0.85rem",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {formError}
-                    </div>
-                  )}
-
                   <div className="form-group">
                     <label>Select Booking *</label>
                     <select
@@ -1788,71 +1698,6 @@ export default function Payments() {
                             </div>
                           </div>
 
-                          {/* Installment Milestone Allocation Selector */}
-                          <div className="form-group" style={{ marginTop: "6px" }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                              }}
-                            >
-                              <label style={{ margin: 0 }}>
-                                Allocate to Installment Milestone *
-                              </label>
-                              {selectedInstallment && (
-                                <span
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    color: "#0891b2",
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Milestone Due: {formatCurrency(selectedInstallmentRemaining)}
-                                </span>
-                              )}
-                            </div>
-                            <select
-                              value={selectedInstallmentId}
-                              onChange={(e) => handleInstallmentSelect(e.target.value)}
-                              required={bookingPaymentPlan.status === "Active"}
-                            >
-                              <option value="" disabled>-- Select Milestone for this Payment --</option>
-                              {bookingPaymentPlan.installments
-                                .filter((i) => i.status !== "Cancelled")
-                                .map((i) => {
-                                  const coll = Number(i.net_collected ?? i.total_verified ?? 0);
-                                  const rem =
-                                    i.outstanding_balance !== undefined
-                                      ? Number(i.outstanding_balance)
-                                      : Math.max(0, Number(i.amount) - coll);
-                                  return (
-                                    <option key={i.id} value={i.id}>
-                                      #{i.sequence} {i.name} — Due {new Date(i.due_date).toLocaleDateString()} — Scheduled: {formatCurrency(i.amount)} | Due: {formatCurrency(rem)} [{i.status}]
-                                    </option>
-                                  );
-                                })}
-                            </select>
-                            {selectedInstallment && selectedInstallmentRemaining > 0 && (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "flex-end",
-                                  marginTop: "4px",
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  className="btn-quick-fill-amount"
-                                  onClick={() =>
-                                    setPaymentAmount(String(selectedInstallmentRemaining))
-                                  }
-                                >
-                                  Quick Fill Due Amount ({formatCurrency(selectedInstallmentRemaining)})
-                                </button>
-                              </div>
-                            )}
-                          </div>
                         </>
                       ) : (
                         <div className="no-plan-notice">
@@ -1882,77 +1727,39 @@ export default function Payments() {
                     </div>
                   )}
 
-                  <div className="form-grid-2">
-                    <div className="form-group">
-                      <label>Amount (₹) *</label>
-                      <input
-                        type="number"
-                        name="amount"
-                        min="1"
-                        step="0.01"
-                        value={paymentAmount}
-                        onChange={(e) => setPaymentAmount(e.target.value)}
-                        placeholder="e.g. 500000"
-                        required
-                      />
-                    </div>
+                </div>
 
-                    <div className="form-group">
-                      <label>Payment Method *</label>
-                      <select name="payment_method" defaultValue="Bank Transfer" required>
-                        {PAYMENT_METHODS.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </select>
+                {selectedBooking ? (
+                  loadingBookingPlan ? (
+                    <div className="modal-body" style={{ color: "#64748b", fontSize: "0.85rem" }}>
+                      Loading the booking's payment plan and balances…
                     </div>
-                  </div>
-
-                  <div className="form-grid-2">
-                    <div className="form-group">
-                      <label>Transaction / Reference / UTR</label>
-                      <input
-                        type="text"
-                        name="transaction_reference"
-                        placeholder="e.g. UTR-982187319 or CHQ-0012"
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label>Payment Date</label>
-                      <input
-                        type="date"
-                        name="payment_date"
-                        defaultValue={new Date().toISOString().split("T")[0]}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label>Notes / Remarks</label>
-                    <textarea
-                      name="notes"
-                      rows={3}
-                      placeholder="Add installment details, branch info, or notes..."
+                  ) : (
+                    <StaffPaymentForm
+                      key={`${selectedBooking.id}:${bookingPaymentPlan?.id ?? "none"}:${payments.length}`}
+                      booking={selectedBooking}
+                      buyerName={selectedBooking.buyer_name}
+                      propertyName={properties.find((p) => p.id === selectedBooking.property_id)?.name ?? null}
+                      payments={payments.filter((p) => p.booking_id === selectedBooking.id)}
+                      refundedCents={
+                        bookingCollections && bookingCollections.booking_id === selectedBooking.id
+                          ? toCents(bookingCollections.total_processed_refunds)
+                          : null
+                      }
+                      plan={bookingPaymentPlan}
+                      initialInstallmentId={selectedInstallmentId}
+                      submitting={submitting}
+                      error={formError}
+                      onSubmit={handleRecordPayment}
+                      onCancel={() => setIsRecordOpen(false)}
                     />
+                  )
+                ) : (
+                  <div className="modal-body" style={{ color: "#64748b", fontSize: "0.85rem" }}>
+                    Select a booking to record a payment.
                   </div>
-                </div>
-
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setIsRecordOpen(false)}
-                    disabled={submitting}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn-primary" disabled={submitting}>
-                    {submitting ? "Recording..." : "Save Payment"}
-                  </button>
-                </div>
-              </form>
+                )}
+              </div>
             )}
 
             {/* TAB 2: Configure Installment Plan */}

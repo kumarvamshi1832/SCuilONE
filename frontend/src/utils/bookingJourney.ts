@@ -69,9 +69,18 @@ export interface TimelineStep {
  * payment instructions, payments, agreement status/timestamps). Steps that do not apply to the
  * actual outcome (for example after a rejection) are not shown.
  */
+/** Facts from other endpoints that extend the timeline. `undefined` = not loaded (the step is omitted, never guessed). */
+export interface TimelineExtras {
+  /** Instalment schedule of the booking: null = the booking has no active schedule. */
+  schedule?: { total: number; paid: number } | null;
+  /** Handover record: null = none scheduled yet. */
+  handover?: { status: string; scheduled_at: string | null; completed_at: string | null } | null;
+}
+
 export const buildBookingTimeline = (
   d: BookingRequestDetail,
-  audience: "customer" | "staff"
+  audience: "customer" | "staff",
+  extras: TimelineExtras = {}
 ): TimelineStep[] => {
   const status = d.status;
   const rejected = status === "Rejected";
@@ -183,8 +192,43 @@ export const buildBookingTimeline = (
     key: "confirmed",
     label: status === "Completed" ? "Booking completed" : cancelled ? "Booking cancelled" : "Booking confirmed",
     state: cancelled ? "failed" : confirmed ? "done" : inactive ? "skipped" : "pending",
-    detail: d.final_confirmed_at ? formatBookingDateTime(d.final_confirmed_at) : undefined,
+    detail: d.final_confirmed_at
+      ? `${formatBookingDateTime(d.final_confirmed_at)}${d.final_confirmed_by ? ` by ${d.final_confirmed_by.toLowerCase()}` : ""}`
+      : undefined,
   });
+
+  // Instalment schedule (only for bookings that chose instalments, and only once the schedule state is known).
+  if (d.payment_preference === "Installments" && extras.schedule !== undefined) {
+    const schedule = extras.schedule;
+    const allPaid = Boolean(schedule && schedule.total > 0 && schedule.paid >= schedule.total);
+    steps.push({
+      key: "schedule",
+      label: "Instalment schedule",
+      state: allPaid ? "done" : inactive ? "skipped" : schedule ? "current" : confirmed ? "current" : "pending",
+      detail: schedule
+        ? `${schedule.paid} of ${schedule.total} instalments paid`
+        : confirmed
+        ? "Waiting for our team to create your schedule"
+        : undefined,
+    });
+  }
+
+  // Handover (only once the handover endpoint has answered).
+  if (extras.handover !== undefined) {
+    const h = extras.handover;
+    steps.push({
+      key: "handover",
+      label: "Property handover",
+      state: h?.status === "Completed" ? "done" : inactive ? "skipped" : h ? "current" : "pending",
+      detail: h
+        ? h.status === "Completed"
+          ? `Completed ${formatBookingDateTime(h.completed_at)}`
+          : `${h.status}${h.scheduled_at ? ` · ${formatBookingDateTime(h.scheduled_at)}` : ""}`
+        : confirmed
+        ? "Not scheduled yet"
+        : undefined,
+    });
+  }
 
   return steps;
 };

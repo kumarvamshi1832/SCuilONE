@@ -3,6 +3,8 @@ import { User } from "../../types/user";
 import { getLeadPermissions } from "../../utils/leadPermissions";
 import { formatDateTime } from "../../utils/dateFormatter";
 import { getLeadStatusLabel } from "../../utils/leadStatus";
+import CustomFieldsPanel from "../custom-fields/CustomFieldsPanel";
+import EmailTimeline from "../emails/EmailTimeline";
 
 interface LeadViewModalProps {
   lead: Lead;
@@ -169,6 +171,9 @@ export default function LeadViewModal({ lead, users, onClose, onEdit }: LeadView
               <p className="lead-notes-text">{lead.notes}</p>
             </div>
           )}
+
+          <CustomFieldsPanel entity="lead" recordId={lead.id} canEdit={permissions.canEdit} />
+          <EmailTimeline entity="lead" recordId={lead.id} recipient={lead.email} />
         </div>
 
         <div className="modal-footer">

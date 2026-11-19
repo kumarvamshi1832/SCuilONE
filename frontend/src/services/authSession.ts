@@ -887,3 +887,4 @@ export async function signOutAndRedirect(): Promise<void> {
   invalidateVerifiedSessionCache();
   await logoutUserSession();
 }
+

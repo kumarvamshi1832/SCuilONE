@@ -61,6 +61,9 @@ import CustomerBookingRequestDetail from "../pages/booking-workflow/CustomerBook
 import InsightShortcuts from "../components/dashboard/InsightShortcuts";
 import SalesForecast from "../pages/forecast/SalesForecast";
 import LeadScoring from "../pages/lead-scoring/LeadScoring";
+import CustomerChat from "../pages/customer-chat/CustomerChat";
+import EmailLogs from "../pages/emails/EmailLogs";
+import CustomFields from "../pages/custom-fields/CustomFields";
 import { getIndustryConfig } from "../config/industryConfig";
 import Roles from "../pages/roles/Roles";
 import Permissions from "../pages/permissions/Permissions";
@@ -108,6 +111,7 @@ import CustomerPortalShortlist from "../pages/portal/CustomerPortalShortlist";
 import CustomerPortalBookingJourney from "../pages/portal/CustomerPortalBookingJourney";
 import CustomerPortalBookingRequests from "../pages/portal/CustomerPortalBookingRequests";
 import CustomerPortalBookingRequestDetail from "../pages/portal/CustomerPortalBookingRequestDetail";
+import CustomerPortalChat from "../pages/portal/CustomerPortalChat";
 import SubscriptionBilling from "../pages/billing/SubscriptionBilling";
 import UnsubscribeReminder from "../pages/billing/UnsubscribeReminder";
 import PlatformProtectedRoute from "../components/platform/PlatformProtectedRoute";
@@ -409,6 +413,7 @@ export default function AppRoutes() {
             <Route path="booking-journey" element={<CustomerPortalBookingJourney />} />
             <Route path="booking-requests" element={<CustomerPortalBookingRequests />} />
             <Route path="booking-requests/:requestId" element={<CustomerPortalBookingRequestDetail />} />
+            <Route path="chat" element={<CustomerPortalChat />} />
           </Route>
         </Route>
 
@@ -436,6 +441,7 @@ export default function AppRoutes() {
             <Route path="booking-journey" element={<CustomerPortalBookingJourney />} />
             <Route path="booking-requests" element={<CustomerPortalBookingRequests />} />
             <Route path="booking-requests/:requestId" element={<CustomerPortalBookingRequestDetail />} />
+            <Route path="chat" element={<CustomerPortalChat />} />
           </Route>
         </Route>
         <Route path="/customer_portal" element={<CustomerPortalProtectedRoute />}>
@@ -461,6 +467,7 @@ export default function AppRoutes() {
             <Route path="booking-journey" element={<CustomerPortalBookingJourney />} />
             <Route path="booking-requests" element={<CustomerPortalBookingRequests />} />
             <Route path="booking-requests/:requestId" element={<CustomerPortalBookingRequestDetail />} />
+            <Route path="chat" element={<CustomerPortalChat />} />
           </Route>
         </Route>
 
@@ -682,6 +689,39 @@ export default function AppRoutes() {
           />
 
           <Route
+            path="/:industry/customer-chat"
+            element={
+              <IndustryModuleGate module="customer-chat">
+                <DashboardLayout>
+                  <CustomerChat />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/emails"
+            element={
+              <IndustryModuleGate module="emails">
+                <DashboardLayout>
+                  <EmailLogs />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/custom-fields"
+            element={
+              <IndustryModuleGate module="custom-fields">
+                <DashboardLayout>
+                  <CustomFields />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
             path="/:industry/roles"
             element={
               <DashboardLayout>
@@ -693,9 +733,13 @@ export default function AppRoutes() {
           <Route
             path="/:industry/permissions"
             element={
-              <DashboardLayout>
-                <Permissions />
-              </DashboardLayout>
+              // "permissions" is no longer in any industry's module list, so this redirects to the dashboard.
+              // Backend permission APIs and RBAC enforcement are unaffected.
+              <IndustryModuleGate module="permissions">
+                <DashboardLayout>
+                  <Permissions />
+                </DashboardLayout>
+              </IndustryModuleGate>
             }
           />
 
@@ -1026,6 +1070,9 @@ export default function AppRoutes() {
           <Route path="/forecast" element={<ModuleRedirect target="forecast" />} />
           <Route path="/lead-scoring" element={<ModuleRedirect target="lead-scoring" />} />
           <Route path="/trash" element={<ModuleRedirect target="trash" />} />
+          <Route path="/customer-chat" element={<ModuleRedirect target="customer-chat" />} />
+          <Route path="/emails" element={<ModuleRedirect target="emails" />} />
+          <Route path="/custom-fields" element={<ModuleRedirect target="custom-fields" />} />
           <Route path="/customer-booking-requests" element={<ModuleRedirect target="customer-booking-requests" />} />
           <Route path="/pipelines" element={<ModuleRedirect target="pipelines" />} />
           <Route path="/workflows" element={<ModuleRedirect target="workflows" />} />

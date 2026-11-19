@@ -11,6 +11,65 @@ export type IndustryConfig = {
   pipelineLabel: string;
   primaryEntity: string;
   modules: string[];
+  /**
+   * Subscription module keys (backend/app/core/subscription_config.py) that belong to this industry. Only
+   * industries for which the backend defines entitlement modules list any; the others have none yet.
+   */
+  subscriptionModules?: string[];
+};
+
+/** Core CRM keys that every tenant's plan carries (COMMON_CRM_MODULES in the backend), in display order. */
+export const CORE_SUBSCRIPTION_MODULES: readonly string[] = [
+  "leads",
+  "contacts",
+  "accounts",
+  "deals",
+  "activities",
+  "pipelines",
+  "workflows",
+  "reports",
+  "dashboard",
+  "documents",
+  "form_templates",
+  "import_export",
+  "search",
+  "audit_logs",
+];
+
+/** Readable names for subscription module keys (the raw keys are backend identifiers). */
+export const SUBSCRIPTION_MODULE_LABELS: Record<string, string> = {
+  leads: "Leads",
+  contacts: "Contacts",
+  accounts: "Accounts",
+  deals: "Deals",
+  activities: "Activities & Tasks",
+  pipelines: "Pipelines",
+  workflows: "Workflows",
+  reports: "Reports",
+  dashboard: "Dashboard",
+  documents: "Documents",
+  form_templates: "Form Templates",
+  import_export: "Import & Export",
+  search: "Global Search",
+  audit_logs: "Audit Logs",
+  properties: "Properties",
+  buildings: "Buildings",
+  real_estate_projects: "Real Estate Projects",
+  buyer_requirements: "Buyer Requirements",
+  property_matches: "Property Matches",
+  site_visits: "Site Visits",
+  bookings: "Bookings",
+  payments: "Payments",
+  payment_plans: "Payment Plans",
+  payment_refunds: "Payment Refunds",
+  software_requirements: "Software Requirements",
+  software_estimates: "Software Estimates",
+  software_contracts: "Software Contracts",
+  software_projects: "Software Projects",
+  software_sprints: "Software Sprints",
+  software_time_entries: "Time Tracking",
+  software_invoices: "Invoices & Billing",
+  software_delivery_reports: "Delivery Reports",
 };
 
 const sharedModules = [
@@ -26,12 +85,16 @@ const sharedModules = [
   "forecast",
   "lead-scoring",
   "trash",
+  "customer-chat",
+  "emails",
+  "custom-fields",
 ];
 
 const adminModules = [
   "users",
   "roles",
-  "permissions",
+  // "permissions" is intentionally not listed: the tenant-side Permissions Catalog is removed from the
+  // CRM. The /:industry/permissions route is still gated by this list and redirects to the dashboard.
   "form-builder",
   "workflows",
   "settings",
@@ -41,6 +104,18 @@ const industries: IndustryConfig[] = [
   {
     name: "Real Estate",
     slug: "real-estate",
+    subscriptionModules: [
+      "properties",
+      "buildings",
+      "real_estate_projects",
+      "buyer_requirements",
+      "property_matches",
+      "site_visits",
+      "bookings",
+      "payments",
+      "payment_plans",
+      "payment_refunds",
+    ],
     dashboardTitle: "Real Estate Overview",
     leadLabel: "Leads",
     contactLabel: "Buyers & Contacts",
@@ -131,6 +206,16 @@ const industries: IndustryConfig[] = [
   {
     name: "Software Company",
     slug: "software-company",
+    subscriptionModules: [
+      "software_requirements",
+      "software_estimates",
+      "software_contracts",
+      "software_projects",
+      "software_sprints",
+      "software_time_entries",
+      "software_invoices",
+      "software_delivery_reports",
+    ],
     dashboardTitle: "Software Sales Overview",
     leadLabel: "Leads",
     contactLabel: "Contacts",

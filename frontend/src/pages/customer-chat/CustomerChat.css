@@ -1,0 +1,214 @@
+/* ==========================================================================
+   Staff Customer Chat. Builds on Users.css / Leads.css / CrmInsights.css and the shared
+   ChatThread styles. Dark mode follows the CRM convention (.dashboard-wrapper.dark).
+   ========================================================================== */
+
+.cc-page { --cc-border: #eaeaea; --cc-bg: #ffffff; --cc-soft: #f7f8fa; --cc-text: #1a202c; --cc-muted: #64748b; --cc-accent: #3b82f6; }
+.dashboard-wrapper.dark .cc-page { --cc-border: #333; --cc-bg: #1f1f1f; --cc-soft: #262a33; --cc-text: #e2e8f0; --cc-muted: #94a3b8; }
+
+.cc-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  height: calc(100vh - 230px);
+  min-height: 520px;
+  border: 1px solid var(--cc-border);
+  border-radius: 14px;
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  overflow: hidden;
+}
+.cc-layout.with-panel { grid-template-columns: 340px minmax(0, 1fr) 320px; }
+
+/* Inbox ----------------------------------------------------------------- */
+.cc-inbox {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--cc-border);
+}
+.cc-inbox-head { padding: 12px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--cc-border); }
+.cc-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cc-border);
+  background: var(--cc-soft);
+  color: inherit;
+  font: inherit;
+  font-size: 0.88rem;
+}
+.cc-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.cc-chip {
+  border: 1px solid var(--cc-border);
+  background: transparent;
+  color: var(--cc-muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cc-chip.active { background: var(--cc-accent); border-color: var(--cc-accent); color: #fff; }
+.cc-inbox-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 6px; }
+.cc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.cc-item {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  text-align: left;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.cc-item:hover { background: var(--cc-soft); }
+.cc-item.active { background: var(--cc-soft); border-color: var(--cc-accent); }
+.cc-avatar {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #3b82f6, #26b9d4);
+}
+.cc-item-body { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 1px; }
+.cc-item-top { display: flex; justify-content: space-between; gap: 8px; }
+.cc-item-name { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-item.unread .cc-item-name { font-weight: 800; }
+.cc-item-time { flex: 0 0 auto; font-size: 0.72rem; color: var(--cc-muted); }
+.cc-item-sub { font-size: 0.76rem; color: var(--cc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-item-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; min-width: 0; }
+.cc-item-owner { font-size: 0.72rem; color: var(--cc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.cc-unread {
+  flex: 0 0 auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e53e3e;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cc-more { margin: 8px auto; display: block; }
+
+.cc-badge {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cc-badge.open { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.cc-badge.closed { background: rgba(100, 116, 139, 0.18); color: #475569; }
+.cc-badge.reassign { background: rgba(245, 158, 11, 0.18); color: #b45309; }
+.dashboard-wrapper.dark .cc-badge.open { color: #4ade80; }
+.dashboard-wrapper.dark .cc-badge.closed { color: #cbd5e1; }
+.dashboard-wrapper.dark .cc-badge.reassign { color: #fbbf24; }
+
+/* Thread ---------------------------------------------------------------- */
+.cc-thread { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.cc-placeholder {
+  margin: auto;
+  padding: 24px;
+  text-align: center;
+  color: var(--cc-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.cc-placeholder h3 { margin: 0; color: var(--cc-text); }
+.cc-placeholder p { margin: 0; }
+.cc-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cc-border);
+  flex-wrap: wrap;
+}
+.cc-thread-title { flex: 1 1 220px; min-width: 0; }
+.cc-thread-title h2 { margin: 0; font-size: 1.05rem; }
+.cc-thread-title p { margin: 2px 0 0; font-size: 0.8rem; color: var(--cc-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-thread-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cc-toggle-on { border-color: var(--cc-accent); color: var(--cc-accent); }
+.cc-back { display: none; }
+.cc-thread .ins-warning-box { margin: 10px 16px 0; }
+
+/* Side panel ------------------------------------------------------------ */
+.cc-panel {
+  border-left: 1px solid var(--cc-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--cc-bg);
+}
+.cc-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 0 6px; }
+.cc-panel .ins-alert { margin: 8px 12px 0; }
+.cc-panel-body { padding: 12px 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.cc-panel-body h4 { margin: 10px 0 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cc-muted); }
+.cc-panel-body h4:first-child { margin-top: 0; }
+.cc-small { font-size: 0.78rem; }
+.cc-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cc-people li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--cc-border);
+  border-radius: 10px;
+  background: var(--cc-soft);
+}
+.cc-person-name { font-weight: 600; font-size: 0.88rem; }
+.cc-you { color: var(--cc-muted); font-weight: 400; }
+.cc-tags { display: flex; gap: 4px; margin-top: 4px; }
+.cc-tag { font-size: 0.65rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(100, 116, 139, 0.2); }
+.cc-tag.primary { background: rgba(59, 130, 246, 0.2); color: #2563eb; }
+.dashboard-wrapper.dark .cc-tag.primary { color: #93c5fd; }
+.cc-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; font-weight: 600; }
+.cc-field select,
+.cc-field textarea {
+  font: inherit;
+  font-weight: 400;
+  font-size: 0.88rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--cc-border);
+  background: var(--cc-soft);
+  color: inherit;
+  resize: vertical;
+}
+.cc-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cc-history li { padding: 10px 12px; border-left: 3px solid var(--cc-accent); background: var(--cc-soft); border-radius: 0 10px 10px 0; font-size: 0.86rem; }
+
+/* Responsive ------------------------------------------------------------ */
+@media (max-width: 1280px) {
+  .cc-layout.with-panel { grid-template-columns: 300px minmax(0, 1fr) 300px; }
+  .cc-layout { grid-template-columns: 300px minmax(0, 1fr); }
+}
+@media (max-width: 1020px) {
+  .cc-layout,
+  .cc-layout.with-panel { grid-template-columns: minmax(0, 1fr); height: calc(100vh - 200px); }
+  .cc-layout.show-list .cc-thread,
+  .cc-layout.show-list .cc-panel { display: none; }
+  .cc-layout.show-thread .cc-inbox { display: none; }
+  /* On narrow screens the panel replaces the thread instead of squeezing it. */
+  .cc-layout.show-thread.with-panel .cc-thread { display: none; }
+  .cc-inbox { border-right: none; }
+  .cc-back { display: inline-flex; }
+}

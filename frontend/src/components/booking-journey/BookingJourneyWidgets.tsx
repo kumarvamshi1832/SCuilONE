@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { buildBookingTimeline, statusTone } from "../../utils/bookingJourney";
+import type { TimelineExtras } from "../../utils/bookingJourney";
 import type { BookingRequestDetail } from "../../types/customerBookingJourney";
 import "./BookingJourney.css";
 
@@ -28,11 +29,13 @@ const STATE_ICON: Record<string, string> = {
 export function BookingTimeline({
   detail,
   audience,
+  extras,
 }: {
   detail: BookingRequestDetail;
   audience: "customer" | "staff";
+  extras?: TimelineExtras;
 }) {
-  const steps = buildBookingTimeline(detail, audience);
+  const steps = buildBookingTimeline(detail, audience, extras);
   return (
     <ol className="bj-timeline" aria-label="Booking progress">
       {steps.map((step) => (

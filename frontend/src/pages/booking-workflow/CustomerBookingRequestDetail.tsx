@@ -26,6 +26,7 @@ import {
   FinalConfirmModal,
   PaymentInstructionsModal,
 } from "../../components/booking-journey/StaffBookingActions";
+import RequestBuyerSummary from "../../components/bookings/RequestBuyerSummary";
 import type { BookingRequestDetail } from "../../types/customerBookingJourney";
 import "../users/Users.css";
 import "../leads/Leads.css";
@@ -237,6 +238,8 @@ export default function CustomerBookingRequestDetail() {
               </div>
             )}
           </section>
+
+          {detail.booking_id && <RequestBuyerSummary booking={detail.booking} />}
 
           <section className="ins-card" aria-label="Staff actions">
             <h2 className="ins-card-title">Actions</h2>

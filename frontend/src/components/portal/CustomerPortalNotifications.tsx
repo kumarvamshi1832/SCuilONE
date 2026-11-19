@@ -385,3 +385,4 @@ export const CustomerPortalNotifications: React.FC<CustomerPortalNotificationsPr
 };
 
 export default CustomerPortalNotifications;
+

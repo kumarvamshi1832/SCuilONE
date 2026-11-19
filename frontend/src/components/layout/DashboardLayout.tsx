@@ -68,6 +68,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
       "/pipelines",
       "/buyer-requirements",
       "/lead-scoring",
+      "/emails",
     ],
   },
   {
@@ -122,6 +123,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     icon: "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z",
     routes: [
       "/support-tickets",
+      "/customer-chat",
     ],
   },
   {
@@ -142,10 +144,10 @@ const MENU_GROUPS: MenuGroupConfig[] = [
       "/users",
       "/customer-portal-users",
       "/roles",
-      "/permissions",
       "/subscription",
       "/settings",
       "/form-builder",
+      "/custom-fields",
       "/audit-logs",
       "/trash",
     ],
@@ -734,6 +736,9 @@ export default function DashboardLayout({
         if (moduleName === "customer_booking_requests") {
           // Customer booking requests have a dedicated detail route keyed by the request id.
           navigate(`${basePath}/customer-booking-requests/${encodeURIComponent(item.related_record_id)}`);
+        } else if (moduleName === "customer_chat") {
+          // related_record_id is the chat conversation id; the Customer Chat inbox opens it directly.
+          navigate(`${basePath}/customer-chat?conversation=${encodeURIComponent(item.related_record_id)}`);
         } else if (route) {
 
           navigate(
@@ -978,6 +983,27 @@ export default function DashboardLayout({
           label: "Trash",
           path: `${basePath}/trash`,
           icon: "M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6 M10 11v6 M14 11v6",
+        });
+      }
+      if (enabled.includes("customer-chat") && hasPermission("customer_chat.access")) {
+        items.push({
+          label: "Customer Chat",
+          path: `${basePath}/customer-chat`,
+          icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+        });
+      }
+      if (enabled.includes("emails") && hasPermission("email.view")) {
+        items.push({
+          label: "Emails",
+          path: `${basePath}/emails`,
+          icon: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6",
+        });
+      }
+      if (enabled.includes("custom-fields") && hasPermission("custom_field.view")) {
+        items.push({
+          label: "Custom Fields",
+          path: `${basePath}/custom-fields`,
+          icon: "M12 5v14 M5 12h14 M3 3h18v18H3z",
         });
       }
       return items;
@@ -1228,14 +1254,6 @@ export default function DashboardLayout({
         customNav.push({ label: "Roles", path: `${basePath}/roles`, icon: roleIcon });
       }
 
-      if (hasPermission("permission.view")) {
-        customNav.push({
-          label: "Permissions",
-          path: `${basePath}/permissions`,
-          icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
-        });
-      }
-
       if (hasPermission("report.view")) {
         customNav.push({ label: "Reports", path: `${basePath}/reports`, icon: reportIcon });
       }
@@ -1286,11 +1304,6 @@ export default function DashboardLayout({
             ]
           : []),
         { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
-        {
-          label: "Permissions",
-          path: `${basePath}/permissions`,
-          icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
-        },
         { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
         {
           label: "Subscription & Billing",
@@ -1359,11 +1372,6 @@ export default function DashboardLayout({
           ]
         : []),
       { label: "Roles", path: `${basePath}/roles`, icon: roleIcon },
-      {
-        label: "Permissions",
-        path: `${basePath}/permissions`,
-        icon: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
-      },
       { label: "Settings", path: `${basePath}/settings`, icon: settingsIcon },
       {
         label: "Subscription & Billing",
@@ -1433,6 +1441,7 @@ export default function DashboardLayout({
             "/activities",
             "/lead-scoring",
             "/forecast",
+            "/emails",
           ],
         },
         {
@@ -1456,6 +1465,7 @@ export default function DashboardLayout({
           icon: "M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z",
           routes: [
             "/support-tickets",
+            "/customer-chat",
           ],
         },
         {
@@ -1466,10 +1476,10 @@ export default function DashboardLayout({
             "/users",
             "/customer-portal-users",
             "/roles",
-            "/permissions",
             "/subscription",
             "/settings",
             "/form-builder",
+            "/custom-fields",
             "/audit-logs",
             "/trash",
           ],

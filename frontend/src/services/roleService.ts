@@ -1,4 +1,5 @@
 import { getRoles as getSystemRoleNames, getUsers } from "./userService";
+import { classifyCrmRole } from "../utils/authRouting";
 
 export interface RoleDetail {
   id: string;
@@ -31,14 +32,28 @@ const SYSTEM_ROLE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * Retrieve system roles populated with active user counts from authoritative backend endpoints.
- * Backend route: GET /api/v1/users/roles
+ * Whether a role name is a tenant CRM role (Tenant Owner / Tenant Admin / Manager / Sales User / Operations User /
+ * Support User / Read-only Auditor).
+ *
+ * GET /api/v1/users/roles returns every row of the shared `roles` table as a bare name - there is no tenant_id,
+ * scope or is_system field to filter on. The backend itself treats the platform and industry-team roles
+ * (ALL_PLATFORM_ROLE_NAMES) as not assignable to tenant users, and the frontend mirrors that set as
+ * PLATFORM_ROLE_KEYS. `classifyCrmRole` normalises the name to a stable key and returns null for those and for
+ * any unrecognised role, so only genuine tenant roles pass.
+ */
+export const isTenantRole = (roleName: string): boolean => classifyCrmRole(roleName) !== null;
+
+/**
+ * Retrieve the tenant's assignable roles populated with active user counts from authoritative backend endpoints.
+ * Backend route: GET /api/v1/users/roles (filtered to tenant roles, see `isTenantRole`).
+ * Nothing is deleted or changed on the server; platform roles are only hidden from this view.
  */
 export const getRoles = async (): Promise<RoleDetail[]> => {
-  const [roleNames, users] = await Promise.all([
+  const [allRoleNames, users] = await Promise.all([
     getSystemRoleNames(),
     getUsers().catch(() => []),
   ]);
+  const roleNames = allRoleNames.filter(isTenantRole);
 
   const userCounts = users.reduce((acc, user) => {
     const r = user.role || "User";

@@ -437,6 +437,16 @@ export interface PortalBookingProperty {
   currency?: string | null;
 }
 
+export interface PortalInstallmentPayment {
+  id: string;
+  amount: string;
+  status: string;
+  payment_method?: string;
+  transaction_reference?: string | null;
+  payment_date?: string | null;
+  verified_at?: string | null;
+}
+
 export interface PortalInstallment {
   id: string;
   sequence: number;
@@ -444,6 +454,13 @@ export interface PortalInstallment {
   amount: string;
   due_date: string;
   status: string;
+  /** Installment-wise figures (newer backend): verified money only counts as paid. */
+  payment_state?: string;
+  paid_amount?: string;
+  pending_amount?: string;
+  outstanding_amount?: string;
+  payable_amount?: string;
+  payments?: PortalInstallmentPayment[];
 }
 
 export interface PortalPaymentPlan {
@@ -455,6 +472,7 @@ export interface PortalPaymentPlan {
 
 export interface PortalPayment {
   id: string;
+  installment_id?: string | null;
   amount: string;
   payment_method: string;
   transaction_reference?: string | null;
@@ -478,6 +496,8 @@ export interface PortalBooking {
   agreed_price?: string;
   verified_paid_amount?: string;
   remaining_balance?: string;
+  /** Sum of processed refunds. `verified_paid_amount` is already net of it. */
+  refunded_amount?: string;
   refund_amount?: string;
   cancellation_reason?: string | null;
   property?: PortalBookingProperty | null;

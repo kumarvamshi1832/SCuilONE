@@ -15,6 +15,7 @@ import {
   CreditCardIcon,
   ClockIcon,
   ChevronLeftIcon,
+  MailIcon,
   XIcon,
 } from "../common/SupportPortalIcons";
 
@@ -90,6 +91,11 @@ export const CustomerPortalSidebar: React.FC<CustomerPortalSidebarProps> = ({
           icon: <FileTextIcon size={19} />,
         },
         {
+          name: "Messages",
+          path: "/portal/chat",
+          icon: <MailIcon size={19} />,
+        },
+        {
           name: "Tickets",
           path: "/portal/tickets",
           icon: <TicketIcon size={19} />,
@@ -130,6 +136,11 @@ export const CustomerPortalSidebar: React.FC<CustomerPortalSidebarProps> = ({
           name: "Documents",
           path: "/portal/documents",
           icon: <FileTextIcon size={19} />,
+        },
+        {
+          name: "Messages",
+          path: "/portal/chat",
+          icon: <MailIcon size={19} />,
         },
         {
           name: "Tickets",

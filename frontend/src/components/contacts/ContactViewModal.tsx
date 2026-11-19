@@ -6,6 +6,9 @@ import {
   getFormTemplates,
   getCustomFormSubmission,
 } from "../../services/formTemplateService";
+import { getContactPermissions } from "../../utils/contactPermissions";
+import CustomFieldsPanel from "../custom-fields/CustomFieldsPanel";
+import EmailTimeline from "../emails/EmailTimeline";
 
 interface ContactViewModalProps {
   contact: Contact;
@@ -276,6 +279,9 @@ export default function ContactViewModal({
               </section>
             ))}
           </div>
+
+          <CustomFieldsPanel entity="contact" recordId={contact.id} canEdit={getContactPermissions().update} />
+          <EmailTimeline entity="contact" recordId={contact.id} recipient={contact.email} />
         </div>
 
         <div className="modal-footer">

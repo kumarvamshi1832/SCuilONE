@@ -9,6 +9,9 @@ import { getContacts } from "../../services/contactService";
 import type { Deal } from "../../types/deal";
 import type { Lead } from "../../types/lead";
 import type { Contact } from "../../types/contact";
+import { getAccountPermissions } from "../../utils/accountPermissions";
+import CustomFieldsPanel from "../custom-fields/CustomFieldsPanel";
+import EmailTimeline from "../emails/EmailTimeline";
 import "./AccountViewModal.css";
 
 interface AccountViewModalProps {
@@ -563,6 +566,9 @@ export default function AccountViewModal({ account, users, onClose }: AccountVie
               </section>
             </div>
           ) : null}
+
+          <CustomFieldsPanel entity="account" recordId={account.id} canEdit={getAccountPermissions().update} />
+          <EmailTimeline entity="account" recordId={account.id} recipient={account.email} />
         </div>
 
         <div className="modal-footer">

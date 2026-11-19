@@ -39,6 +39,8 @@ const MODULE_CATEGORY: Record<string, Exclude<NotificationCategory, 'all'>> = {
   property_handovers: 'bookings',
   customer_property_service_requests: 'bookings',
   site_visits: 'visits',
+  // Messages from the company use the existing "support" category (icon + label) rather than a new one.
+  customer_chat: 'support',
 };
 
 function toPortalNotification(item: PortalNotificationApiItem): PortalNotification {
@@ -65,6 +67,8 @@ function getNotificationActionText(item: Pick<PortalNotificationApiItem, 'relate
       return 'View booking request';
     case 'site_visits':
       return 'View site visits';
+    case 'customer_chat':
+      return 'Open messages';
     default:
       return undefined;
   }
@@ -133,6 +137,9 @@ export const CustomerPortalNotificationService = {
     }
     if (module === 'site_visits') {
       return '/portal/booking-journey';
+    }
+    if (module === 'customer_chat') {
+      return '/portal/chat';
     }
     return null;
   },

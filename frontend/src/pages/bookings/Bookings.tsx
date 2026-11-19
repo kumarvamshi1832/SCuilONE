@@ -1,11 +1,21 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { Fragment, useRef, useState, useEffect, useMemo, useCallback } from "react";
 import {
   getBookings,
+  getBooking,
   createBooking,
   updateBooking,
   cancelBooking,
   completeBooking,
 } from "../../services/bookingService";
+import { finalConfirmBooking, getStaffBookingRequests } from "../../services/customerBookingWorkflowService";
+import type { BookingRequest } from "../../types/customerBookingJourney";
+import AmountInput from "../../components/bookings/AmountInput";
+import StaffPaymentForm from "../../components/bookings/StaffPaymentForm";
+import StaffPaymentOverview from "../../components/bookings/StaffPaymentOverview";
+import ConfirmationChecklist from "../../components/bookings/ConfirmationChecklist";
+import { confirmationChecks, planTargetCents } from "../../utils/bookingPayments";
+import { parseBackendDate } from "../../utils/bookingJourney";
+import { centsToNumber, formatInrCents, splitCents, sumCents, toCents } from "../../utils/money";
 import {
   getPayments,
   createPayment,
@@ -30,7 +40,6 @@ import type {
   Payment,
   PaymentCreate,
 } from "../../types/payment";
-import { PAYMENT_METHODS } from "../../types/payment";
 import type { PaymentRefund } from "../../types/paymentRefund";
 import type { Property } from "../../types/property";
 import type {
@@ -49,6 +58,12 @@ import {
   getOverdueCollections,
 } from "../../services/paymentPlanService";
 import { getLeadStatusLabel } from "../../utils/leadStatus";
+import { hasFeaturePermission } from "../../utils/modulePermissions";
+import { hasNomineeErrors, nomineePayload, validateNominees } from "../../utils/bookingNominees";
+import { NOMINEE_LIMITS } from "../../types/bookingNominee";
+import type { NomineeDraft, NomineeErrors } from "../../types/bookingNominee";
+import { NomineesEditor } from "../../components/bookings/NomineesEditor";
+import BookingBuyerSection from "../../components/bookings/BookingBuyerSection";
 import "./Bookings.css";
 
 export default function Bookings() {
@@ -78,6 +93,10 @@ export default function Bookings() {
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string>("");
   const [buyerName, setBuyerName] = useState<string>("");
+  const [buyerAddress, setBuyerAddress] = useState<string>("");
+  const [createNominees, setCreateNominees] = useState<NomineeDraft[]>([]);
+  const [nomineeErrors, setNomineeErrors] = useState<NomineeErrors>({ rows: {}, form: null });
+  const canEditNominees = useMemo(() => hasFeaturePermission("booking.update"), []);
   const [buyerEmail, setBuyerEmail] = useState<string>("");
   const [buyerPhone, setBuyerPhone] = useState<string>("");
 
@@ -104,6 +123,7 @@ export default function Bookings() {
   const [planNotes, setPlanNotes] = useState("");
   const [planFormError, setPlanFormError] = useState<string | null>(null);
   const [planSubmitting, setPlanSubmitting] = useState(false);
+  const planSubmitInFlight = useRef(false);
   const [isCancelPlanModalOpen, setIsCancelPlanModalOpen] = useState(false);
 
   // Overdue Installments Modal
@@ -113,7 +133,11 @@ export default function Bookings() {
 
   // Record Payment Modal
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
-  const [selectedPaymentInstallmentId, setSelectedPaymentInstallmentId] = useState("");
+  const [decidingPaymentId, setDecidingPaymentId] = useState<string | null>(null);
+
+  // Customer-portal booking request behind the booking being viewed (null for bookings staff created directly).
+  const [journey, setJourney] = useState<BookingRequest | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   // Request Refund Modal
   const [refundingPayment, setRefundingPayment] = useState<Payment | null>(null);
@@ -348,15 +372,29 @@ export default function Bookings() {
     }
   }, []);
 
+  // The customer-portal booking request (agreement, hold) behind a booking decides whether it can be confirmed.
+  const loadJourney = useCallback(async (bookingId: string) => {
+    try {
+      const requests = await getStaffBookingRequests();
+      setJourney(requests.find((r) => r.booking_id === bookingId) ?? null);
+    } catch {
+      setJourney(null);
+    }
+  }, []);
+
   const viewingBookingId = viewingBooking?.id;
   useEffect(() => {
     if (viewingBookingId) {
       loadPaymentsAndRefunds(viewingBookingId);
+      loadJourney(viewingBookingId);
+      setConfirmError(null);
       if (userPermissions.canPaymentPlanView) {
         loadPaymentPlanAndCollections(viewingBookingId);
       }
       setActiveDetailsTab("overview");
     } else {
+      setJourney(null);
+      setConfirmError(null);
       setBookingPayments([]);
       setPaymentsRefundsMap({});
       setPaymentPlan(null);
@@ -364,7 +402,7 @@ export default function Bookings() {
       setPlanError(null);
       setActiveDetailsTab("overview");
     }
-  }, [viewingBookingId, loadPaymentsAndRefunds, loadPaymentPlanAndCollections, userPermissions.canPaymentPlanView]);
+  }, [viewingBookingId, loadPaymentsAndRefunds, loadJourney, loadPaymentPlanAndCollections, userPermissions.canPaymentPlanView]);
 
   // Currency Formatter
   const formatINR = (val?: number | string | null) => {
@@ -445,6 +483,15 @@ export default function Bookings() {
     const canCompleteSale =
       viewingBooking.status === "Confirmed" && netReceived >= agreedPrice && agreedPrice > 0;
 
+    // Exact paise figures for the rules the backend enforces.
+    const verifiedCents = sumCents(verifiedPayments.map((p) => p.amount));
+    const refundedCents = sumCents(
+      Object.values(paymentsRefundsMap).flatMap((rList) => rList.filter((r) => r.status === "Processed").map((r) => r.amount))
+    );
+    const pendingPayments = bookingPayments.filter((p) => p.status === "Pending");
+    /** What an instalment plan has to add up to: agreed price - net verified money already received. */
+    const planTarget = planTargetCents(viewingBooking.agreed_price, verifiedCents, refundedCents);
+
     return {
       agreedPrice,
       bookingToken,
@@ -454,8 +501,26 @@ export default function Bookings() {
       balanceDue,
       progressPercent,
       canCompleteSale,
+      verifiedCents,
+      refundedCents,
+      pendingCount: pendingPayments.length,
+      planTarget,
     };
   }, [viewingBooking, bookingPayments, paymentsRefundsMap]);
+
+  // Conditions the backend enforces before a customer-portal booking can be confirmed (null = staff-created booking).
+  const confirmChecks = useMemo(() => {
+    if (!viewingBooking || !journey || !financialSummary) return null;
+    const hold = parseBackendDate(journey.hold_expires_at);
+    return confirmationChecks({
+      holdActive: journey.status === "Approved" && Boolean(hold && hold.getTime() > Date.now()),
+      buyerDetailsSubmitted: Boolean(viewingBooking.buyer_details_submitted_at),
+      agreementStatus: journey.agreement_status,
+      verifiedNetCents: Math.max(0, financialSummary.verifiedCents - financialSummary.refundedCents),
+      bookingAmountCents: toCents(viewingBooking.booking_amount),
+    });
+  }, [viewingBooking, journey, financialSummary]);
+  const confirmBlocked = Boolean(confirmChecks && confirmChecks.some((c) => !c.met));
 
   // Handle Lead Selection in Create Booking Modal
   const handleLeadChange = (newLeadId: string) => {
@@ -482,6 +547,9 @@ export default function Bookings() {
     setBuyerName("");
     setBuyerEmail("");
     setBuyerPhone("");
+    setBuyerAddress("");
+    setCreateNominees([]);
+    setNomineeErrors({ rows: {}, form: null });
     setFormError(null);
     setCreatePaymentPref("Full Payment");
     setCreateInstallmentNotes("");
@@ -516,6 +584,16 @@ export default function Bookings() {
       return;
     }
 
+    // Nominees are optional, but any that were added must be complete and (if percentages are used) total 100%.
+    const foundNomineeErrors = validateNominees(createNominees);
+    setNomineeErrors(foundNomineeErrors);
+    if (hasNomineeErrors(foundNomineeErrors)) {
+      setFormError("Please correct the nominee details highlighted below.");
+      setSubmitting(false);
+      return;
+    }
+    const finalBuyerAddress = buyerAddress.trim() || null;
+
     try {
       const payload: BookingCreate = {
         property_id,
@@ -523,6 +601,8 @@ export default function Bookings() {
         buyer_name: finalBuyerName,
         buyer_email: finalBuyerEmail,
         buyer_phone: finalBuyerPhone,
+        buyer_address: finalBuyerAddress,
+        nominees: nomineePayload(createNominees),
         booking_amount,
         payment_preference,
         installment_request_notes,
@@ -545,32 +625,32 @@ export default function Bookings() {
 
   // Open Create Payment Plan Modal
   const handleOpenCreatePlan = () => {
-    if (!viewingBooking) return;
-    const agreedPrice = Number(viewingBooking.agreed_price) || 0;
-    const tokenAmount = Math.min(Number(viewingBooking.booking_amount) || 0, agreedPrice);
-    const balance = Math.max(0, agreedPrice - tokenAmount);
+    if (!viewingBooking || !financialSummary) return;
+    // The backend refuses a schedule while payments await a decision, and when nothing is left to schedule.
+    if (financialSummary.pendingCount > 0) {
+      showToast("Verify or reject the pending payments before creating the installment schedule.", "error");
+      return;
+    }
+    if (financialSummary.planTarget <= 0) {
+      showToast("The agreed price has already been fully collected; no installment schedule is needed.", "error");
+      return;
+    }
 
-    const todayStr = new Date().toISOString().split("T")[0] || "";
+    // The schedule covers the REMAINING balance (agreed price minus verified money already received, e.g. the
+    // token). The token is a separate payment, never an instalment, so it is not repeated here.
+    const shares = splitCents(financialSummary.planTarget, 2);
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    const nextMonthStr = nextMonth.toISOString().split("T")[0] || "";
+    const afterNext = new Date();
+    afterNext.setMonth(afterNext.getMonth() + 2);
 
-    const initialInstallments: InstallmentCreate[] = [
-      {
-        sequence: 1,
-        name: "Initial Token / Booking Deposit",
-        amount: tokenAmount > 0 ? tokenAmount : Math.round(agreedPrice * 0.1),
-        due_date: todayStr,
-        notes: "Due upon booking confirmation",
-      },
-      {
-        sequence: 2,
-        name: "Final Settlement / Handover",
-        amount: tokenAmount > 0 ? balance : Math.round(agreedPrice * 0.9),
-        due_date: nextMonthStr,
-        notes: "Due on possession / handover",
-      },
-    ];
+    const initialInstallments: InstallmentCreate[] = shares.map((share, i) => ({
+      sequence: i + 1,
+      name: `Installment ${i + 1}`,
+      amount: centsToNumber(share),
+      due_date: ((i === 0 ? nextMonth : afterNext).toISOString().split("T")[0]) || "",
+      notes: "",
+    }));
 
     setPlanInstallments(initialInstallments);
     setPlanNotes("");
@@ -598,33 +678,23 @@ export default function Bookings() {
 
   // Quick Auto Split Helper
   const handleAutoSplit = (parts: number) => {
-    if (!viewingBooking) return;
-    const agreedPrice = Number(viewingBooking.agreed_price) || 0;
-    if (agreedPrice <= 0) return;
+    if (!viewingBooking || !financialSummary) return;
+    // Split the amount the backend expects the schedule to total (remaining balance), to the paisa.
+    const target = financialSummary.planTarget;
+    if (target <= 0) return;
 
-    const baseAmount = Math.floor((agreedPrice / parts) * 100) / 100;
-    const remainder = Math.round((agreedPrice - baseAmount * (parts - 1)) * 100) / 100;
-
-    const generated: InstallmentCreate[] = [];
-    const baseDate = new Date();
-
-    for (let i = 1; i <= parts; i++) {
-      const dueDate = new Date(baseDate);
-      dueDate.setMonth(dueDate.getMonth() + (i - 1));
-      const isLast = i === parts;
-      generated.push({
-        sequence: i,
-        name:
-          i === 1
-            ? "1st Installment (Booking / Down Payment)"
-            : isLast
-            ? `Final Installment #${i} (Handover)`
-            : `Installment #${i}`,
-        amount: isLast ? remainder : baseAmount,
+    const shares = splitCents(target, parts);
+    const generated: InstallmentCreate[] = shares.map((share, idx) => {
+      const dueDate = new Date();
+      dueDate.setMonth(dueDate.getMonth() + idx + 1);
+      return {
+        sequence: idx + 1,
+        name: idx === parts - 1 && parts > 1 ? `Final Installment ${idx + 1}` : `Installment ${idx + 1}`,
+        amount: centsToNumber(share),
         due_date: dueDate.toISOString().split("T")[0] || "",
-        notes: `Milestone ${i} of ${parts}`,
-      });
-    }
+        notes: `Installment ${idx + 1} of ${parts}`,
+      };
+    });
     setPlanInstallments(generated);
   };
 
@@ -674,15 +744,12 @@ export default function Bookings() {
   // Save Payment Plan (Create or Update)
   const handleSavePlan = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!viewingBooking) return;
+    if (!viewingBooking || !financialSummary || planSubmitInFlight.current) return;
     setPlanFormError(null);
     setPlanSubmitting(true);
 
-    const agreedPrice = Number(viewingBooking.agreed_price) || 0;
-    const currentTotal = planInstallments.reduce(
-      (sum, item) => sum + (Number(item.amount) || 0),
-      0
-    );
+    const targetCents = financialSummary.planTarget;
+    const currentCents = sumCents(planInstallments.map((item) => item.amount));
 
     // Validations
     if (planInstallments.length === 0) {
@@ -709,29 +776,34 @@ export default function Bookings() {
         setPlanSubmitting(false);
         return;
       }
-      if (!inst.due_date) {
-        setPlanFormError("Each installment must specify a due date.");
+      if (!inst.due_date || !/^\d{4}-\d{2}-\d{2}$/.test(inst.due_date) || Number.isNaN(new Date(inst.due_date).getTime())) {
+        setPlanFormError(`Installment ${inst.sequence}: enter a valid due date.`);
         setPlanSubmitting(false);
         return;
       }
     }
 
-    // Cent precision difference check
-    const diff = Math.abs(currentTotal - agreedPrice);
-    if (diff > 0.05) {
+    // The backend requires the schedule to equal the remaining balance exactly (to the paisa).
+    if (currentCents !== targetCents) {
       setPlanFormError(
-        `Plan total (${formatINR(currentTotal)}) must equal the agreed price (${formatINR(agreedPrice)}). Current difference: ${formatINR(Math.abs(agreedPrice - currentTotal))}`
+        `The schedule total (${formatInrCents(currentCents)}) must equal the remaining balance (${formatInrCents(targetCents)}) - the agreed price minus verified payments already received. Difference: ${formatInrCents(Math.abs(targetCents - currentCents))}.`
       );
       setPlanSubmitting(false);
       return;
     }
+    if (financialSummary.pendingCount > 0) {
+      setPlanFormError("Verify or reject the pending payments before saving the installment schedule.");
+      setPlanSubmitting(false);
+      return;
+    }
 
+    planSubmitInFlight.current = true;
     try {
       const payload: PaymentPlanCreate = {
         installments: planInstallments.map((x) => ({
           sequence: Number(x.sequence),
           name: x.name.trim(),
-          amount: Number(x.amount),
+          amount: centsToNumber(toCents(x.amount)),
           due_date: x.due_date,
           notes: x.notes?.trim() || null,
         })),
@@ -745,16 +817,19 @@ export default function Bookings() {
       } else {
         const created = await createPaymentPlan(viewingBooking.id, payload);
         setPaymentPlan(created);
-        showToast("Payment plan created successfully!");
+        showToast("Payment plan created successfully! The customer can now see it in their portal.");
       }
 
-      await loadPaymentPlanAndCollections(viewingBooking.id);
+      // Re-read what the server stored (plan, collections, payments) so every figure shown is the saved state.
+      await refreshBookingPayments(viewingBooking.id);
       setIsPlanModalOpen(false);
       setActiveDetailsTab("plan");
     } catch (err: any) {
       console.error("Save payment plan error:", err);
+      // 409/422 carry the exact reason (pending payments, plan already exists, total mismatch, not an Installments booking).
       setPlanFormError(formatApiError(err, "Failed to save payment plan."));
     } finally {
+      planSubmitInFlight.current = false;
       setPlanSubmitting(false);
     }
   };
@@ -804,8 +879,18 @@ export default function Bookings() {
   // Confirm Pending Booking
   const handleConfirmBooking = async (booking: Booking) => {
     setSubmitting(true);
+    setConfirmError(null);
     try {
-      const updated = await updateBooking(booking.id, { status: "Confirmed" });
+      let updated: Booking;
+      if (journey) {
+        // Customer-portal booking: the dedicated endpoint re-checks hold, agreement, buyer details and verified
+        // booking amount, confirms both records and notifies the customer.
+        await finalConfirmBooking(journey.id);
+        updated = await getBooking(booking.id);
+        loadJourney(booking.id);
+      } else {
+        updated = await updateBooking(booking.id, { status: "Confirmed" });
+      }
       setBookings((prev) =>
         prev.map((b) => (b.id === updated.id ? updated : b))
       );
@@ -813,7 +898,10 @@ export default function Bookings() {
       showToast("Booking confirmed!");
     } catch (err: any) {
       console.error("Confirm booking error:", err);
-      showToast(formatApiError(err, "Failed to confirm booking."), "error");
+      // The backend names exactly what is missing (hold, agreement, buyer details, booking amount) - keep it on screen.
+      const message = formatApiError(err, "Failed to confirm booking.");
+      setConfirmError(message);
+      showToast(message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -876,49 +964,28 @@ export default function Bookings() {
     }
   };
 
-  // Record Payment Submit
-  const handleRecordPayment = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  // Re-reads everything the API owns about one booking after a payment action, so the staff lists, balances and
+  // schedule always show the server's state (no local patching).
+  const refreshBookingPayments = async (bookingId: string) => {
+    await Promise.all([
+      loadPaymentsAndRefunds(bookingId),
+      userPermissions.canPaymentPlanView ? loadPaymentPlanAndCollections(bookingId) : Promise.resolve(),
+    ]);
+  };
+
+  // Record Payment Submit (payload is built and pre-validated by StaffPaymentForm)
+  const handleRecordPayment = async (payload: PaymentCreate) => {
     if (!viewingBooking) return;
     setSubmitting(true);
     setFormError(null);
-
-    const formData = new FormData(e.currentTarget);
-    const amount = Number(formData.get("amount") || 0);
-    const payment_method = String(formData.get("payment_method") || "Bank Transfer");
-    const transaction_reference = String(formData.get("transaction_reference") || "").trim() || null;
-    const payment_date = String(formData.get("payment_date") || "")
-      ? new Date(String(formData.get("payment_date"))).toISOString()
-      : null;
-    const notes = String(formData.get("notes") || "").trim() || null;
-
-    const installment_id = selectedPaymentInstallmentId || null;
-
-    if (amount <= 0) {
-      setFormError("Amount must be greater than zero.");
-      setSubmitting(false);
-      return;
-    }
-
     try {
-      const payload: PaymentCreate = {
-        installment_id,
-        amount,
-        payment_method,
-        transaction_reference,
-        payment_date,
-        notes,
-      };
       await createPayment(viewingBooking.id, payload);
-      showToast("Payment recorded! Awaiting verification.");
+      showToast("Payment recorded as PENDING. It counts as paid only after it is verified.");
       setIsRecordPaymentOpen(false);
-      setSelectedPaymentInstallmentId("");
-      loadPaymentsAndRefunds(viewingBooking.id);
-      if (userPermissions.canPaymentPlanView) {
-        loadPaymentPlanAndCollections(viewingBooking.id);
-      }
+      await refreshBookingPayments(viewingBooking.id);
     } catch (err: any) {
       console.error("Record payment error:", err);
+      // Keeps the form open with the server's reason (limit exceeded, duplicate reference, instalment required...).
       setFormError(formatApiError(err, "Failed to record payment."));
     } finally {
       setSubmitting(false);
@@ -927,19 +994,17 @@ export default function Bookings() {
 
   // Decide Payment Submit (Verify / Reject)
   const handleDecidePayment = async (status: "Verified" | "Rejected", paymentId: string) => {
-    if (!viewingBooking) return;
-    setSubmitting(true);
+    if (!viewingBooking || decidingPaymentId) return;
+    setDecidingPaymentId(paymentId);
     try {
-      await decidePayment(viewingBooking.id, paymentId, {
-        status,
-      });
-      showToast(`Payment marked as ${status}!`);
-      loadPaymentsAndRefunds(viewingBooking.id);
+      await decidePayment(viewingBooking.id, paymentId, { status });
+      showToast(status === "Verified" ? "Payment verified. It now counts as paid and is visible to the customer." : "Payment rejected.");
+      await refreshBookingPayments(viewingBooking.id);
     } catch (err: any) {
       console.error("Payment decision error:", err);
-      showToast(err?.response?.data?.detail || "Action failed.", "error");
+      showToast(formatApiError(err, "The payment could not be updated."), "error");
     } finally {
-      setSubmitting(false);
+      setDecidingPaymentId(null);
     }
   };
 
@@ -1664,6 +1729,33 @@ export default function Bookings() {
                   </div>
                 </div>
 
+                <div className="form-group">
+                  <label>Buyer Address</label>
+                  <textarea
+                    name="buyer_address"
+                    rows={2}
+                    maxLength={NOMINEE_LIMITS.buyerAddressMax}
+                    value={buyerAddress}
+                    onChange={(e) => setBuyerAddress(e.target.value)}
+                    placeholder="Residential / correspondence address"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Nominees (Optional)</label>
+                  <NomineesEditor
+                    value={createNominees}
+                    onChange={(next) => {
+                      setCreateNominees(next);
+                      if (nomineeErrors.form || Object.keys(nomineeErrors.rows).length > 0) {
+                        setNomineeErrors({ rows: {}, form: null });
+                      }
+                    }}
+                    errors={nomineeErrors}
+                    disabled={submitting}
+                  />
+                </div>
+
                 <div className="form-grid-2">
                   <div className="form-group">
                     <label>Initial Token / Booking Amount (INR) *</label>
@@ -1855,6 +1947,17 @@ export default function Bookings() {
                 </div>
               </div>
 
+              <BookingBuyerSection
+                booking={viewingBooking}
+                canEdit={canEditNominees}
+                onNomineesSaved={(saved) => {
+                  const patch = { nominees: saved };
+                  setViewingBooking((prev) => (prev && prev.id === viewingBooking.id ? { ...prev, ...patch } : prev));
+                  setBookings((prev) => prev.map((b) => (b.id === viewingBooking.id ? { ...b, ...patch } : b)));
+                  showToast("Nominees saved.");
+                }}
+              />
+
               {/* Financial Summary Banner */}
               <div className="booking-summary-banner">
                 <div className="summary-financial-grid">
@@ -1891,6 +1994,13 @@ export default function Bookings() {
                 </div>
               </div>
 
+              <StaffPaymentOverview
+                booking={viewingBooking}
+                payments={bookingPayments}
+                refundedCents={financialSummary.refundedCents}
+                plan={paymentPlan}
+              />
+
               {/* Buyer's Installment Request Notes banner if present */}
               {viewingBooking.installment_request_notes && (
                 <div className="installment-request-banner">
@@ -1922,13 +2032,32 @@ export default function Bookings() {
               {/* TAB 1: Transactions & Refunds Overview */}
               {activeDetailsTab === "overview" && (
                 <>
+                  {/* What must be true before a customer-portal booking can be confirmed (server-enforced) */}
+                  {viewingBooking.status === "Pending" && confirmChecks && (
+                    <div className="pw-root" style={{ marginBottom: "16px" }}>
+                      <ConfirmationChecklist
+                        title="Confirmation requirements"
+                        intro="This booking came from a customer portal request, so the backend checks these before it can be confirmed."
+                        checks={confirmChecks}
+                      />
+                    </div>
+                  )}
+                  {viewingBooking.status === "Pending" && confirmError && (
+                    <div className="pw-root" style={{ marginBottom: "16px" }}>
+                      <div className="pw-notice error" role="alert">
+                        <strong>Booking not confirmed:</strong> {confirmError}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Action Buttons Row */}
                   <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "20px", flexWrap: "wrap" }}>
                     {viewingBooking.status === "Pending" && userPermissions.canUpdate && (
                       <button
                         className="btn-primary"
                         onClick={() => handleConfirmBooking(viewingBooking)}
-                        disabled={submitting}
+                        disabled={submitting || confirmBlocked}
+                        title={confirmBlocked ? "Complete the outstanding requirements listed above first." : undefined}
                       >
                         Confirm Booking
                       </button>
@@ -2002,7 +2131,11 @@ export default function Bookings() {
                       </div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {bookingPayments.map((pmt) => {
+                        {[...bookingPayments]
+                          .sort((a, b) => Number(b.status === "Pending") - Number(a.status === "Pending"))
+                          .map((pmt, idx, arr) => {
+                          const isPending = pmt.status === "Pending";
+                          const startsGroup = idx === 0 || (arr[idx - 1]?.status === "Pending") !== isPending;
                           const refunds = paymentsRefundsMap[pmt.id] || [];
                           const pmtStatusClass =
                             pmt.status === "Verified"
@@ -2016,8 +2149,15 @@ export default function Bookings() {
                           );
 
                           return (
+                            <Fragment key={pmt.id}>
+                            {startsGroup && (
+                              <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#64748b", marginTop: idx === 0 ? 0 : 6 }}>
+                                {isPending
+                                  ? `Pending verification (${arr.filter((p) => p.status === "Pending").length}) — recorded, not yet counted as paid`
+                                  : `Payment history (${arr.filter((p) => p.status !== "Pending").length}) — verified and rejected`}
+                              </div>
+                            )}
                             <div
-                              key={pmt.id}
                               style={{
                                 border: "1px solid #e2e8f0",
                                 borderRadius: "10px",
@@ -2058,6 +2198,7 @@ export default function Bookings() {
                                         className="btn-primary"
                                         style={{ padding: "4px 10px", fontSize: "0.75rem" }}
                                         onClick={() => handleDecidePayment("Verified", pmt.id)}
+                                        disabled={decidingPaymentId !== null}
                                       >
                                         Verify
                                       </button>
@@ -2065,6 +2206,7 @@ export default function Bookings() {
                                         className="btn-danger"
                                         style={{ padding: "4px 10px", fontSize: "0.75rem" }}
                                         onClick={() => handleDecidePayment("Rejected", pmt.id)}
+                                        disabled={decidingPaymentId !== null}
                                       >
                                         Reject
                                       </button>
@@ -2160,6 +2302,7 @@ export default function Bookings() {
                                 </div>
                               )}
                             </div>
+                            </Fragment>
                           );
                         })}
                       </div>
@@ -2477,7 +2620,7 @@ export default function Bookings() {
       {/* ─── Record Payment Modal ─── */}
       {isRecordPaymentOpen && viewingBooking && (
         <div className="modal-overlay" onClick={() => setIsRecordPaymentOpen(false)}>
-          <div className="modal-card" style={{ maxWidth: "520px" }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Record Booking Payment</h2>
               <button className="modal-close-btn" onClick={() => setIsRecordPaymentOpen(false)}>
@@ -2485,109 +2628,18 @@ export default function Bookings() {
               </button>
             </div>
 
-            <form onSubmit={handleRecordPayment} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-              <div className="modal-body">
-                {formError && (
-                  <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "16px", fontSize: "0.85rem" }}>
-                    {formError}
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label>Amount (INR) *</label>
-                  <input
-                    type="number"
-                    name="amount"
-                    min="1"
-                    step="any"
-                    placeholder="e.g. 500000"
-                    required
-                  />
-                </div>
-
-                {/* Optional link to payment plan installment milestone */}
-                {paymentPlan && paymentPlan.status === "Active" && paymentPlan.installments.length > 0 && (
-                  <div className="form-group">
-                    <label>Link to Installment Milestone (Optional)</label>
-                    <select
-                      value={selectedPaymentInstallmentId}
-                      onChange={(e) => setSelectedPaymentInstallmentId(e.target.value)}
-                    >
-                      <option value="">-- General Payment / Unallocated --</option>
-                      {paymentPlan.installments
-                        .filter((inst) => inst.status !== "Paid" && inst.status !== "Cancelled")
-                        .map((inst) => {
-                          const rem =
-                            inst.outstanding_balance !== undefined
-                              ? Number(inst.outstanding_balance)
-                              : Math.max(
-                                  0,
-                                  Number(inst.amount) -
-                                    Number(inst.net_collected ?? inst.total_verified ?? 0)
-                                );
-                          return (
-                            <option key={inst.id} value={inst.id}>
-                              #{inst.sequence} {inst.name} - Due {new Date(inst.due_date).toLocaleDateString()} ({formatINR(rem)} due)
-                            </option>
-                          );
-                        })}
-                    </select>
-                  </div>
-                )}
-
-                <div className="form-group">
-                  <label>Payment Method *</label>
-                  <select name="payment_method" defaultValue="Bank Transfer" required>
-                    {PAYMENT_METHODS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Transaction Reference / Cheque No</label>
-                  <input
-                    type="text"
-                    name="transaction_reference"
-                    placeholder="e.g. UTR / NEFT / Cheque #12345"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Payment Date</label>
-                  <input
-                    type="date"
-                    name="payment_date"
-                    defaultValue={new Date().toISOString().split("T")[0]}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Notes</label>
-                  <textarea
-                    name="notes"
-                    placeholder="e.g. Received 2nd installment towards unit..."
-                    rows={2}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setIsRecordPaymentOpen(false)}
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" disabled={submitting}>
-                  {submitting ? "Saving..." : "Record Payment"}
-                </button>
-              </div>
-            </form>
+            <StaffPaymentForm
+              booking={viewingBooking}
+              buyerName={viewingBooking.buyer_name}
+              propertyName={propertyMap.get(viewingBooking.property_id)?.name ?? null}
+              payments={bookingPayments}
+              refundedCents={loadingPayments ? null : financialSummary?.refundedCents ?? null}
+              plan={paymentPlan}
+              submitting={submitting}
+              error={formError}
+              onSubmit={handleRecordPayment}
+              onCancel={() => setIsRecordPaymentOpen(false)}
+            />
           </div>
         </div>
       )}
@@ -2608,7 +2660,7 @@ export default function Bookings() {
               </button>
             </div>
 
-            <form onSubmit={handleSavePlan} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+            <form onSubmit={handleSavePlan} noValidate style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
               <div className="modal-body" style={{ maxHeight: "75vh", overflowY: "auto" }}>
                 {planFormError && (
                   <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "16px", fontSize: "0.85rem" }}>
@@ -2695,17 +2747,12 @@ export default function Bookings() {
                               />
                             </td>
                             <td>
-                              <input
-                                type="number"
-                                min="1"
-                                step="any"
-                                value={inst.amount || ""}
+                              <AmountInput
+                                value={Number(inst.amount) || 0}
                                 placeholder="Amount"
-                                onChange={(e) =>
-                                  handleInstallmentFieldChange(index, "amount", Number(e.target.value))
-                                }
+                                aria-label={`Installment ${inst.sequence} amount`}
+                                onChange={(rupees) => handleInstallmentFieldChange(index, "amount", rupees)}
                                 style={{ width: "100%", padding: "4px 8px", fontSize: "0.85rem" }}
-                                required
                               />
                             </td>
                             <td>
@@ -2757,31 +2804,42 @@ export default function Bookings() {
 
                 {/* Balance verification banner */}
                 {(() => {
-                  const agreedPrice = Number(viewingBooking.agreed_price) || 0;
-                  const scheduledTotal = planInstallments.reduce(
-                    (sum, item) => sum + (Number(item.amount) || 0),
-                    0
-                  );
-                  const diff = Math.round((scheduledTotal - agreedPrice) * 100) / 100;
-                  const isBalanced = Math.abs(diff) <= 0.05;
+                  // The backend requires: schedule total === agreed price - net verified money already received.
+                  const targetCents = financialSummary?.planTarget ?? 0;
+                  const scheduledCents = sumCents(planInstallments.map((item) => item.amount));
+                  const diffCents = scheduledCents - targetCents;
+                  const isBalanced = diffCents === 0 && targetCents > 0;
+                  const receivedCents = Math.max(0, (financialSummary?.verifiedCents ?? 0) - (financialSummary?.refundedCents ?? 0));
 
                   return (
-                    <div className={`plan-balance-banner ${isBalanced ? "balanced" : "unbalanced"}`}>
-                      <div>
-                        <strong>Scheduled Total: {formatINR(scheduledTotal)}</strong>
-                        <span style={{ margin: "0 8px" }}>|</span>
-                        <span>Agreed Sale Price: {formatINR(agreedPrice)}</span>
+                    <>
+                      <dl className="pw-facts pw-root" style={{ marginBottom: "10px" }}>
+                        <div><dt>Total payable (agreed price)</dt><dd>{formatInrCents(toCents(viewingBooking.agreed_price))}</dd></div>
+                        <div><dt>Booking / token amount</dt><dd>{formatInrCents(toCents(viewingBooking.booking_amount))}</dd></div>
+                        <div><dt>Verified payments received</dt><dd>{formatInrCents(receivedCents)}</dd></div>
+                        <div><dt>Amount to schedule</dt><dd><strong>{formatInrCents(targetCents)}</strong></dd></div>
+                        <div><dt>Number of installments</dt><dd>{planInstallments.length}</dd></div>
+                        <div><dt>Total installment amount</dt><dd>{formatInrCents(scheduledCents)}</dd></div>
+                        <div><dt>Outstanding after this schedule</dt><dd>{formatInrCents(Math.max(0, targetCents - scheduledCents))}</dd></div>
+                        <div><dt>Pending payments</dt><dd>{financialSummary?.pendingCount ?? 0}{(financialSummary?.pendingCount ?? 0) > 0 ? " — verify or reject first" : ""}</dd></div>
+                      </dl>
+                      <div className={`plan-balance-banner ${isBalanced ? "balanced" : "unbalanced"}`}>
+                        <div>
+                          <strong>Scheduled Total: {formatInrCents(scheduledCents)}</strong>
+                          <span style={{ margin: "0 8px" }}>|</span>
+                          <span>Remaining balance to schedule: {formatInrCents(targetCents)}</span>
+                        </div>
+                        <div style={{ fontWeight: 600, fontSize: "0.85rem", marginTop: "4px" }}>
+                          {isBalanced ? (
+                            <span>✓ Schedule total matches the remaining balance</span>
+                          ) : diffCents > 0 ? (
+                            <span>⚠ Total exceeds the remaining balance by {formatInrCents(diffCents)}</span>
+                          ) : (
+                            <span>⚠ Total is short of the remaining balance by {formatInrCents(Math.abs(diffCents))}</span>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ fontWeight: 600, fontSize: "0.85rem", marginTop: "4px" }}>
-                        {isBalanced ? (
-                          <span>✓ Plan total matches agreed sale price</span>
-                        ) : diff > 0 ? (
-                          <span>⚠ Total exceeds agreed price by {formatINR(diff)}</span>
-                        ) : (
-                          <span>⚠ Total is short of agreed price by {formatINR(Math.abs(diff))}</span>
-                        )}
-                      </div>
-                    </div>
+                    </>
                   );
                 })()}
 
@@ -2809,13 +2867,8 @@ export default function Bookings() {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={
-                    planSubmitting ||
-                    Math.abs(
-                      planInstallments.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) -
-                        (Number(viewingBooking.agreed_price) || 0)
-                    ) > 0.05
-                  }
+                  disabled={planSubmitting}
+                  aria-busy={planSubmitting}
                 >
                   {planSubmitting ? "Saving Plan..." : isEditingPlan ? "Update Payment Plan" : "Create Payment Plan"}
                 </button>

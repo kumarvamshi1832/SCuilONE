@@ -1,0 +1,71 @@
+/* Custom fields: record panel + inputs + management page. Dark mode follows .dashboard-wrapper.dark. */
+
+.cf-panel { margin-top: 20px; border-top: 1px solid rgba(100, 116, 139, 0.25); padding-top: 14px; }
+.cf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.cf-title { margin: 0; font-size: 0.95rem; }
+.cf-skeleton { height: 54px; border-radius: 10px; background: linear-gradient(90deg, rgba(100,116,139,.12), rgba(100,116,139,.22), rgba(100,116,139,.12)); background-size: 200% 100%; animation: cf-pulse 1.2s ease-in-out infinite; }
+@keyframes cf-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+.cf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.cf-item dt { font-size: 0.74rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b; }
+.dashboard-wrapper.dark .cf-item dt { color: #94a3b8; }
+.cf-item dd { margin: 3px 0 0; font-size: 0.9rem; overflow-wrap: anywhere; }
+.cf-none { color: #94a3b8; }
+.cf-missing { color: #b45309; font-size: 0.82rem; font-weight: 600; }
+.dashboard-wrapper.dark .cf-missing { color: #fbbf24; }
+.cf-saved { font-size: 0.82rem; color: #15803d; margin-bottom: 8px; }
+.dashboard-wrapper.dark .cf-saved { color: #4ade80; }
+.cf-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+.cf-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cf-field > label { font-size: 0.8rem; font-weight: 600; }
+.cf-required { color: #e53e3e; }
+.cf-field input[type="text"],
+.cf-field input[type="number"],
+.cf-field input[type="date"],
+.cf-field input[type="email"],
+.cf-field input[type="url"],
+.cf-field select,
+.cf-field textarea {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d5dae3;
+  background: #fff;
+  color: #1a202c;
+  box-sizing: border-box;
+  width: 100%;
+}
+.cf-field textarea { resize: vertical; }
+.dashboard-wrapper.dark .cf-field input,
+.dashboard-wrapper.dark .cf-field select,
+.dashboard-wrapper.dark .cf-field textarea { background: #262a33; border-color: #3a3f4b; color: #e2e8f0; }
+.cf-field.has-error input,
+.cf-field.has-error select,
+.cf-field.has-error textarea { border-color: #e53e3e; }
+.cf-help { color: #64748b; font-size: 0.74rem; }
+.dashboard-wrapper.dark .cf-help { color: #94a3b8; }
+.cf-error { color: #c53030; font-size: 0.76rem; font-weight: 600; }
+.dashboard-wrapper.dark .cf-error { color: #fc8181; }
+.cf-checks { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 4px 0; }
+.cf-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.86rem; font-weight: 400; cursor: pointer; }
+
+/* Management page ---------------------------------------------------------- */
+.cfm-type { font-size: 0.78rem; padding: 2px 8px; border-radius: 6px; background: rgba(100, 116, 139, 0.15); white-space: nowrap; }
+.cfm-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; color: #64748b; }
+.dashboard-wrapper.dark .cfm-key { color: #94a3b8; }
+.cfm-inactive td { opacity: 0.6; }
+.cfm-status { font-size: 0.7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.cfm-status.on { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.cfm-status.off { background: rgba(100, 116, 139, 0.2); color: #475569; }
+.dashboard-wrapper.dark .cfm-status.on { color: #4ade80; }
+.dashboard-wrapper.dark .cfm-status.off { color: #cbd5e1; }
+.cfm-form { display: flex; flex-direction: column; gap: 14px; }
+.cfm-form .em-field small { color: #64748b; }
+.cfm-check { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
+.cfm-readonly { padding: 9px 11px; border-radius: 8px; background: rgba(100, 116, 139, 0.12); font-size: 0.88rem; }
+
+@media (max-width: 640px) {
+  .cf-grid { grid-template-columns: 1fr; }
+}

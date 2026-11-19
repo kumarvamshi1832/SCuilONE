@@ -105,6 +105,17 @@ const FEATURE_ROLE_DEFAULTS: Record<string, CrmRoleCategory[]> = {
   "pipeline.update": ["TENANT_ADMIN", "MANAGER"],
   "lead.view": ALL_ROLES,
   "lead.update": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
+  // Customer chat, e-mail logs and custom fields (seed_role_permissions.py). Tenant Owner/Admin hold
+  // every grant; Manager holds chat access+manage, email.view/create, custom_field.view; Sales User holds
+  // email.view/create + custom_field.view + chat access; Operations/Support hold chat access only.
+  "customer_chat.access": ["TENANT_ADMIN", "MANAGER", "SALES_USER", "OPERATIONS_USER", "SUPPORT_USER"],
+  "customer_chat.manage": ["TENANT_ADMIN", "MANAGER"],
+  "email.view": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
+  "email.create": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
+  "email.delete": ["TENANT_ADMIN"],
+  "email.manage": ["TENANT_ADMIN"],
+  "custom_field.view": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
+  "custom_field.manage": ["TENANT_ADMIN"],
   // Customer booking workflow (booking.view / .create / .update in seed_role_permissions.py).
   "booking.view": ALL_ROLES,
   "booking.create": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],

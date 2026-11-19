@@ -7,11 +7,14 @@ import type {
   BookingRequest,
   BookingRequestDetail,
   BookingRequestInput,
+  BuyerDetailsInput,
+  BuyerDetailsResult,
   JourneyFile,
   JourneyFileDownload,
   JourneyFilePurpose,
   JourneyFileUploadResult,
   JourneyPayment,
+  PortalHandover,
   VisitFeedbackInput,
   VisitFeedbackResult,
 } from "../types/customerBookingJourney";
@@ -24,6 +27,7 @@ import type {
  *   POST /api/v1/customer-portal/site-visits/{id}/booking-requests
  *   GET  /api/v1/customer-portal/booking-requests
  *   GET  /api/v1/customer-portal/booking-requests/{id}
+ *   PUT  /api/v1/customer-portal/booking-requests/{id}/buyer-details   (buyer + nominees; required before payment)
  *   POST /api/v1/customer-portal/booking-requests/{id}/agreement/acknowledge
  *   POST /api/v1/customer-portal/booking-requests/{id}/payments
  *   POST /api/v1/customer-portal/booking-requests/{id}/files            (multipart)
@@ -94,6 +98,19 @@ export const getBookingRequest = async (requestId: string): Promise<BookingReque
   return { ...raw, payments, files: raw.files ?? [] };
 };
 
+/**
+ * Replaces the buyer details and the complete nominee list of the booking behind an approved request.
+ * 409 when the request is not Approved, the hold expired, the booking is no longer pending, or a payment
+ * has already been submitted (the details are then locked).
+ */
+export const submitBuyerDetails = async (
+  requestId: string,
+  data: BuyerDetailsInput
+): Promise<BuyerDetailsResult> => {
+  const response = await portalApiClient.put<BuyerDetailsResult>(`${REQUESTS}/${requestId}/buyer-details`, data);
+  return response.data;
+};
+
 export const acknowledgeAgreement = async (
   requestId: string,
   data: AgreementAcknowledgeInput
@@ -154,6 +171,17 @@ export const uploadBookingFile = async (
     }
   );
   return response.data;
+};
+
+/** GET /api/v1/customer-portal/bookings/{booking_id}/handover - 404 means no handover has been scheduled yet. */
+export const getBookingHandover = async (bookingId: string): Promise<PortalHandover | null> => {
+  try {
+    const response = await portalApiClient.get<PortalHandover>(`/api/v1/customer-portal/bookings/${bookingId}/handover`);
+    return response.data;
+  } catch (err) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) return null;
+    throw err;
+  }
 };
 
 export const getBookingFileDownload = async (

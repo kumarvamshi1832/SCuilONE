@@ -242,6 +242,31 @@
   gap: 8px;
 }
 
+.sub-module-group {
+  margin: 16px 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #64748b);
+}
+
+.sub-module-note {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-secondary, #64748b);
+}
+
+.sub-chip.industry {
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f9488;
+  border-color: rgba(20, 184, 166, 0.25);
+}
+
+.dashboard-wrapper.dark .sub-chip.industry {
+  color: #2dd4bf;
+}
+
 .sub-chip {
   padding: 4px 10px;
   border-radius: 6px;

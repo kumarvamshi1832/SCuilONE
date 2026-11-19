@@ -1,0 +1,180 @@
+/* ==========================================================================
+   Shared chat thread + composer (staff Customer Chat and Customer Portal chat).
+   Tokens fall back to neutral values so the CRM (.dashboard-wrapper / .dark) and the
+   Customer Portal (--cp-* variables) both theme it correctly.
+   ========================================================================== */
+
+.chat-thread,
+.chat-composer {
+  --ct-accent: var(--cp-accent, #3b82f6);
+  --ct-accent-text: #ffffff;
+  --ct-surface: var(--cp-surface-2, #f1f5f9);
+  --ct-card: var(--cp-card-bg, #ffffff);
+  --ct-text: var(--cp-text, #1a202c);
+  --ct-muted: var(--cp-text-muted, #64748b);
+  --ct-border: var(--cp-border, #e2e8f0);
+}
+
+.dashboard-wrapper.dark .chat-thread,
+.dashboard-wrapper.dark .chat-composer {
+  --ct-surface: #262a33;
+  --ct-card: #1f1f1f;
+  --ct-text: #e2e8f0;
+  --ct-muted: #94a3b8;
+  --ct-border: #333;
+}
+
+.chat-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ct-text);
+  background: var(--ct-card);
+}
+
+.chat-thread-empty {
+  margin: auto;
+  color: var(--ct-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.chat-day-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8px 0 4px;
+}
+.chat-day-divider span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ct-muted);
+  background: var(--ct-surface);
+  border: 1px solid var(--ct-border);
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+
+.chat-row {
+  display: flex;
+  margin-top: 6px;
+}
+.chat-row.right { justify-content: flex-end; }
+.chat-row.left { justify-content: flex-start; }
+
+.chat-bubble {
+  max-width: min(78%, 560px);
+  min-width: 0;
+  border-radius: 14px;
+  padding: 9px 13px 7px;
+  background: var(--ct-surface);
+  border: 1px solid var(--ct-border);
+  color: var(--ct-text);
+  overflow-wrap: anywhere;
+}
+/* Staff messages use the accent colour, customer messages stay neutral - on either screen. */
+.chat-bubble.staff {
+  background: var(--ct-accent);
+  border-color: var(--ct-accent);
+  color: var(--ct-accent-text);
+}
+.chat-row.left .chat-bubble { border-bottom-left-radius: 4px; }
+.chat-row.right .chat-bubble { border-bottom-right-radius: 4px; }
+
+.chat-bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+  font-size: 0.72rem;
+}
+.chat-bubble-sender { font-weight: 700; }
+.chat-role-tag {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.18);
+}
+.chat-bubble.staff .chat-role-tag { background: rgba(255, 255, 255, 0.22); }
+
+.chat-bubble-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.chat-bubble-time {
+  display: block;
+  margin-top: 4px;
+  text-align: right;
+  font-size: 0.68rem;
+  opacity: 0.75;
+}
+
+/* Composer ------------------------------------------------------------- */
+.chat-composer {
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--ct-border);
+  background: var(--ct-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-composer-row { display: flex; gap: 10px; align-items: flex-end; }
+.chat-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: none;
+  max-height: 160px;
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ct-border);
+  background: var(--ct-surface);
+  color: var(--ct-text);
+}
+.chat-composer-input:focus { outline: 2px solid var(--ct-accent); outline-offset: 0; }
+.chat-composer-input:disabled { opacity: 0.6; cursor: not-allowed; }
+.chat-send-btn {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--ct-accent);
+  color: var(--ct-accent-text);
+}
+.chat-send-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.chat-composer-locked,
+.chat-composer-error {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.chat-composer-locked {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--ct-text);
+}
+.chat-composer-error {
+  background: rgba(229, 62, 62, 0.1);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  color: #c53030;
+}
+.dashboard-wrapper.dark .chat-composer-error { color: #fc8181; }
+
+@media (max-width: 640px) {
+  .chat-bubble { max-width: 90%; }
+  .chat-thread { padding: 14px 12px; }
+  .chat-composer-row { flex-direction: column; align-items: stretch; }
+}

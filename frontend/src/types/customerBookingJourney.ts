@@ -4,13 +4,15 @@
  * backend/app/models/customer_booking_journey.py. Only fields that exist there are typed.
  */
 
+import type { BookingNominee, BookingNomineeInput } from "./bookingNominee";
+
 export const VISIT_FEEDBACK_DECISIONS = ["Interested", "Maybe", "Not Interested"] as const;
 export type VisitFeedbackDecision = (typeof VISIT_FEEDBACK_DECISIONS)[number];
 
 export const PAYMENT_PREFERENCES = ["Full Payment", "Installments"] as const;
 export type PaymentPreference = (typeof PAYMENT_PREFERENCES)[number];
 
-export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "UPI", "Cheque", "Card", "Other"] as const;
+export const PAYMENT_METHODS = ["Cash", "Bank Transfer", "UPI", "Cheque", "Demand Draft", "Card", "Other"] as const;
 export type BookingPaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /** CHECK constraint ck_customer_booking_request_status. */
@@ -102,6 +104,8 @@ export interface BookingRequest {
   agreement_text: string | null;
   agreement_acknowledged_at: string | null;
   final_confirmed_at: string | null;
+  /** "Customer" or "Staff"; null when not confirmed (or confirmed before this was recorded). */
+  final_confirmed_by?: string | null;
   customer_notes: string | null;
   customer_message: string | null;
   created_at: string;
@@ -124,6 +128,8 @@ export interface JourneyFile {
 /** Payment as listed inside a booking request detail (customer and staff variants are normalised). */
 export interface JourneyPayment {
   id: string;
+  /** The instalment this payment is allocated to (null for the booking amount). */
+  installment_id?: string | null;
   amount: string;
   method: string | null;
   reference: string | null;
@@ -137,6 +143,31 @@ export interface JourneyBookingSummary {
   status: string;
   booking_amount: string;
   agreed_price: string;
+  /** Buyer and nominee details, present on both the customer and the staff detail responses. */
+  buyer_name?: string | null;
+  buyer_email?: string | null;
+  buyer_phone?: string | null;
+  buyer_address?: string | null;
+  buyer_details_submitted_at?: string | null;
+  nominees?: BookingNominee[];
+}
+
+/** PUT /api/v1/customer-portal/booking-requests/{id}/buyer-details (CustomerBookingDetailsUpdate). */
+export interface BuyerDetailsInput {
+  buyer_name: string;
+  buyer_phone: string;
+  buyer_email?: string | null;
+  buyer_address?: string | null;
+  nominees: BookingNomineeInput[];
+}
+
+export interface BuyerDetailsResult {
+  booking_id: string;
+  buyer_name: string;
+  buyer_phone: string;
+  buyer_email: string | null;
+  nominee_count: number;
+  message: string;
 }
 
 export interface BookingRequestDetail extends BookingRequest {
@@ -184,6 +215,17 @@ export interface JourneyFileDownload {
 export interface PaymentInstructionsResult {
   message: string;
   payment_instructions: string;
+}
+
+/** GET /api/v1/customer-portal/bookings/{id}/handover (handover_payload). */
+export interface PortalHandover {
+  id: string;
+  booking_id: string;
+  status: "Pending" | "Scheduled" | "In Progress" | "Completed" | "On Hold" | string;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  customer_acknowledged_at: string | null;
+  customer_notes: string | null;
 }
 
 export interface FinalConfirmResult {
