@@ -39,6 +39,9 @@ from app.models.building_image import BuildingImage
 from app.models.buyer_requirement import BuyerRequirement
 from app.models.property_match import PropertyMatch
 from app.models.site_visit import SiteVisit
+from app.models.buyer_requirement_revision import BuyerRequirementRevision
+from app.models.site_visit_history import SiteVisitHistory
+from app.models.property_offer import PropertyOffer
 from app.models.booking import Booking, BookingNominee
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund

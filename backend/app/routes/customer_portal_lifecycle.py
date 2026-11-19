@@ -27,6 +27,7 @@ from app.models.user import User
 from app.routes.customer_portal import require_portal_user, get_db, staff_context, _notify_staff_user
 from app.services.audit_service import log_audit
 from app.services.customer_portal_notifications import notify_customer, notify_booking_customer
+from app.services.payment_allocation import IN_FLIGHT_STATUSES
 
 router = APIRouter(tags=["Customer Portal - Lifecycle, Handover and After-sales"])
 
@@ -237,7 +238,7 @@ def staff_decide_cancellation_request(request_id: UUID, payload: CancellationDec
             PaymentPlan.status == "Active").with_for_update().first()
         if plan: plan.status = "Cancelled"
         for payment in db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id,
-            Payment.status == "Pending").with_for_update().all(): payment.status = "Rejected"
+            Payment.status.in_(IN_FLIGHT_STATUSES)).with_for_update().all(): payment.status = "Rejected"
         journey = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == tenant_id,
             CustomerBookingRequest.booking_id == booking.id).with_for_update().first()
         if journey: journey.status, journey.hold_expires_at = "Cancelled", None

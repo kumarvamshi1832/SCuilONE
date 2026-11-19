@@ -12,6 +12,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.buyer_requirement import BuyerRequirement
+from app.models.buyer_requirement_revision import BuyerRequirementRevision
 from app.schemas.buyer_requirement import (
     BuyerRequirementCreate,
     BuyerRequirementResponse,
@@ -176,6 +177,19 @@ def validate_assigned_user(
         )
 
 
+def record_requirement_revision(db: Session, requirement: BuyerRequirement, user_id: uuid.UUID, reason: str | None = None):
+    latest = db.query(BuyerRequirementRevision).filter(BuyerRequirementRevision.tenant_id == requirement.tenant_id, BuyerRequirementRevision.buyer_requirement_id == requirement.id).order_by(BuyerRequirementRevision.revision_number.desc()).first()
+    db.add(BuyerRequirementRevision(tenant_id=requirement.tenant_id, buyer_requirement_id=requirement.id, revision_number=(latest.revision_number + 1) if latest else 1, snapshot=requirement_snapshot(requirement), change_reason=reason, changed_by=user_id))
+
+
+@router.get("/{requirement_id}/revisions")
+def list_requirement_revisions(requirement_id: uuid.UUID, db: Session = Depends(get_db), current_user=Depends(require_active_user), _permission=Depends(require_permission("buyer_requirement.view"))):
+    tenant_id = uuid.UUID(str(current_user["tenant_id"]))
+    get_requirement(db, requirement_id, tenant_id)
+    rows = db.query(BuyerRequirementRevision).filter(BuyerRequirementRevision.tenant_id == tenant_id, BuyerRequirementRevision.buyer_requirement_id == requirement_id).order_by(BuyerRequirementRevision.revision_number.asc()).all()
+    return [{"id": str(r.id), "revision_number": r.revision_number, "snapshot": r.snapshot, "change_reason": r.change_reason, "changed_by": str(r.changed_by) if r.changed_by else None, "created_at": r.created_at.isoformat()} for r in rows]
+
+
 @router.post(
     "/",
     response_model=BuyerRequirementResponse,
@@ -212,6 +226,7 @@ def create_buyer_requirement(
     try:
         db.add(requirement)
         db.flush()
+        record_requirement_revision(db, requirement, user_id, "Initial requirement")
 
         log_audit(
             db,
@@ -283,7 +298,11 @@ def update_buyer_requirement(
     user_id = uuid.UUID(str(current_user["user_id"]))
 
     requirement = get_requirement(db, requirement_id, tenant_id)
+    requirement = db.query(BuyerRequirement).filter(
+        BuyerRequirement.id == requirement_id, BuyerRequirement.tenant_id == tenant_id
+    ).with_for_update().first()
     changes = payload.model_dump(exclude_unset=True)
+    revision_reason = changes.pop("revision_reason", None)
 
     lead_id = changes.get("lead_id", requirement.lead_id)
     contact_id = changes.get("contact_id", requirement.contact_id)
@@ -323,6 +342,7 @@ def update_buyer_requirement(
             setattr(requirement, field, changes[field])
 
         db.flush()
+        record_requirement_revision(db, requirement, user_id, revision_reason or "Buyer requirement updated")
 
         log_audit(
             db,
@@ -360,6 +380,11 @@ def delete_buyer_requirement(
     user_id = uuid.UUID(str(current_user["user_id"]))
 
     requirement = get_requirement(db, requirement_id, tenant_id)
+    if db.query(BuyerRequirementRevision.id).filter(
+        BuyerRequirementRevision.tenant_id == tenant_id,
+        BuyerRequirementRevision.buyer_requirement_id == requirement_id,
+    ).first():
+        raise HTTPException(status_code=409, detail="This requirement has immutable revision history and cannot be deleted. Close it instead.")
     before_data = requirement_snapshot(requirement)
 
     try:

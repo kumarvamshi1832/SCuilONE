@@ -17,7 +17,7 @@ PaymentMethod = Literal[
     "Other",
 ]
 
-PaymentStatus = Literal["Pending", "Verified", "Rejected"]
+PaymentStatus = Literal["Pending", "Under Verification", "Verified", "Rejected", "Failed"]
 
 
 class PaymentCreate(BaseModel):
@@ -46,7 +46,8 @@ class PaymentCreate(BaseModel):
 
 
 class PaymentDecision(BaseModel):
-    status: Literal["Verified", "Rejected"]
+    # "Under Verification" marks the payment as picked up for review; the other three close it.
+    status: Literal["Under Verification", "Verified", "Rejected", "Failed"]
     notes: str | None = Field(
         default=None,
         max_length=5000,

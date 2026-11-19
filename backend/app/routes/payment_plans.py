@@ -14,6 +14,7 @@ from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.schemas.payment_plan import PaymentPlanCreate
 from app.services.audit_service import log_audit
+from app.services.payment_allocation import IN_FLIGHT_STATUSES, installment_position
 from app.services.customer_portal_notifications import notify_booking_customer
 
 router = APIRouter(prefix="/api/v1/bookings/{booking_id}", tags=["Payment Plans and Collections"])
@@ -62,7 +63,7 @@ def payment_totals(db: Session, tenant_id: UUID, booking_id: UUID):
     ).all()
     total_verified = sum((Decimal(str(p.amount)) for p in verified), ZERO)
     total_refunds = sum((Decimal(str(r.amount)) for r in refunds), ZERO)
-    pending = sum((Decimal(str(p.amount)) for p in payments if p.status == "Pending"), ZERO)
+    pending = sum((Decimal(str(p.amount)) for p in payments if p.status in IN_FLIGHT_STATUSES), ZERO)
     return payments, refunds, total_verified, total_refunds, pending
 
 
@@ -75,6 +76,7 @@ def installment_snapshot(
     plan_status: str = "Active",
 ):
 
+    position = installment_position(installment, payments, refunds, plan_status=plan_status)
     installment_payments = [p for p in payments if p.installment_id == installment.id and p.status == "Verified"]
     payment_ids = {p.id for p in installment_payments}
     installment_refunds = [r for r in refunds if r.payment_id in payment_ids]
@@ -104,6 +106,10 @@ def installment_snapshot(
         "net_collected": net_paid,
         "outstanding_balance": outstanding,
         "notes": installment.notes,
+        # Allocation view: money already submitted but not yet verified, and what a NEW payment may still be.
+        "pending_amount": position["pending"],
+        "payable_amount": position["payable"],
+        "payment_state": position["state"],
     }
 
 
@@ -169,7 +175,7 @@ def create_payment_plan(
         pending_payment = db.query(Payment.id).filter(
             Payment.tenant_id == tenant_id,
             Payment.booking_id == booking.id,
-            Payment.status == "Pending",
+            Payment.status.in_(IN_FLIGHT_STATUSES),
         ).first()
         if pending_payment:
             raise HTTPException(
@@ -289,7 +295,7 @@ def update_payment_plan(
         pending_payment = db.query(Payment.id).filter(
             Payment.tenant_id == tenant_id,
             Payment.booking_id == booking.id,
-            Payment.status == "Pending",
+            Payment.status.in_(IN_FLIGHT_STATUSES),
         ).first()
         if pending_payment:
             raise HTTPException(status_code=409, detail="Verify or reject pending payments before editing the installment schedule.")
@@ -416,7 +422,7 @@ def cancel_payment_plan(
             .filter(
                 Payment.tenant_id == tenant_id,
                 Payment.booking_id == booking.id,
-                Payment.status.in_(["Pending", "Verified"]),
+                Payment.status.in_(("Verified", *IN_FLIGHT_STATUSES)),
             )
             .first()
         )

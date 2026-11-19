@@ -2200,6 +2200,44 @@ def get_portal_invoice(
 # 9. REAL ESTATE BOOKINGS, INSTALLMENT PLANS & SITE VISITS
 # ==============================================================================
 
+from app.services.payment_allocation import installment_position
+
+
+def _serialize_portal_installment(inst, payments, processed_refunds, plan_status: str) -> dict:
+    """One schedule row as the customer sees it: the stored fields plus installment-wise paid / pending / remaining.
+
+    Only VERIFIED money counts as paid.  `pending_amount` is submitted money still awaiting finance and
+    `payable_amount` is the most a new payment for this installment may be.  Nothing staff-only is exposed.
+    """
+    pos = installment_position(inst, payments, processed_refunds, plan_status=plan_status)
+    linked = sorted((p for p in payments if p.installment_id == inst.id), key=lambda p: p.payment_date or p.created_at, reverse=True)
+    return {
+        "id": str(inst.id),
+        "sequence": inst.sequence,
+        "name": inst.name,
+        "amount": str(money(inst.amount)),
+        "due_date": inst.due_date,
+        "status": inst.status,
+        "payment_state": pos["state"],
+        "paid_amount": str(pos["paid"]),
+        "pending_amount": str(pos["pending"]),
+        "outstanding_amount": str(pos["outstanding"]),
+        "payable_amount": str(pos["payable"]),
+        "payments": [
+            {
+                "id": str(p.id),
+                "amount": str(money(p.amount)),
+                "status": p.status,
+                "payment_method": p.payment_method,
+                "transaction_reference": p.transaction_reference,
+                "payment_date": p.payment_date,
+                "verified_at": p.verified_at,
+            }
+            for p in linked
+        ],
+    }
+
+
 def _serialize_portal_booking(db: Session, tenant_id: UUID, booking: Booking) -> dict:
     prop = db.query(Property).filter(
         Property.id == booking.property_id,
@@ -2276,20 +2314,14 @@ def _serialize_portal_booking(db: Session, tenant_id: UUID, booking: Booking) ->
             "total_amount": str(money(plan.total_amount)),
             "status": plan.status,
             "installments": [
-                {
-                    "id": str(inst.id),
-                    "sequence": inst.sequence,
-                    "name": inst.name,
-                    "amount": str(money(inst.amount)),
-                    "due_date": inst.due_date,
-                    "status": inst.status,
-                }
+                _serialize_portal_installment(inst, payments, processed_refunds, plan.status)
                 for inst in installments
             ],
         } if plan else None,
         "payments": [
             {
                 "id": str(p.id),
+                "installment_id": str(p.installment_id) if p.installment_id else None,
                 "amount": str(money(p.amount)),
                 "payment_method": p.payment_method,
                 "transaction_reference": p.transaction_reference,

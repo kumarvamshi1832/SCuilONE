@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from app.core.industry_modules import require_enabled_module
 from app.core.dependencies import require_active_user
@@ -10,6 +11,7 @@ from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.property_match import PropertyMatch
 from app.models.site_visit import SiteVisit
+from app.models.site_visit_history import SiteVisitHistory
 from app.models.buyer_requirement import BuyerRequirement
 from app.models.customer_portal import CustomerPortalUser
 from app.services.customer_portal_notifications import notify_customer
@@ -167,6 +169,18 @@ def audit_data(visit: SiteVisit) -> dict:
     }
 
 
+def record_visit_history(db: Session, visit: SiteVisit, event_type: str, before: dict | None, user_id: UUID, reason: str | None = None):
+    db.add(SiteVisitHistory(tenant_id=visit.tenant_id, site_visit_id=visit.id, event_type=event_type, before_data=jsonable_encoder(before) if before is not None else None, after_data=jsonable_encoder(audit_data(visit)), reason=reason, changed_by=user_id))
+
+
+@router.get("/{visit_id}/history")
+def list_site_visit_history(visit_id: UUID, db: Session = Depends(get_db), current_user: dict = Depends(require_active_user), permission=Depends(require_permission("site_visit.view"))):
+    tenant_id, _ = get_tenant_and_user(current_user)
+    get_visit_or_404(db, visit_id, tenant_id)
+    rows = db.query(SiteVisitHistory).filter(SiteVisitHistory.tenant_id == tenant_id, SiteVisitHistory.site_visit_id == visit_id).order_by(SiteVisitHistory.created_at.asc()).all()
+    return [{"id": str(r.id), "event_type": r.event_type, "before_data": r.before_data, "after_data": r.after_data, "reason": r.reason, "changed_by": str(r.changed_by) if r.changed_by else None, "created_at": r.created_at.isoformat()} for r in rows]
+
+
 @router.post(
     "/",
     response_model=SiteVisitResponse,
@@ -225,6 +239,7 @@ def create_site_visit(
     try:
         db.add(visit)
         db.flush()
+        record_visit_history(db, visit, "CREATED", None, user_id, "Site visit scheduled")
 
         log_audit(
             db=db,
@@ -421,6 +436,8 @@ def update_site_visit(
 
         visit.updated_at = datetime.utcnow()
         db.flush()
+        event_type = "RESCHEDULED" if rescheduling else ("STATUS_CHANGED" if "status" in changes else "UPDATED")
+        record_visit_history(db, visit, event_type, before_data, user_id, changes.get("cancellation_reason") or changes.get("buyer_feedback"))
 
         match = db.query(PropertyMatch).filter(PropertyMatch.id == visit.property_match_id,
             PropertyMatch.tenant_id == tenant_id).first()

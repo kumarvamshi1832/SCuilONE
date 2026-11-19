@@ -18,6 +18,7 @@ from app.schemas.payment_refund import (
     PaymentRefundResponse,
 )
 from app.services.audit_service import log_audit
+from app.services.payment_allocation import sync_installment_status
 from app.services.customer_portal_notifications import notify_booking_customer
 
 
@@ -597,6 +598,21 @@ def confirm_manual_refund(
         refund.updated_at = now
 
         booking.refund_amount = new_refund_total
+
+        if payment.installment_id is not None:
+            from app.models.payment_plan import PaymentPlanInstallment
+
+            db.flush()  # the refund must be visible as Processed to the recompute
+            linked_installment = db.query(PaymentPlanInstallment).filter(
+                PaymentPlanInstallment.id == payment.installment_id,
+                PaymentPlanInstallment.tenant_id == tenant_id,
+            ).with_for_update().first()
+            if linked_installment:
+                booking_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id).all()
+                booking_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
+                sync_installment_status(linked_installment, booking_payments, booking_refunds)
+                linked_installment.updated_at = now
+
         notify_booking_customer(db, tenant_id, booking.id, "Refund processed",
                                 f"A refund of {refund.amount:.2f} has been recorded as processed. Reference: {external_reference}.",
                                 "refund_processed", "payment_refunds", refund.id)

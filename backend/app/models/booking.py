@@ -74,6 +74,9 @@ class Booking(Base):
         nullable=True,
         index=True,
     )
+    accepted_offer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("property_offers.id"), nullable=True, unique=True
+    )
     buyer_name: Mapped[str] = mapped_column(String(200), nullable=False)
     buyer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     buyer_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)

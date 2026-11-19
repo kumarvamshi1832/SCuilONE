@@ -12,6 +12,7 @@ from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.booking import Booking
 from app.models.payment import Payment
+from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.schemas.payment import (
     PaymentCreate,
@@ -19,6 +20,12 @@ from app.schemas.payment import (
     PaymentResponse,
 )
 from app.services.audit_service import log_audit
+from app.services.payment_allocation import (
+    IN_FLIGHT_STATUSES,
+    PAYMENT_STATUSES,
+    installment_position,
+    sync_installment_status,
+)
 from app.services.customer_portal_notifications import notify_booking_customer
 
 
@@ -177,9 +184,18 @@ def create_payment(
             )
             if not installment:
                 raise HTTPException(status_code=404, detail="Active payment-plan instalment not found for this booking.")
+            booking_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id).all()
+            booking_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
+            position = installment_position(installment, booking_payments, booking_refunds)
+            if payload.amount > position["payable"]:
+                raise HTTPException(
+                    409,
+                    f"Payment exceeds this instalment's payable balance of {position['payable']:.2f} "
+                    f"(outstanding {position['outstanding']:.2f}, already awaiting verification {position['pending']:.2f}).",
+                )
 
         payment_cap = Decimal(str(booking.booking_amount if booking.status == "Pending" else booking.agreed_price))
-        prior_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status.in_(["Pending", "Verified"])).all()
+        prior_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status.in_(("Verified", *IN_FLIGHT_STATUSES))).all()
         pending_or_verified = sum((Decimal(str(item.amount)) for item in prior_payments), Decimal("0.00"))
         processed_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
         refunded_total = sum((Decimal(str(item.amount)) for item in processed_refunds), Decimal("0.00"))
@@ -255,7 +271,7 @@ def list_payments(
     )
 
     if payment_status:
-        if payment_status not in ("Pending", "Verified", "Rejected"):
+        if payment_status not in PAYMENT_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid payment status filter.",
@@ -300,10 +316,15 @@ def decide_payment(
             db, payment_id, booking_id, tenant_id, lock=True
         )
 
-        if payment.status != "Pending":
+        if payment.status not in IN_FLIGHT_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Only pending payments can be verified or rejected.",
+                detail="Only pending or under-verification payments can be decided.",
+            )
+        if payload.status == "Under Verification" and payment.status == "Under Verification":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This payment is already under verification.",
             )
 
 
@@ -323,8 +344,6 @@ def decide_payment(
                 )
                 .all()
             )
-
-            from app.models.payment_refund import PaymentRefund
 
             processed_refunds = (
                 db.query(PaymentRefund)
@@ -349,7 +368,7 @@ def decide_payment(
             net_received = total_received - total_refunded
 
             payment_cap = Decimal(str(booking.booking_amount if booking.status == "Pending" else booking.agreed_price))
-            pending_other = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status == "Pending", Payment.id != payment.id).all()
+            pending_other = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status.in_(IN_FLIGHT_STATUSES), Payment.id != payment.id).all()
             pending_other_total = sum((Decimal(str(item.amount)) for item in pending_other), Decimal("0.00"))
             if net_received + pending_other_total + Decimal(str(payment.amount)) > payment_cap:
                 raise HTTPException(
@@ -383,7 +402,6 @@ def decide_payment(
                     Payment.status == "Verified",
                 ).all()
                 linked_ids = [item.id for item in linked_verified]
-                from app.models.payment_refund import PaymentRefund
                 linked_refunds = db.query(PaymentRefund).filter(
                     PaymentRefund.tenant_id == tenant_id,
                     PaymentRefund.booking_id == booking.id,
@@ -398,8 +416,10 @@ def decide_payment(
 
         before_data = payment_snapshot(payment)
         payment.status = payload.status
-        payment.verified_by = user_id
-        payment.verified_at = datetime.utcnow()
+        if payload.status != "Under Verification":
+            # Only a closing decision (Verified / Rejected / Failed) records who decided and when.
+            payment.verified_by = user_id
+            payment.verified_at = datetime.utcnow()
         if payload.notes is not None:
             payment.notes = payload.notes
         payment.updated_at = datetime.utcnow()
@@ -410,32 +430,19 @@ def decide_payment(
                 PaymentPlanInstallment.tenant_id == tenant_id,
             ).with_for_update().first()
             if installment:
-                verified_for_installment = db.query(Payment).filter(
-                    Payment.tenant_id == tenant_id,
-                    Payment.booking_id == booking.id,
-                    Payment.installment_id == installment.id,
-                    Payment.status == "Verified",
-                ).all()
-                gross_for_installment = sum((Decimal(str(item.amount)) for item in verified_for_installment), Decimal("0.00"))
-                verified_ids = [item.id for item in verified_for_installment]
-                refunded_for_installment = db.query(PaymentRefund).filter(
-                    PaymentRefund.tenant_id == tenant_id,
-                    PaymentRefund.booking_id == booking.id,
-                    PaymentRefund.payment_id.in_(verified_ids) if verified_ids else PaymentRefund.payment_id == None,
-                    PaymentRefund.status == "Processed",
-                ).all()
-                net_for_installment = max(Decimal("0.00"), gross_for_installment - sum((Decimal(str(item.amount)) for item in refunded_for_installment), Decimal("0.00")))
-                installment.status = "Paid" if net_for_installment >= Decimal(str(installment.amount)) else ("Partially Paid" if net_for_installment > 0 else "Pending")
+                db.flush()  # make this payment's new status visible to the recompute below
+                booking_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id).all()
+                booking_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
+                sync_installment_status(installment, booking_payments, booking_refunds)
                 installment.updated_at = datetime.utcnow()
 
-        notify_booking_customer(
-            db, tenant_id, booking.id,
-            "Payment verified" if payload.status == "Verified" else "Payment rejected",
-            (f"Your payment of {payment.amount} has been verified." if payload.status == "Verified"
-             else f"Your payment of {payment.amount} was rejected. Please review the payment details or contact support."),
-            "payment_verified" if payload.status == "Verified" else "payment_rejected",
-            "payments", payment.id,
-        )
+        notification = {
+            "Verified": ("Payment verified", f"Your payment of {payment.amount} has been verified.", "payment_verified"),
+            "Rejected": ("Payment rejected", f"Your payment of {payment.amount} was rejected. Please review the payment details or contact support.", "payment_rejected"),
+            "Failed": ("Payment failed", f"Your payment of {payment.amount} did not go through. Please check the payment details or contact support.", "payment_failed"),
+            "Under Verification": ("Payment under verification", f"Our finance team has started verifying your payment of {payment.amount}.", "payment_under_verification"),
+        }[payload.status]
+        notify_booking_customer(db, tenant_id, booking.id, notification[0], notification[1], notification[2], "payments", payment.id)
 
         audit_payment(
             db,

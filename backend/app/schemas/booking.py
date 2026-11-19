@@ -48,6 +48,7 @@ class BookingCreate(BaseModel):
     nominees: list[BookingNomineeInput] = Field(default_factory=list, max_length=20)
     lead_id: UUID | None = None
     buyer_requirement_id: UUID | None = None
+    accepted_offer_id: UUID | None = None
     booking_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     payment_preference: Literal["Full Payment", "Installments"] = "Full Payment"
     installment_request_notes: str | None = Field(default=None, max_length=2000)
@@ -99,6 +100,7 @@ class BookingResponse(BaseModel):
     nominees: list[BookingNomineeResponse] = Field(default_factory=list)
     lead_id: UUID | None = None
     buyer_requirement_id: UUID | None = None
+    accepted_offer_id: UUID | None = None
     payment_preference: Literal["Full Payment", "Installments"]
     installment_request_notes: str | None
     booking_amount: Decimal

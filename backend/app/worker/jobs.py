@@ -534,6 +534,7 @@ def expire_customer_booking_holds(db: Session, today: date) -> dict:
     from app.models.payment import Payment
     from app.models.payment_plan import PaymentPlan
     from app.models.payment_refund import PaymentRefund
+    from app.services.payment_allocation import IN_FLIGHT_STATUSES
 
     now = datetime.utcnow()
     expired = 0
@@ -587,7 +588,7 @@ def expire_customer_booking_holds(db: Session, today: date) -> dict:
                     active_plan = db.query(PaymentPlan).filter(PaymentPlan.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").with_for_update().first()
                     if active_plan:
                         active_plan.status = "Cancelled"
-                    pending = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status == "Pending").with_for_update().all()
+                    pending = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status.in_(IN_FLIGHT_STATUSES)).with_for_update().all()
                     for payment in pending:
                         payment.status = "Rejected"
                         payment.notes = ((payment.notes or "") + "\nAutomatically rejected because the booking hold expired without verified funds.").strip()

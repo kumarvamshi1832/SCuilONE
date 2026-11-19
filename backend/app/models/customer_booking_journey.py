@@ -32,6 +32,7 @@ class CustomerBookingRequest(Base):
         CheckConstraint("agreement_status IN ('Not Prepared', 'Prepared', 'Customer Acknowledged', 'Verified', 'Rejected')", name="ck_customer_booking_request_agreement_status"),
         CheckConstraint("payment_preference IN ('Full Payment', 'Installments')", name="ck_customer_booking_request_payment_preference"),
         CheckConstraint("extension_count BETWEEN 0 AND 2", name="ck_customer_booking_request_extensions"),
+        CheckConstraint("final_confirmed_by IS NULL OR final_confirmed_by IN ('Customer', 'Staff')", name="ck_customer_booking_request_confirmed_by"),
         CheckConstraint("booking_amount IS NULL OR booking_amount >= 0", name="ck_customer_booking_request_booking_amount"),
         CheckConstraint("agreed_price IS NULL OR agreed_price > 0", name="ck_customer_booking_request_agreed_price"),
         CheckConstraint("booking_amount IS NULL OR agreed_price IS NULL OR booking_amount <= agreed_price", name="ck_customer_booking_request_amount_not_over_price"),
@@ -65,6 +66,8 @@ class CustomerBookingRequest(Base):
     agreement_verified_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     agreement_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     final_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # "Customer" (confirmed in the portal) or "Staff"; NULL for requests confirmed before this was recorded.
+    final_confirmed_by: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

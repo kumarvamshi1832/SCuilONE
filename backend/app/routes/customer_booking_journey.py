@@ -25,6 +25,7 @@ from app.models.account import Account
 from app.models.user import User
 from app.models.lead import Lead
 from app.services.audit_service import log_audit
+from app.services.payment_allocation import IN_FLIGHT_STATUSES, installment_position
 from app.routes.customer_portal import require_portal_user, get_db, _notify_staff_user, staff_context
 from app.services.customer_portal_notifications import notify_customer
 from app.schemas.booking import CustomerBookingDetailsUpdate
@@ -126,7 +127,7 @@ def _expire_if_needed(db: Session, row: CustomerBookingRequest):
                 active_plan = db.query(PaymentPlan).filter(PaymentPlan.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").with_for_update().first()
                 if active_plan:
                     active_plan.status = "Cancelled"
-                pending_payments = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status == "Pending").with_for_update().all()
+                pending_payments = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status.in_(IN_FLIGHT_STATUSES)).with_for_update().all()
                 for payment in pending_payments:
                     payment.status = "Rejected"
                     payment.notes = ((payment.notes or "") + "\nAutomatically rejected because the booking hold expired without verified funds.").strip()
@@ -146,7 +147,7 @@ def _request_payload(row: CustomerBookingRequest):
         "payment_preference": row.payment_preference, "payment_instructions": row.payment_instructions, "agreement_status": row.agreement_status,
         "agreement_version": row.agreement_version, "agreement_text": row.agreement_text,
         "agreement_acknowledged_at": row.agreement_acknowledged_at,
-        "final_confirmed_at": row.final_confirmed_at, "customer_notes": row.customer_notes, "customer_message": row.customer_message,
+        "final_confirmed_at": row.final_confirmed_at, "final_confirmed_by": row.final_confirmed_by, "customer_notes": row.customer_notes, "customer_message": row.customer_message,
         "created_at": row.created_at, "updated_at": row.updated_at,
     }
 
@@ -244,7 +245,7 @@ def get_customer_booking_request(request_id: UUID, portal: dict = Depends(requir
         if booking:
             data["booking"] = {"id": str(booking.id), "status": booking.status, "buyer_name": booking.buyer_name, "buyer_email": booking.buyer_email, "buyer_phone": booking.buyer_phone, "buyer_address": booking.buyer_address, "buyer_details_submitted_at": booking.buyer_details_submitted_at, "nominees": [{"id": str(n.id), "nominee_name": n.nominee_name, "relationship": n.relationship, "phone": n.phone, "email": n.email, "date_of_birth": n.date_of_birth, "address": n.address, "allocation_percentage": str(n.allocation_percentage) if n.allocation_percentage is not None else None, "remarks": n.remarks} for n in db.query(BookingNominee).filter(BookingNominee.tenant_id == row.tenant_id, BookingNominee.booking_id == booking.id).order_by(BookingNominee.created_at).all()], "booking_amount": str(booking.booking_amount), "agreed_price": str(booking.agreed_price)}
             payments = db.query(Payment).filter(Payment.booking_id == booking.id, Payment.tenant_id == row.tenant_id).order_by(Payment.created_at.desc()).all()
-            data["payments"] = [{"id": str(p.id), "amount": str(p.amount), "method": p.payment_method, "reference": p.transaction_reference, "status": p.status, "payment_date": p.payment_date, "verified_at": p.verified_at} for p in payments]
+            data["payments"] = [{"id": str(p.id), "installment_id": str(p.installment_id) if p.installment_id else None, "amount": str(p.amount), "method": p.payment_method, "reference": p.transaction_reference, "status": p.status, "payment_date": p.payment_date, "verified_at": p.verified_at} for p in payments]
     return data
 
 
@@ -272,7 +273,7 @@ def staff_get_customer_booking_request(request_id: UUID, current_user: dict = De
         if booking:
             data["booking"] = {"id": str(booking.id), "status": booking.status, "buyer_name": booking.buyer_name, "buyer_email": booking.buyer_email, "buyer_phone": booking.buyer_phone, "buyer_address": booking.buyer_address, "buyer_details_submitted_at": booking.buyer_details_submitted_at, "booking_amount": str(booking.booking_amount), "agreed_price": str(booking.agreed_price), "nominees": [{"id": str(n.id), "nominee_name": n.nominee_name, "relationship": n.relationship, "phone": n.phone, "email": n.email, "date_of_birth": n.date_of_birth, "address": n.address, "allocation_percentage": str(n.allocation_percentage) if n.allocation_percentage is not None else None, "remarks": n.remarks} for n in db.query(BookingNominee).filter(BookingNominee.tenant_id == tenant_id, BookingNominee.booking_id == booking.id).all()]}
         payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == row.booking_id).order_by(Payment.created_at.desc()).all()
-        data["payments"] = [{"id": str(p.id), "amount": str(p.amount), "status": p.status, "payment_method": p.payment_method, "transaction_reference": p.transaction_reference, "verified_at": p.verified_at} for p in payments]
+        data["payments"] = [{"id": str(p.id), "installment_id": str(p.installment_id) if p.installment_id else None, "amount": str(p.amount), "status": p.status, "payment_method": p.payment_method, "transaction_reference": p.transaction_reference, "payment_date": p.payment_date, "verified_at": p.verified_at} for p in payments]
     return data
 
 
@@ -421,7 +422,7 @@ def customer_update_booking_buyer_details(request_id: UUID, payload: CustomerBoo
     existing_submitted_payments = db.query(Payment.id).filter(
         Payment.tenant_id == row.tenant_id,
         Payment.booking_id == booking.id,
-        Payment.status.in_(["Pending", "Verified"]),
+        Payment.status.in_(("Verified", *IN_FLIGHT_STATUSES)),
     ).first()
     if existing_submitted_payments:
         raise HTTPException(409, "Buyer and nominee details are locked after a payment has been submitted. Contact staff if a correction is required.")
@@ -470,23 +471,14 @@ def customer_submit_booking_payment(request_id: UUID, payload: PaymentSubmitIn, 
         installment = db.query(PaymentPlanInstallment).join(PaymentPlan, PaymentPlan.id == PaymentPlanInstallment.payment_plan_id).filter(PaymentPlanInstallment.id == payload.installment_id, PaymentPlanInstallment.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").first()
         if not installment:
             raise HTTPException(404, "Active payment-plan instalment not found for this booking.")
-        installment_payments = db.query(Payment).filter(Payment.tenant_id == row.tenant_id,
-            Payment.booking_id == booking.id, Payment.installment_id == installment.id,
-            Payment.status.in_(["Pending", "Verified"])).all()
-        installment_pending = sum((Decimal(str(p.amount)) for p in installment_payments if p.status == "Pending"), Decimal("0.00"))
-        installment_verified = sum((Decimal(str(p.amount)) for p in installment_payments if p.status == "Verified"), Decimal("0.00"))
-        installment_payment_ids = [p.id for p in installment_payments if p.status == "Verified"]
-        installment_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == row.tenant_id,
-            PaymentRefund.booking_id == booking.id,
-            PaymentRefund.payment_id.in_(installment_payment_ids) if installment_payment_ids else PaymentRefund.payment_id == None,
-            PaymentRefund.status == "Processed").all()
-        installment_refunded = sum((Decimal(str(r.amount)) for r in installment_refunds), Decimal("0.00"))
-        installment_balance = max(Decimal("0.00"), Decimal(str(installment.amount)) - max(Decimal("0.00"), installment_verified - installment_refunded) - installment_pending)
-        if payload.amount > installment_balance:
-            raise HTTPException(409, f"Payment exceeds this instalment's remaining balance of {installment_balance:.2f}.")
+        booking_payments = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id).all()
+        booking_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == row.tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
+        position = installment_position(installment, booking_payments, booking_refunds)
+        if payload.amount > position["payable"]:
+            raise HTTPException(409, f"Payment exceeds this instalment's remaining balance of {position['payable']:.2f}.")
     existing_payments = db.query(Payment).filter(Payment.tenant_id == row.tenant_id,
-        Payment.booking_id == booking.id, Payment.status.in_(["Pending", "Verified"])).all()
-    pending_total = sum((Decimal(str(p.amount)) for p in existing_payments if p.status == "Pending"), Decimal("0.00"))
+        Payment.booking_id == booking.id, Payment.status.in_(("Verified", *IN_FLIGHT_STATUSES))).all()
+    pending_total = sum((Decimal(str(p.amount)) for p in existing_payments if p.status in IN_FLIGHT_STATUSES), Decimal("0.00"))
     verified_gross = sum((Decimal(str(p.amount)) for p in existing_payments if p.status == "Verified"), Decimal("0.00"))
     processed_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == row.tenant_id,
         PaymentRefund.booking_id == booking.id, PaymentRefund.status == "Processed").all()
@@ -521,7 +513,7 @@ async def customer_upload_booking_file(request_id: UUID, file: UploadFile = File
         payment = db.query(Payment).filter(Payment.id == payment_id, Payment.booking_id == row.booking_id, Payment.tenant_id == row.tenant_id).first() if payment_id else None
         if not payment:
             raise HTTPException(404, "Payment not found for this booking. Submit payment details first.")
-        if payment.status != "Pending":
+        if payment.status not in IN_FLIGHT_STATUSES:
             raise HTTPException(409, "Proof can be attached only to a payment awaiting verification.")
     filename = Path(file.filename or "").name
     if not filename or Path(filename).suffix.lower() not in {".pdf", ".jpg", ".jpeg", ".png"}:
@@ -566,27 +558,105 @@ async def customer_upload_booking_file(request_id: UUID, file: UploadFile = File
         raise HTTPException(502, "File upload failed. Please retry or contact support.") from exc
 
 
-@router.post("/api/v1/customer-booking-workflow/requests/{request_id}/final-confirm", dependencies=[Depends(require_permission("booking.update"))])
-def staff_final_confirm_booking(request_id: UUID, current_user: dict = Depends(require_active_user), db: Session = Depends(get_db)):
-    tenant_id, user_id = staff_context(current_user)
-    row = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.id == request_id, CustomerBookingRequest.tenant_id == tenant_id).with_for_update().first()
-    if not row: raise HTTPException(404, "Customer booking request not found.")
-    if row.status != "Approved" or not row.booking_id: raise HTTPException(409, "An approved active booking is required.")
-    if row.hold_expires_at and row.hold_expires_at <= _now(): raise HTTPException(409, "The booking hold expired. Extend or reapprove it before confirmation.")
-    if row.agreement_status != "Verified" or not row.agreement_verified_at: raise HTTPException(409, "The agreement must be verified before final confirmation.")
-    booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == tenant_id).with_for_update().first()
-    if not booking or booking.status != "Pending": raise HTTPException(409, "Booking must be Pending to be final-confirmed.")
+def _net_verified(db: Session, tenant_id, booking: Booking) -> Decimal:
     verified_payments = db.query(Payment).filter(Payment.tenant_id == tenant_id, Payment.booking_id == booking.id, Payment.status == "Verified").all()
     paid_gross = sum((Decimal(str(p.amount)) for p in verified_payments), Decimal("0.00"))
     payment_ids = [p.id for p in verified_payments]
     processed_refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(payment_ids) if payment_ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
     refunded = sum((Decimal(str(r.amount)) for r in processed_refunds), Decimal("0.00"))
-    paid = max(Decimal("0.00"), paid_gross - refunded)
-    if not booking.buyer_details_submitted_at: raise HTTPException(409, "Customer buyer and nominee details must be submitted before final booking confirmation.")
-    if paid < Decimal(str(booking.booking_amount)): raise HTTPException(409, f"Verified net booking payment is insufficient. Required {booking.booking_amount}; net verified {paid}.")
-    booking.status = "Confirmed"; row.status = "Confirmed"; row.final_confirmed_at = _now(); row.hold_expires_at = None
+    return max(Decimal("0.00"), paid_gross - refunded)
+
+
+def _confirmation_checks(db: Session, tenant_id, row: CustomerBookingRequest, booking: Booking | None) -> tuple[list[dict], Decimal]:
+    """The single definition of what must be true before a portal booking can be finally confirmed.
+
+    Used by the staff action, the customer action and the customer's readiness view, so all three always agree.
+    Order matters: the first unmet check is the one reported.  Returns (checks, net verified payments).
+    """
+    paid = _net_verified(db, tenant_id, booking) if booking else Decimal("0.00")
+    needed = Decimal(str(booking.booking_amount)) if booking else Decimal("0.00")
+    checks = [
+        {"key": "approved", "label": "Booking request approved by staff", "met": row.status == "Approved" and bool(row.booking_id),
+         "message": "An approved active booking is required."},
+        {"key": "hold", "label": "Booking hold is active", "met": not (row.hold_expires_at and row.hold_expires_at <= _now()),
+         "message": "The booking hold expired. Extend or reapprove it before confirmation."},
+        {"key": "agreement", "label": "Signed agreement verified by staff", "met": row.agreement_status == "Verified" and bool(row.agreement_verified_at),
+         "message": "The agreement must be verified before final confirmation."},
+        {"key": "booking_pending", "label": "Booking is awaiting confirmation", "met": bool(booking and booking.status == "Pending"),
+         "message": "Booking must be Pending to be final-confirmed."},
+        {"key": "buyer_details", "label": "Buyer and nominee details submitted", "met": bool(booking and booking.buyer_details_submitted_at),
+         "message": "Customer buyer and nominee details must be submitted before final booking confirmation."},
+        {"key": "booking_amount", "label": "Booking amount paid and verified by finance", "met": bool(booking) and paid >= needed,
+         "message": f"Verified net booking payment is insufficient. Required {booking.booking_amount if booking else '0.00'}; net verified {paid}."},
+    ]
+    return checks, paid
+
+
+def _confirm_booking(db: Session, tenant_id, row: CustomerBookingRequest, booking: Booking, paid: Decimal, *, actor: str, user_id=None):
+    """Applies the confirmation.  Callers must have locked `row` and `booking` and passed every check."""
+    booking.status = "Confirmed"; row.status = "Confirmed"; row.final_confirmed_at = _now(); row.final_confirmed_by = actor; row.hold_expires_at = None
     notify_customer(db, tenant_id, row.portal_user_id, "Booking confirmed",
                     "Your booking is confirmed. You can continue to pay the remaining balance from your Customer Portal.",
                     "booking_confirmed", "bookings", booking.id)
-    log_audit(db, tenant_id, user_id, "UPDATE", "bookings", booking.id, "Booking final-confirmed after verified agreement and booking amount payment.")
-    db.commit(); return {"booking_id": str(booking.id), "booking_status": booking.status, "request_status": row.status, "final_confirmed_at": row.final_confirmed_at, "verified_paid": str(paid)}
+    if actor == "Customer":
+        match = db.query(PropertyMatch).filter(PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == tenant_id).first()
+        _notify_staff_user(db, tenant_id, match.assigned_to if match else None, "Customer confirmed booking",
+                           f"The customer confirmed booking {booking.id} in the Customer Portal after all requirements were verified.", "bookings", booking.id)
+    log_audit(db, tenant_id, user_id, "UPDATE", "bookings", booking.id,
+              f"Booking final-confirmed by the {actor.lower()} after verified agreement and booking amount payment.")
+    return {"booking_id": str(booking.id), "booking_status": booking.status, "request_status": row.status,
+            "final_confirmed_at": row.final_confirmed_at, "final_confirmed_by": actor, "verified_paid": str(paid)}
+
+
+def _first_unmet(checks: list[dict]):
+    for check in checks:
+        if not check["met"]:
+            raise HTTPException(409, check["message"])
+
+
+@router.post("/api/v1/customer-booking-workflow/requests/{request_id}/final-confirm", dependencies=[Depends(require_permission("booking.update"))])
+def staff_final_confirm_booking(request_id: UUID, current_user: dict = Depends(require_active_user), db: Session = Depends(get_db)):
+    tenant_id, user_id = staff_context(current_user)
+    row = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.id == request_id, CustomerBookingRequest.tenant_id == tenant_id).with_for_update().first()
+    if not row: raise HTTPException(404, "Customer booking request not found.")
+    booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == tenant_id).with_for_update().first() if row.booking_id else None
+    checks, paid = _confirmation_checks(db, tenant_id, row, booking)
+    _first_unmet(checks)
+    result = _confirm_booking(db, tenant_id, row, booking, paid, actor="Staff", user_id=user_id)
+    db.commit(); return result
+
+
+@router.get("/api/v1/customer-portal/booking-requests/{request_id}/confirmation-status")
+def customer_confirmation_status(request_id: UUID, portal: dict = Depends(require_portal_user), db: Session = Depends(get_db)):
+    """What is still missing before the customer can confirm.  Read-only; the confirm endpoint re-checks everything."""
+    row = _customer_request(db, portal, request_id)
+    _expire_if_needed(db, row)
+    booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id).first() if row.booking_id else None
+    if row.status == "Confirmed":
+        db.commit()
+        return {"can_confirm": False, "already_confirmed": True, "confirmed_by": row.final_confirmed_by, "final_confirmed_at": row.final_confirmed_at, "checks": []}
+    checks, paid = _confirmation_checks(db, row.tenant_id, row, booking)
+    db.commit()
+    return {"can_confirm": all(c["met"] for c in checks), "already_confirmed": False, "booking_amount": str(booking.booking_amount) if booking else None,
+            "verified_paid": str(paid), "checks": [{"key": c["key"], "label": c["label"], "met": c["met"], "message": None if c["met"] else c["message"]} for c in checks]}
+
+
+@router.post("/api/v1/customer-portal/booking-requests/{request_id}/confirm")
+def customer_confirm_booking(request_id: UUID, portal: dict = Depends(require_portal_user), db: Session = Depends(get_db)):
+    """Customer's final confirmation.  It does not bypass anything: staff must already have approved the request,
+    verified the signed agreement and (via finance) verified the booking amount; the customer must have submitted
+    their buyer details.  Only the request's own portal user can confirm it."""
+    row = _customer_request(db, portal, request_id, lock=True)
+    _expire_if_needed(db, row)
+    if row.status == "Confirmed":
+        db.commit()
+        raise HTTPException(409, "Your booking is already confirmed.")
+    booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id).with_for_update().first() if row.booking_id else None
+    checks, paid = _confirmation_checks(db, row.tenant_id, row, booking)
+    try:
+        _first_unmet(checks)
+    except HTTPException:
+        db.commit()  # keep a hold expiry that _expire_if_needed may just have recorded
+        raise
+    result = _confirm_booking(db, row.tenant_id, row, booking, paid, actor="Customer")
+    db.commit(); return result

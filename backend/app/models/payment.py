@@ -37,6 +37,10 @@ class Payment(Base):
             "amount > 0",
             name="ck_payments_amount_positive",
         ),
+        CheckConstraint(
+            "status IN ('Pending', 'Under Verification', 'Verified', 'Rejected', 'Failed')",
+            name="ck_payments_status_valid",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

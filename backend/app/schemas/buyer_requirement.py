@@ -52,6 +52,7 @@ class BuyerRequirementCreate(BuyerRequirementBase):
 
 
 class BuyerRequirementUpdate(BaseModel):
+    revision_reason: str | None = Field(default=None, max_length=1000)
     requirement_type: Literal["Buy", "Rent"] | None = None
     property_type: str | None = Field(default=None, min_length=1, max_length=50)
     preferred_city: str | None = Field(default=None, max_length=100)
