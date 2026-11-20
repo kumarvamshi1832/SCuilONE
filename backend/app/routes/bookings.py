@@ -398,10 +398,23 @@ def create_booking(
                 detail="Bookings are currently supported only for sale properties.",
             )
 
-        if property_record.status != "Available":
+        if (
+            property_record.status == "Reserved"
+            and property_record.offer_hold_expires_at is not None
+            and property_record.offer_hold_expires_at <= datetime.utcnow()
+        ):
+            property_record.status = "Available"
+            property_record.offer_hold_expires_at = None
+        offer_hold_valid = (
+            property_record.status == "Reserved"
+            and payload.accepted_offer_id is not None
+            and property_record.offer_hold_expires_at is not None
+            and property_record.offer_hold_expires_at > datetime.utcnow()
+        )
+        if property_record.status != "Available" and not offer_hold_valid:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Only available properties can be booked.",
+                detail="Only available properties or properties held for this accepted offer can be booked.",
             )
 
         linked_lead_id = payload.lead_id
@@ -477,6 +490,16 @@ def create_booking(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="The selected offer is not an accepted offer in this tenant.",
                 )
+            if accepted_offer.expires_at and accepted_offer.expires_at <= datetime.utcnow():
+                raise HTTPException(status_code=409, detail="The accepted offer has expired. Obtain a renewed offer before booking.")
+            if accepted_offer.hold_expires_at and accepted_offer.hold_expires_at <= datetime.utcnow():
+                raise HTTPException(status_code=409, detail="The accepted offer's property hold has expired. Obtain a renewed offer before booking.")
+            if property_record.status == "Reserved" and (
+                not accepted_offer.hold_expires_at
+                or accepted_offer.hold_expires_at <= datetime.utcnow()
+                or accepted_offer.hold_expires_at != property_record.offer_hold_expires_at
+            ):
+                raise HTTPException(status_code=409, detail="The property hold is not valid for this accepted offer.")
 
             accepted_match = (
                 db.query(PropertyMatch)

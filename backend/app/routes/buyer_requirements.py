@@ -59,6 +59,9 @@ def requirement_snapshot(requirement: BuyerRequirement) -> dict:
         "contact_id",
         "assigned_to",
         "requirement_type",
+        "budget_frequency",
+        "min_duration_months",
+        "max_duration_months",
         "property_type",
         "preferred_city",
         "preferred_location",
@@ -303,6 +306,18 @@ def update_buyer_requirement(
     ).with_for_update().first()
     changes = payload.model_dump(exclude_unset=True)
     revision_reason = changes.pop("revision_reason", None)
+    if "requirement_type" in changes and "budget_frequency" not in changes:
+        changes["budget_frequency"] = "One-time" if changes["requirement_type"] == "Buy" else "Monthly"
+    final_requirement_type = changes.get("requirement_type", requirement.requirement_type)
+    final_budget_frequency = changes.get("budget_frequency", requirement.budget_frequency)
+    final_min_duration = changes.get("min_duration_months", requirement.min_duration_months)
+    final_max_duration = changes.get("max_duration_months", requirement.max_duration_months)
+    if final_min_duration is not None and final_max_duration is not None and final_min_duration > final_max_duration:
+        raise HTTPException(status_code=400, detail="Minimum duration cannot exceed maximum duration.")
+    if final_requirement_type == "Buy" and final_budget_frequency != "One-time":
+        raise HTTPException(status_code=400, detail="Buy requirements must use One-time budget frequency.")
+    if final_requirement_type in ("Rent", "Lease") and final_budget_frequency == "One-time":
+        raise HTTPException(status_code=400, detail="Rent and Lease requirements must use recurring budget frequency.")
 
     lead_id = changes.get("lead_id", requirement.lead_id)
     contact_id = changes.get("contact_id", requirement.contact_id)

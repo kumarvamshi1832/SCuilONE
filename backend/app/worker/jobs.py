@@ -663,3 +663,313 @@ def customer_booking_payment_reminders(db: Session, today: date) -> dict:
 
 
 JOBS["customer_booking_payment_reminders"] = customer_booking_payment_reminders
+
+
+def rental_lifecycle_job(db: Session, today: date) -> dict:
+    """Mark rental dues overdue, expire agreements, and send idempotent reminders."""
+    from app.models.rental import RentalAgreement, RentalPaymentSchedule, RentalPayment
+    from app.models.property_offer import PropertyOffer
+    from app.models.property_match import PropertyMatch
+    from app.models.property import Property
+    from app.models.lead import Lead
+    from app.models.booking import Booking
+    from app.models.buyer_requirement import BuyerRequirement
+    from app.models.customer_portal import CustomerPortalUser
+    from app.models.customer_portal_lifecycle import CustomerPortalNotification
+    from app.models.notification import Notification
+    from app.models.user import User
+
+    now = datetime.utcnow()
+    overdue_updated = 0
+    agreements_expired = 0
+    reminders_sent = 0
+    expiry_reminders_sent = 0
+    offers_expired = 0
+    property_holds_released = 0
+    late_fees_applied = 0
+
+    # Expire offers and release timed holds. Existing bookings keep the property Reserved.
+    expired_offers = db.query(PropertyOffer).filter(
+        PropertyOffer.status.in_(("Submitted", "Countered", "Pending Owner Approval", "Accepted")),
+        PropertyOffer.expires_at.is_not(None),
+        PropertyOffer.expires_at <= now,
+    ).with_for_update(skip_locked=True).all()
+    for offer in expired_offers:
+        was_accepted = offer.status == "Accepted"
+        if offer.status == "Accepted":
+            linked_booking = db.query(Booking.id).filter(
+                Booking.tenant_id == offer.tenant_id,
+                Booking.accepted_offer_id == offer.id,
+                Booking.status.in_(("Pending", "Confirmed", "Completed")),
+            ).first()
+            linked_agreement = db.query(RentalAgreement.id).filter(
+                RentalAgreement.tenant_id == offer.tenant_id,
+                RentalAgreement.accepted_offer_id == offer.id,
+                RentalAgreement.status.in_(("Draft", "Pending Signature", "Active", "Termination Requested", "Expired")),
+            ).first()
+            if linked_booking or linked_agreement:
+                continue
+        offer.status = "Expired"
+        offers_expired += 1
+        match = db.query(PropertyMatch).filter(
+            PropertyMatch.id == offer.property_match_id,
+            PropertyMatch.tenant_id == offer.tenant_id,
+        ).first()
+        if match and was_accepted:
+            match.status = "Matched"
+            req = db.query(BuyerRequirement).filter(
+                BuyerRequirement.id == match.buyer_requirement_id,
+                BuyerRequirement.tenant_id == offer.tenant_id,
+            ).first()
+            if req and req.lead_id:
+                lead = db.query(Lead).filter(Lead.id == req.lead_id, Lead.tenant_id == offer.tenant_id).first()
+                if lead and lead.status == "Offer Accepted":
+                    lead.status = "Qualified"
+        if match and offer.hold_expires_at:
+            prop = db.query(Property).filter(
+                Property.id == match.property_id, Property.tenant_id == offer.tenant_id,
+            ).with_for_update().first()
+            active_booking = db.query(Booking.id).filter(
+                Booking.tenant_id == offer.tenant_id, Booking.property_id == match.property_id,
+                Booking.status.in_(("Pending", "Confirmed")),
+            ).first()
+            if prop and prop.offer_hold_expires_at == offer.hold_expires_at:
+                prop.offer_hold_expires_at = None
+                if prop.status == "Reserved" and not active_booking:
+                    prop.status = "Available"
+                    property_holds_released += 1
+
+    expired_holds = db.query(Property).filter(
+        Property.offer_hold_expires_at.is_not(None),
+        Property.offer_hold_expires_at <= now,
+    ).with_for_update(skip_locked=True).all()
+    for prop in expired_holds:
+        held_offer = db.query(PropertyOffer).join(PropertyMatch, PropertyMatch.id == PropertyOffer.property_match_id).filter(
+            PropertyOffer.tenant_id == prop.tenant_id,
+            PropertyMatch.tenant_id == prop.tenant_id,
+            PropertyMatch.property_id == prop.id,
+            PropertyOffer.status.in_(("Accepted", "Pending Owner Approval")),
+            PropertyOffer.hold_expires_at.is_not(None),
+            PropertyOffer.hold_expires_at <= now,
+        ).with_for_update().all()
+        for offer in held_offer:
+            was_accepted = offer.status == "Accepted"
+            linked_booking = db.query(Booking.id).filter(
+                Booking.tenant_id == prop.tenant_id, Booking.accepted_offer_id == offer.id,
+                Booking.status.in_(("Pending", "Confirmed", "Completed")),
+            ).first()
+            linked_agreement = db.query(RentalAgreement.id).filter(
+                RentalAgreement.tenant_id == prop.tenant_id, RentalAgreement.accepted_offer_id == offer.id,
+                RentalAgreement.status.in_(("Draft", "Pending Signature", "Active", "Termination Requested", "Expired")),
+            ).first()
+            if linked_booking or linked_agreement:
+                continue
+            offer.status = "Expired"
+            match = db.query(PropertyMatch).filter(PropertyMatch.id == offer.property_match_id, PropertyMatch.tenant_id == prop.tenant_id).first()
+            if match and was_accepted:
+                match.status = "Matched"
+                req = db.query(BuyerRequirement).filter(BuyerRequirement.id == match.buyer_requirement_id, BuyerRequirement.tenant_id == prop.tenant_id).first()
+                if req and req.lead_id:
+                    lead = db.query(Lead).filter(Lead.id == req.lead_id, Lead.tenant_id == prop.tenant_id).first()
+                    if lead and lead.status == "Offer Accepted":
+                        lead.status = "Qualified"
+        active_booking = db.query(Booking.id).filter(
+            Booking.tenant_id == prop.tenant_id,
+            Booking.property_id == prop.id,
+            Booking.status.in_(("Pending", "Confirmed")),
+        ).first()
+        prop.offer_hold_expires_at = None
+        if prop.status == "Reserved" and not active_booking:
+            prop.status = "Available"
+            property_holds_released += 1
+
+    schedules = db.query(RentalPaymentSchedule).filter(
+        RentalPaymentSchedule.status.in_(("Pending", "Partially Paid", "Overdue")),
+        RentalPaymentSchedule.due_date < today,
+    ).all()
+    for schedule in schedules:
+        paid = db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(
+            RentalPayment.tenant_id == schedule.tenant_id,
+            RentalPayment.schedule_id == schedule.id,
+            RentalPayment.status == "Verified",
+        ).scalar() or 0
+        agreement = db.query(RentalAgreement).filter(
+            RentalAgreement.id == schedule.agreement_id,
+            RentalAgreement.tenant_id == schedule.tenant_id,
+        ).first()
+        if agreement and schedule.charge_type == "Rent" and agreement.late_fee_amount > 0:
+            grace_cutoff = schedule.due_date + timedelta(days=agreement.late_fee_grace_days or 0)
+            if today > grace_cutoff and schedule.late_fee_applied_at is None and Decimal(str(paid)) < Decimal(str(schedule.amount)):
+                if agreement.late_fee_type == "Percentage":
+                    schedule.late_fee_amount = (Decimal(str(schedule.amount)) * Decimal(str(agreement.late_fee_amount)) / Decimal("100")).quantize(Decimal("0.01"))
+                else:
+                    schedule.late_fee_amount = Decimal(str(agreement.late_fee_amount)).quantize(Decimal("0.01"))
+                schedule.late_fee_applied_at = now
+                late_fees_applied += 1
+        total_due = Decimal(str(schedule.amount)) + Decimal(str(schedule.late_fee_amount or 0))
+        if Decimal(str(paid)) >= total_due:
+            schedule.status = "Paid"
+        else:
+            schedule.status = "Overdue"
+            overdue_updated += 1
+
+    expiring = db.query(RentalAgreement).filter(
+        RentalAgreement.status == "Active",
+        RentalAgreement.agreement_end.is_not(None),
+        RentalAgreement.agreement_end < today,
+    ).with_for_update().all()
+    for agreement in expiring:
+        agreement.status = "Expired"
+        agreements_expired += 1
+        message = f"Your rental agreement has reached its end date ({agreement.agreement_end.isoformat()}). Please contact your property manager to confirm renewal or move-out arrangements. The property remains occupied until handover is completed."
+        portal_user = db.query(CustomerPortalUser).filter(
+            CustomerPortalUser.tenant_id == agreement.tenant_id,
+            CustomerPortalUser.contact_id == agreement.contact_id,
+            CustomerPortalUser.status == "Active",
+        ).first() if agreement.contact_id else None
+        if portal_user:
+            exists_portal = db.query(CustomerPortalNotification.id).filter(
+                CustomerPortalNotification.tenant_id == agreement.tenant_id,
+                CustomerPortalNotification.portal_user_id == portal_user.id,
+                CustomerPortalNotification.notification_type == "rental_agreement_expired",
+                CustomerPortalNotification.related_record_id == agreement.id,
+            ).first()
+            if not exists_portal:
+                db.add(CustomerPortalNotification(
+                    tenant_id=agreement.tenant_id, portal_user_id=portal_user.id,
+                    title="Rental agreement reached its end date", message=message,
+                    notification_type="rental_agreement_expired", related_module="rental_agreements",
+                    related_record_id=agreement.id, is_read=False,
+                ))
+        if agreement.created_by:
+            exists = db.query(Notification.id).filter(
+                Notification.tenant_id == agreement.tenant_id,
+                Notification.related_module == "rental_agreements",
+                Notification.related_record_id == agreement.id,
+                Notification.title == "Rental agreement expired",
+            ).first()
+            if not exists:
+                db.add(Notification(
+                    tenant_id=agreement.tenant_id,
+                    recipient_user_id=agreement.created_by,
+                    workflow_id=None,
+                    title="Rental agreement expired",
+                    message=f"Rental agreement {agreement.id} has passed its end date. Confirm tenant exit, renewal, or a revised agreement before releasing the property.",
+                    notification_type="rental_lifecycle",
+                    related_module="rental_agreements",
+                    related_record_id=agreement.id,
+                    is_read=False,
+                ))
+
+    expiring_soon = db.query(RentalAgreement).filter(
+        RentalAgreement.status == "Active",
+        RentalAgreement.agreement_end.in_((today + timedelta(days=30), today + timedelta(days=7))),
+    ).all()
+    for agreement in expiring_soon:
+        days_left = (agreement.agreement_end - today).days
+        title = f"Rental agreement expires in {days_left} days"
+        message = f"Your rental agreement is scheduled to end on {agreement.agreement_end.isoformat()}. Please contact your property manager if you want to request a renewal."
+        portal_user = db.query(CustomerPortalUser).filter(
+            CustomerPortalUser.tenant_id == agreement.tenant_id,
+            CustomerPortalUser.contact_id == agreement.contact_id,
+            CustomerPortalUser.status == "Active",
+        ).first() if agreement.contact_id else None
+        if portal_user:
+            exists_portal = db.query(CustomerPortalNotification.id).filter(
+                CustomerPortalNotification.tenant_id == agreement.tenant_id,
+                CustomerPortalNotification.portal_user_id == portal_user.id,
+                CustomerPortalNotification.notification_type == "rental_agreement_expiry_reminder",
+                CustomerPortalNotification.related_record_id == agreement.id,
+                CustomerPortalNotification.title == title,
+            ).first()
+            if not exists_portal:
+                db.add(CustomerPortalNotification(
+                    tenant_id=agreement.tenant_id, portal_user_id=portal_user.id,
+                    title=title, message=message,
+                    notification_type="rental_agreement_expiry_reminder",
+                    related_module="rental_agreements", related_record_id=agreement.id, is_read=False,
+                ))
+                expiry_reminders_sent += 1
+        if agreement.created_by:
+            exists_staff = db.query(Notification.id).filter(
+                Notification.tenant_id == agreement.tenant_id,
+                Notification.recipient_user_id == agreement.created_by,
+                Notification.related_module == "rental_agreements",
+                Notification.related_record_id == agreement.id,
+                Notification.title == title,
+            ).first()
+            if not exists_staff:
+                db.add(Notification(
+                    tenant_id=agreement.tenant_id, recipient_user_id=agreement.created_by,
+                    workflow_id=None, title=title,
+                    message=f"{agreement.customer_name}: {message}",
+                    notification_type="rental_lifecycle", related_module="rental_agreements",
+                    related_record_id=agreement.id, is_read=False,
+                ))
+
+    due_schedules = db.query(RentalPaymentSchedule).filter(
+        RentalPaymentSchedule.status.in_(("Pending", "Partially Paid", "Overdue")),
+        RentalPaymentSchedule.due_date.in_((today + timedelta(days=3), today - timedelta(days=1), today - timedelta(days=7), today - timedelta(days=15))),
+    ).all()
+    for schedule in due_schedules:
+        agreement = db.query(RentalAgreement).filter(
+            RentalAgreement.id == schedule.agreement_id,
+            RentalAgreement.tenant_id == schedule.tenant_id,
+        ).first()
+        if not agreement:
+            continue
+        portal_user = db.query(CustomerPortalUser).filter(
+            CustomerPortalUser.tenant_id == agreement.tenant_id,
+            CustomerPortalUser.contact_id == agreement.contact_id,
+            CustomerPortalUser.status == "Active",
+        ).first() if agreement.contact_id else None
+        due_days = (schedule.due_date - today).days
+        kind = "rental_due_soon" if due_days > 0 else "rental_overdue"
+        title = "Rental payment due in three days" if due_days > 0 else "Rental payment overdue"
+        message = (f"Your {schedule.charge_type.lower()} payment of {schedule.amount} is due on {schedule.due_date.isoformat()}." if due_days > 0 else f"Your {schedule.charge_type.lower()} payment of {schedule.amount} was due on {schedule.due_date.isoformat()}. Late fee: {schedule.late_fee_amount}. Total due: {Decimal(str(schedule.amount)) + Decimal(str(schedule.late_fee_amount or 0))}. Please submit payment proof or contact your property manager.")
+        if portal_user:
+            exists = db.query(CustomerPortalNotification.id).filter(
+                CustomerPortalNotification.tenant_id == agreement.tenant_id,
+                CustomerPortalNotification.portal_user_id == portal_user.id,
+                CustomerPortalNotification.notification_type == kind,
+                CustomerPortalNotification.related_record_id == schedule.id,
+            ).first()
+            if not exists:
+                db.add(CustomerPortalNotification(
+                    tenant_id=agreement.tenant_id,
+                    portal_user_id=portal_user.id,
+                    title=title,
+                    message=message,
+                    notification_type=kind,
+                    related_module="rental_payment_schedules",
+                    related_record_id=schedule.id,
+                    is_read=False,
+                ))
+                reminders_sent += 1
+        if agreement.created_by:
+            exists_staff = db.query(Notification.id).filter(
+                Notification.tenant_id == agreement.tenant_id,
+                Notification.notification_type == "rental_lifecycle",
+                Notification.related_module == "rental_payment_schedules",
+                Notification.related_record_id == schedule.id,
+                Notification.title == title,
+            ).first()
+            if not exists_staff:
+                recipient = db.query(User).filter(User.id == agreement.created_by, User.tenant_id == agreement.tenant_id, User.status == "Active").first()
+                if recipient:
+                    db.add(Notification(
+                        tenant_id=agreement.tenant_id,
+                        recipient_user_id=recipient.id,
+                        workflow_id=None,
+                        title=title,
+                        message=f"{agreement.customer_name}: {message}",
+                        notification_type="rental_lifecycle",
+                        related_module="rental_payment_schedules",
+                        related_record_id=schedule.id,
+                        is_read=False,
+                    ))
+    db.commit()
+    return {"overdue_schedule_items": overdue_updated, "late_fees_applied": late_fees_applied, "offers_expired": offers_expired, "property_holds_released": property_holds_released, "agreements_expired": agreements_expired, "payment_reminders_sent": reminders_sent, "agreement_expiry_reminders_sent": expiry_reminders_sent}
+
+
+JOBS["rental_lifecycle"] = rental_lifecycle_job

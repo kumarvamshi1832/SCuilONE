@@ -29,6 +29,11 @@ router = APIRouter(
 MAX_AUTO_MATCHES = 20
 NEARBY_BUDGET_PERCENT = 10
 
+REQUIREMENT_LISTING_TYPES = {"Buy": "Sale", "Rent": "Rent", "Lease": "Lease"}
+
+def expected_listing_type_for_requirement(requirement: BuyerRequirement) -> str:
+    return REQUIREMENT_LISTING_TYPES.get(requirement.requirement_type, "Sale")
+
 # Customer language and the CRM inventory use different names for some types.
 # Keep this mapping centralized so AI-extracted values match inventory values.
 PROPERTY_TYPE_ALIASES = {
@@ -158,9 +163,7 @@ def create_property_match(
             detail="Only properties with Available status can be matched.",
         )
 
-    expected_listing_type = (
-        "Sale" if requirement.requirement_type == "Buy" else "Rent"
-    )
+    expected_listing_type = expected_listing_type_for_requirement(requirement)
 
     if property_record.listing_type != expected_listing_type:
         raise HTTPException(
@@ -170,6 +173,14 @@ def create_property_match(
                 f"the property listing type is {property_record.listing_type}."
             ),
         )
+
+
+    if requirement.budget_frequency and (property_record.price_frequency or "One-time").casefold() != requirement.budget_frequency.casefold():
+        raise HTTPException(status_code=400, detail="Property price frequency does not match the customer budget frequency.")
+    if requirement.min_duration_months is not None and property_record.maximum_term_months is not None and property_record.maximum_term_months < requirement.min_duration_months:
+        raise HTTPException(status_code=400, detail="Property maximum term is shorter than the customer's minimum requested duration.")
+    if requirement.max_duration_months is not None and property_record.minimum_term_months is not None and property_record.minimum_term_months > requirement.max_duration_months:
+        raise HTTPException(status_code=400, detail="Property minimum term is longer than the customer's maximum requested duration.")
 
     assigned_to = payload.assigned_to
 
@@ -262,9 +273,7 @@ def auto_match_properties(
             detail="A closed buyer requirement cannot be matched.",
         )
 
-    expected_listing_type = (
-        "Sale" if requirement.requirement_type == "Buy" else "Rent"
-    )
+    expected_listing_type = expected_listing_type_for_requirement(requirement)
 
     query = db.query(Property).filter(
         Property.tenant_id == tenant_id,
@@ -275,6 +284,8 @@ def auto_match_properties(
             property_type_aliases(requirement.property_type)
         ),
     )
+    if requirement.budget_frequency:
+        query = query.filter(func.lower(func.trim(Property.price_frequency)) == requirement.budget_frequency.lower())
 
     if requirement.preferred_city and requirement.preferred_city.strip():
         query = query.filter(
@@ -299,6 +310,10 @@ def auto_match_properties(
         query = query.filter(
             Property.price <= requirement.max_budget
         )
+    if requirement.min_duration_months is not None:
+        query = query.filter((Property.maximum_term_months.is_(None)) | (Property.maximum_term_months >= requirement.min_duration_months))
+    if requirement.max_duration_months is not None:
+        query = query.filter((Property.minimum_term_months.is_(None)) | (Property.minimum_term_months <= requirement.max_duration_months))
 
     if requirement.bedrooms is not None:
         query = query.filter(
@@ -537,9 +552,7 @@ def get_potential_matches(
     ):
         return []
 
-    expected_listing_type = (
-        "Sale" if requirement.requirement_type == "Buy" else "Rent"
-    )
+    expected_listing_type = expected_listing_type_for_requirement(requirement)
 
     query = db.query(Property).filter(
         Property.tenant_id == tenant_id,
@@ -550,6 +563,8 @@ def get_potential_matches(
             property_type_aliases(requirement.property_type)
         ),
     )
+    if requirement.budget_frequency:
+        query = query.filter(func.lower(func.trim(Property.price_frequency)) == requirement.budget_frequency.lower())
 
     city = (requirement.preferred_city or "").strip()
     location = (requirement.preferred_location or "").strip()
@@ -563,6 +578,11 @@ def get_potential_matches(
         query = query.filter(
             Property.address.ilike(f"%{location}%")
         )
+
+    if requirement.min_duration_months is not None:
+        query = query.filter((Property.maximum_term_months.is_(None)) | (Property.maximum_term_months >= requirement.min_duration_months))
+    if requirement.max_duration_months is not None:
+        query = query.filter((Property.minimum_term_months.is_(None)) | (Property.minimum_term_months <= requirement.max_duration_months))
 
     if requirement.bedrooms is not None:
         query = query.filter(
@@ -670,9 +690,7 @@ def get_nearby_budget_matches(
     if requirement.status == "Closed" or requirement.max_budget is None:
         return []
 
-    expected_listing_type = (
-        "Sale" if requirement.requirement_type == "Buy" else "Rent"
-    )
+    expected_listing_type = expected_listing_type_for_requirement(requirement)
     max_price = Decimal(str(requirement.max_budget))
     upper_limit = max_price * (
         Decimal("1") + Decimal(NEARBY_BUDGET_PERCENT) / Decimal("100")
@@ -688,6 +706,8 @@ def get_nearby_budget_matches(
         Property.price > max_price,
         Property.price <= upper_limit,
     )
+    if requirement.budget_frequency:
+        query = query.filter(func.lower(func.trim(Property.price_frequency)) == requirement.budget_frequency.lower())
 
     city = (requirement.preferred_city or "").strip()
     location = (requirement.preferred_location or "").strip()
@@ -699,6 +719,11 @@ def get_nearby_budget_matches(
 
     if location and location.casefold() != city.casefold():
         query = query.filter(Property.address.ilike(f"%{location}%"))
+
+    if requirement.min_duration_months is not None:
+        query = query.filter((Property.maximum_term_months.is_(None)) | (Property.maximum_term_months >= requirement.min_duration_months))
+    if requirement.max_duration_months is not None:
+        query = query.filter((Property.minimum_term_months.is_(None)) | (Property.minimum_term_months <= requirement.max_duration_months))
 
     if requirement.bedrooms is not None:
         query = query.filter(Property.bedrooms == requirement.bedrooms)

@@ -49,10 +49,15 @@ class BuyerRequirement(Base):
     )
 
     requirement_type: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-        default="Buy",
+        String(20), nullable=False, default="Buy",
     )
+
+    budget_frequency: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="One-time", server_default="One-time"
+    )
+
+    min_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     property_type: Mapped[str] = mapped_column(
         String(50),

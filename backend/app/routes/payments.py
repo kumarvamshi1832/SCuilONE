@@ -11,6 +11,7 @@ from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
 from app.database.connection import SessionLocal
 from app.models.booking import Booking
+from app.models.customer_booking_journey import CustomerBookingRequest
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
@@ -416,6 +417,50 @@ def decide_payment(
 
         before_data = payment_snapshot(payment)
         payment.status = payload.status
+        if payload.status == "Verified":
+            # A verified token payment confirms a standard booking automatically.
+            # Customer-portal bookings still require the portal's required buyer,
+            # hold, and agreement checks before the state transition.
+            db.flush()
+            verified_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                Payment.tenant_id == tenant_id, Payment.booking_id == booking.id,
+                Payment.status == "Verified",
+            ).scalar()
+            refund_total = db.query(func.coalesce(func.sum(PaymentRefund.amount), 0)).filter(
+                PaymentRefund.tenant_id == tenant_id, PaymentRefund.booking_id == booking.id,
+                PaymentRefund.status == "Processed",
+            ).scalar()
+            net_received = Decimal(str(verified_total or 0)) - Decimal(str(refund_total or 0))
+            if booking.status == "Pending" and net_received >= Decimal(str(booking.booking_amount)):
+                journey = db.query(CustomerBookingRequest).filter(
+                    CustomerBookingRequest.tenant_id == tenant_id,
+                    CustomerBookingRequest.booking_id == booking.id,
+                ).with_for_update().first()
+                journey_ready = journey is None or (
+                    journey.status == "Approved"
+                    and journey.hold_expires_at is not None
+                    and journey.hold_expires_at > datetime.utcnow()
+                    and booking.buyer_details_submitted_at is not None
+                    and journey.agreement_status == "Verified"
+                    and journey.agreement_verified_at is not None
+                )
+                if journey_ready:
+                    booking.status = "Confirmed"
+                    booking.updated_at = datetime.utcnow()
+                    notify_booking_customer(
+                        db, tenant_id, booking.id, "Booking confirmed",
+                        "Your token payment has been verified and your booking is now confirmed.",
+                        "booking_confirmed", "bookings", booking.id,
+                    )
+                    log_audit(
+                        db, tenant_id, user_id, "AUTO_CONFIRM", "bookings", booking.id,
+                        "Booking automatically confirmed after verified token payment",
+                        after_data={"status": "Confirmed", "verified_token_amount": str(net_received)},
+                    )
+                    if journey:
+                        journey.status = "Confirmed"
+                        journey.final_confirmed_at = datetime.utcnow()
+                        journey.hold_expires_at = None
         if payload.status != "Under Verification":
             # Only a closing decision (Verified / Rejected / Failed) records who decided and when.
             payment.verified_by = user_id

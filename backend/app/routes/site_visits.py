@@ -208,6 +208,8 @@ def create_site_visit(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Property match not found in this tenant.",
         )
+    if payload.scheduled_start <= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="A site visit must be scheduled for a future date and time.")
 
     assigned_to = (
         payload.assigned_to
@@ -372,7 +374,6 @@ def update_site_visit(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="scheduled_end must be after scheduled_start.",
         )
-
     if "assigned_to" in changes:
         validate_assigned_user(
             db,
@@ -388,6 +389,8 @@ def update_site_visit(
         visit.status == "Requested"
         and new_status in ("Scheduled", "Rescheduled")
     )
+    if (rescheduling or confirming_request) and new_start <= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="A site visit must be scheduled for a future date and time.")
 
     if (
         rescheduling or "assigned_to" in changes or confirming_request

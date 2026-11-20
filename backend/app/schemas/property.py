@@ -18,7 +18,7 @@ PropertyType = Literal[
     "Warehouse",
     "Other",
 ]
-ListingType = Literal["Sale", "Rent"]
+ListingType = Literal["Sale", "Rent", "Lease"]
 PropertyStatus = Literal["Available", "Reserved", "Sold", "Rented", "Inactive"]
 FurnishingType = Literal["Unfurnished", "Semi-Furnished", "Furnished"]
 
@@ -36,7 +36,15 @@ class PropertyCreate(BaseModel):
     state: str = Field(min_length=1, max_length=100)
     country: str = Field(default="India", max_length=100)
     postal_code: str | None = Field(default=None, max_length=20)
-    price: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    price: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    minimum_acceptable_price: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    require_owner_approval: bool = False
+    hold_on_offer_acceptance: bool = False
+    offer_hold_hours: int = Field(default=48, ge=1, le=720)
+    price_frequency: Literal["One-time", "Monthly", "Quarterly", "Yearly"] | None = None
+    security_deposit: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    minimum_term_months: int | None = Field(default=None, ge=1, le=600)
+    maximum_term_months: int | None = Field(default=None, ge=1, le=600)
     currency: str = Field(default="INR", min_length=3, max_length=3)
     area: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     area_unit: Literal["sqft", "sqm", "sqyd", "acre"] = "sqft"
@@ -70,6 +78,15 @@ class PropertyCreate(BaseModel):
     def validate_building_unit(self):
         if self.building_id is not None and self.unit_number is None:
             raise ValueError("Unit number is required when a building is selected.")
+        expected = "One-time" if self.listing_type == "Sale" else "Monthly"
+        if self.price_frequency is None:
+            self.price_frequency = expected
+        if self.listing_type == "Sale" and self.price_frequency != "One-time":
+            raise ValueError("Sale listings must use One-time pricing.")
+        if self.listing_type in ("Rent", "Lease") and self.price_frequency == "One-time":
+            raise ValueError("Rent and Lease listings must use a recurring price frequency.")
+        if self.minimum_term_months and self.maximum_term_months and self.minimum_term_months > self.maximum_term_months:
+            raise ValueError("Minimum term cannot exceed maximum term.")
         return self
 
 
@@ -86,7 +103,15 @@ class PropertyUpdate(BaseModel):
     state: str | None = Field(default=None, min_length=1, max_length=100)
     country: str | None = Field(default=None, max_length=100)
     postal_code: str | None = Field(default=None, max_length=20)
-    price: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    price: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    minimum_acceptable_price: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    require_owner_approval: bool | None = None
+    hold_on_offer_acceptance: bool | None = None
+    offer_hold_hours: int | None = Field(default=None, ge=1, le=720)
+    price_frequency: Literal["One-time", "Monthly", "Quarterly", "Yearly"] | None = None
+    security_deposit: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    minimum_term_months: int | None = Field(default=None, ge=1, le=600)
+    maximum_term_months: int | None = Field(default=None, ge=1, le=600)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     area: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     area_unit: Literal["sqft", "sqm", "sqyd", "acre"] | None = None
@@ -135,6 +160,15 @@ class PropertyResponse(BaseModel):
     country: str
     postal_code: str | None
     price: Decimal
+    minimum_acceptable_price: Decimal | None = None
+    require_owner_approval: bool = False
+    hold_on_offer_acceptance: bool = False
+    offer_hold_hours: int = 48
+    offer_hold_expires_at: datetime | None = None
+    price_frequency: str
+    security_deposit: Decimal | None
+    minimum_term_months: int | None
+    maximum_term_months: int | None
     currency: str
     area: Decimal | None
     area_unit: str

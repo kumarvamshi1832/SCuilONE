@@ -185,10 +185,13 @@ def extract_real_estate_heuristics(message: str) -> dict[str, Any]:
     extracted: dict[str, Any] = {}
 
     wants_buy = bool(re.search(r"\b(buy|buying|purchase|purchasing)\b", lower))
-    wants_rent = bool(re.search(r"\b(rent|renting|lease|leasing|rental)\b", lower))
-    if wants_buy and not wants_rent:
+    wants_lease = bool(re.search(r"\b(lease|leasing)\b", lower))
+    wants_rent = bool(re.search(r"\b(rent|renting|rental)\b", lower))
+    if wants_buy and not wants_rent and not wants_lease:
         extracted["buy_or_rent"] = "Buy"
-    elif wants_rent and not wants_buy:
+    elif wants_lease and not wants_rent and not wants_buy:
+        extracted["buy_or_rent"] = "Lease"
+    elif wants_rent and not wants_buy and not wants_lease:
         extracted["buy_or_rent"] = "Rent"
     # If both words appear (e.g. "buy or rent"), leave it unset so the assistant asks.
 
@@ -387,7 +390,7 @@ async def run_ollama_extraction(
 
     if industry_type == "real_estate":
         schema_keys = (
-            "buy_or_rent (Buy or Rent), city, locality, property_type "
+            "buy_or_rent (Buy, Rent or Lease), city, locality, property_type "
             "(Apartment, Villa, Independent House, Plot, Commercial, Office, Shop, Warehouse), "
             "bedrooms (integer), min_budget (number), max_budget (number), "
             "min_area (number), max_area (number), area_unit (sqft, sqm, sqyd, acre), "

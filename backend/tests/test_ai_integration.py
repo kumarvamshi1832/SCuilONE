@@ -265,6 +265,7 @@ class Phase3HardeningTests(unittest.TestCase):
     def test_buy_or_rent_ambiguity_is_left_unset(self):
         self.assertEqual(extract_real_estate_heuristics("I want to buy a flat")["buy_or_rent"], "Buy")
         self.assertEqual(extract_real_estate_heuristics("Looking to rent a flat")["buy_or_rent"], "Rent")
+        self.assertEqual(extract_real_estate_heuristics("I want to lease an office")["buy_or_rent"], "Lease")
         self.assertNotIn("buy_or_rent", extract_real_estate_heuristics("Should I buy or rent a flat?"))
         self.assertNotIn("buy_or_rent", extract_real_estate_heuristics("I own a house in Pune"))
 

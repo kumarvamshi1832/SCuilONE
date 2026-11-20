@@ -46,6 +46,10 @@ from app.models.booking import Booking, BookingNominee
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
+from app.models.rental import (
+    RentalAgreement, RentalPaymentSchedule, RentalPayment, RentalDepositTransaction,
+    RentalExitRequest, RentalInspection, RentalSettlement, RentalAgreementRevision,
+)
 from app.models.software_requirement import SoftwareRequirement
 from app.models.software_estimate import SoftwareEstimate
 from app.models.software_estimate_item import SoftwareEstimateItem

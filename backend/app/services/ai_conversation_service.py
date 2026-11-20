@@ -49,7 +49,7 @@ SOFTWARE_REQUIRED_FIELDS = [
 MAX_USER_MESSAGES_PER_CONVERSATION = 60
 
 FIELD_LABELS = {
-    "buy_or_rent": "whether you want to Buy or Rent",
+    "buy_or_rent": "whether you want to Buy, Rent or Lease",
     "city": "preferred city",
     "locality": "preferred locality / neighborhood",
     "property_type": "property type (e.g., Apartment, Villa, Plot, Office)",
@@ -480,7 +480,7 @@ async def start_or_resume_ai_conversation(
     if industry_type == "real_estate":
         greeting = (
             f"Hello {contact.full_name}! I am your Real Estate requirement assistant. "
-            "To help match the right properties for you, are you looking to Buy or Rent, "
+            "To help match the right properties for you, are you looking to Buy, Rent or Lease, "
             "and what city, locality, and property type do you prefer?"
         )
     else:
@@ -709,6 +709,7 @@ def confirm_ai_requirement(
             if not req:
                 raise HTTPException(status_code=404, detail="Linked BuyerRequirement record not found.")
             req.requirement_type = validated_data["buy_or_rent"]
+            req.budget_frequency = "One-time" if req.requirement_type == "Buy" else "Monthly"
             req.property_type = validated_data["property_type"]
             req.preferred_city = validated_data.get("city")
             req.preferred_location = validated_data.get("locality")
@@ -729,6 +730,7 @@ def confirm_ai_requirement(
                 contact_id=contact.id,
                 assigned_to=assigned_to,
                 requirement_type=validated_data["buy_or_rent"],
+                budget_frequency="One-time" if validated_data["buy_or_rent"] == "Buy" else "Monthly",
                 property_type=validated_data["property_type"],
                 preferred_city=validated_data.get("city"),
                 preferred_location=validated_data.get("locality"),

@@ -1,3 +1,4 @@
+import calendar
 import hashlib
 import hmac
 import logging
@@ -44,10 +45,14 @@ from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.models.property import Property
+from app.models.rental import (
+    RentalAgreement, RentalPaymentSchedule, RentalPayment, RentalExitRequest, RentalAgreementRevision, RentalInspection, RentalSettlement
+)
 from app.models.property_image import PropertyImage
 from app.models.customer_property_shortlist import CustomerPropertyShortlist
 from app.models.customer_booking_journey import CustomerSiteVisitFeedback
 from app.models.property_match import PropertyMatch
+from app.models.property_offer import PropertyOffer
 from app.models.site_visit import SiteVisit
 from app.models.software_contract import SoftwareContract
 from app.models.software_estimate import SoftwareEstimate
@@ -88,6 +93,8 @@ from app.schemas.customer_portal import (
     PortalTicketListResponse,
     PortalTicketResponse,
 )
+from app.schemas.property_offer import PropertyOfferCreate, PropertyOfferDecision, PropertyOfferResponse
+from app.schemas.rental import RentalPaymentCreate, RentalExitRequestCreate, RentalRenewalCreate, RentalAgreementSignRequest, RentalInspectionAcknowledge
 from app.services.audit_service import log_audit
 from app.services.customer_chat_service import ensure_invitation_conversation
 from app.services.email_service import (
@@ -2665,6 +2672,10 @@ def _portal_property_payload(db: Session, prop: Property, match: PropertyMatch) 
             "country": prop.country,
             "postal_code": prop.postal_code,
             "price": str(prop.price),
+            "price_frequency": prop.price_frequency,
+            "security_deposit": str(prop.security_deposit) if prop.security_deposit is not None else None,
+            "minimum_term_months": prop.minimum_term_months,
+            "maximum_term_months": prop.maximum_term_months,
             "currency": prop.currency,
             "area": str(prop.area) if prop.area is not None else None,
             "area_unit": prop.area_unit,
@@ -2723,6 +2734,9 @@ def create_portal_buyer_requirement(
         property_type=payload.property_type,
         preferred_city=payload.preferred_city,
         preferred_location=payload.preferred_location,
+        budget_frequency=payload.budget_frequency or ("One-time" if payload.requirement_type == "Buy" else "Monthly"),
+        min_duration_months=payload.min_duration_months,
+        max_duration_months=payload.max_duration_months,
         min_budget=payload.min_budget,
         max_budget=payload.max_budget,
         bedrooms=payload.bedrooms,
@@ -2794,6 +2808,9 @@ def create_portal_buyer_requirement(
                 "contact_id": str(contact.id),
                 "lead_id": str(lead.id) if lead else None,
                 "requirement_type": requirement.requirement_type,
+                "budget_frequency": requirement.budget_frequency,
+                "min_duration_months": requirement.min_duration_months,
+                "max_duration_months": requirement.max_duration_months,
                 "property_type": requirement.property_type,
                 "preferred_city": requirement.preferred_city,
                 "preferred_location": requirement.preferred_location,
@@ -2816,6 +2833,9 @@ def create_portal_buyer_requirement(
     return {
         "id": str(requirement.id),
         "requirement_type": requirement.requirement_type,
+        "budget_frequency": requirement.budget_frequency,
+        "min_duration_months": requirement.min_duration_months,
+        "max_duration_months": requirement.max_duration_months,
         "property_type": requirement.property_type,
         "preferred_city": requirement.preferred_city,
         "preferred_location": requirement.preferred_location,
@@ -2844,6 +2864,9 @@ def list_portal_buyer_requirements(
         {
             "id": str(item.id),
             "requirement_type": item.requirement_type,
+            "budget_frequency": item.budget_frequency,
+            "min_duration_months": item.min_duration_months,
+            "max_duration_months": item.max_duration_months,
             "property_type": item.property_type,
             "preferred_city": item.preferred_city,
             "preferred_location": item.preferred_location,
@@ -2871,6 +2894,9 @@ def get_portal_buyer_requirement(
     return {
         "id": str(item.id),
         "requirement_type": item.requirement_type,
+        "budget_frequency": item.budget_frequency,
+        "min_duration_months": item.min_duration_months,
+        "max_duration_months": item.max_duration_months,
         "property_type": item.property_type,
         "preferred_city": item.preferred_city,
         "preferred_location": item.preferred_location,
@@ -3078,3 +3104,552 @@ def request_portal_site_visit(
 
 
 # ==============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Customer-side property offer negotiation
+# ---------------------------------------------------------------------------
+
+def _portal_owned_match(db: Session, portal: dict, match_id: UUID, lock: bool = False) -> tuple[PropertyMatch, BuyerRequirement]:
+    query = db.query(PropertyMatch).filter(
+        PropertyMatch.id == match_id,
+        PropertyMatch.tenant_id == portal["tenant_id"],
+    )
+    if lock:
+        query = query.with_for_update()
+    match = query.first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Property match not found for this customer.")
+    requirement = db.query(BuyerRequirement).filter(
+        BuyerRequirement.id == match.buyer_requirement_id,
+        BuyerRequirement.tenant_id == portal["tenant_id"],
+        BuyerRequirement.contact_id == portal["contact_id"],
+    ).first()
+    if not requirement:
+        raise HTTPException(status_code=404, detail="Property match not found for this customer.")
+    return match, requirement
+
+
+def _portal_offer_or_404(db: Session, portal: dict, offer_id: UUID) -> PropertyOffer:
+    offer = db.query(PropertyOffer).filter(
+        PropertyOffer.id == offer_id,
+        PropertyOffer.tenant_id == portal["tenant_id"],
+    ).first()
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found.")
+    _portal_owned_match(db, portal, offer.property_match_id)
+    return offer
+
+
+@router.get("/property-matches/{match_id}/offers", response_model=list[PropertyOfferResponse])
+def portal_list_property_offers(
+    match_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    _portal_owned_match(db, portal, match_id)
+    return db.query(PropertyOffer).filter(
+        PropertyOffer.tenant_id == portal["tenant_id"],
+        PropertyOffer.property_match_id == match_id,
+    ).order_by(PropertyOffer.created_at.asc()).all()
+
+
+@router.post("/property-offers", response_model=PropertyOfferResponse, status_code=status.HTTP_201_CREATED)
+def portal_create_property_offer(
+    payload: PropertyOfferCreate,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    match, _requirement = _portal_owned_match(db, portal, payload.property_match_id, lock=True)
+    prop = db.query(Property).filter(
+        Property.id == match.property_id, Property.tenant_id == portal["tenant_id"]
+    ).with_for_update().first()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Matched property not found.")
+    if prop.listing_type not in ("Rent", "Lease", "Sale"):
+        raise HTTPException(status_code=400, detail="Customer portal offers are available only for Sale, Rent, and Lease listings.")
+    unresolved = db.query(PropertyOffer.id).filter(
+        PropertyOffer.tenant_id == portal["tenant_id"],
+        PropertyOffer.property_match_id == match.id,
+        PropertyOffer.status.in_(("Submitted", "Countered")),
+    ).first()
+    if unresolved:
+        raise HTTPException(status_code=409, detail="An offer is already waiting for the other party. Respond to it before submitting another offer.")
+    row = PropertyOffer(
+        tenant_id=portal["tenant_id"], property_match_id=match.id,
+        offered_price=payload.offered_price, price_frequency=prop.price_frequency or "Monthly",
+        terms=payload.terms, expires_at=payload.expires_at or now_naive_utc() + timedelta(days=7), created_by=None, status="Submitted", offer_type="Buyer",
+    )
+    db.add(row)
+    db.flush()
+    recipient = match.assigned_to or _requirement.assigned_to or _requirement.created_by
+    _notify_staff_user(db, portal["tenant_id"], recipient, "Customer submitted a property offer",
+        f"A customer submitted an offer of {payload.offered_price} for property match {match.id}. Please review and respond.",
+        "property_offers", row.id)
+    log_audit(db, portal["tenant_id"], None, "CUSTOMER_CREATE", "property_offers", row.id,
+        f"Customer {portal['email']} submitted an offer", after_data={"offered_price": str(row.offered_price), "property_match_id": str(match.id), "offer_type": "Buyer"})
+    db.commit(); db.refresh(row)
+    return row
+
+
+@router.post("/property-offers/{offer_id}/decision", response_model=PropertyOfferResponse)
+def portal_decide_property_offer(
+    offer_id: UUID,
+    payload: PropertyOfferDecision,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    row = _portal_offer_or_404(db, portal, offer_id)
+    if row.offer_type != "Seller":
+        raise HTTPException(status_code=403, detail="Customers can respond only to offers or counteroffers created by staff.")
+    if row.status not in ("Submitted", "Countered"):
+        raise HTTPException(status_code=409, detail="Only submitted offers can receive a customer decision.")
+    if row.expires_at and row.expires_at <= now_naive_utc():
+        row.status = "Expired"
+        db.commit()
+        raise HTTPException(status_code=409, detail="This offer has expired and can no longer be accepted or countered.")
+    if payload.decision == "Withdrawn":
+        raise HTTPException(status_code=400, detail="A customer cannot withdraw a staff offer. Accept, reject, or counter it.")
+    if payload.decision == "Countered" and payload.counter_price is None:
+        raise HTTPException(status_code=400, detail="counter_price is required for a counteroffer.")
+    match, requirement = _portal_owned_match(db, portal, row.property_match_id)
+    prop = db.query(Property).filter(Property.id == match.property_id, Property.tenant_id == portal["tenant_id"]).with_for_update().first()
+    if payload.decision == "Accepted":
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found.")
+        if prop.offer_hold_expires_at and prop.offer_hold_expires_at <= now_naive_utc():
+            prop.status = "Available"
+            prop.offer_hold_expires_at = None
+        if prop.status != "Available":
+            raise HTTPException(status_code=409, detail="This property is no longer available for a new accepted offer.")
+        if prop.minimum_acceptable_price is not None and row.offered_price < prop.minimum_acceptable_price:
+            raise HTTPException(status_code=409, detail=f"Offer is below the property's minimum acceptable price ({prop.minimum_acceptable_price}).")
+        competing = db.query(PropertyOffer.id).join(PropertyMatch, PropertyMatch.id == PropertyOffer.property_match_id).filter(
+            PropertyOffer.tenant_id == portal["tenant_id"], PropertyMatch.tenant_id == portal["tenant_id"],
+            PropertyMatch.property_id == prop.id, PropertyOffer.id != row.id,
+            PropertyOffer.status.in_(("Accepted", "Pending Owner Approval")),
+            (PropertyOffer.expires_at.is_(None) | (PropertyOffer.expires_at > now_naive_utc())),
+            (PropertyOffer.hold_expires_at.is_(None) | (PropertyOffer.hold_expires_at > now_naive_utc())),
+        ).first()
+        if competing:
+            raise HTTPException(status_code=409, detail="Another buyer already has an accepted or owner-pending offer on this property.")
+        row.status = "Pending Owner Approval" if prop.require_owner_approval else "Accepted"
+        if row.status == "Accepted":
+            match.status = "Offer Accepted"
+            if requirement.lead_id:
+                lead = db.query(Lead).filter(Lead.id == requirement.lead_id, Lead.tenant_id == portal["tenant_id"]).first()
+                if lead:
+                    lead.status = "Offer Accepted"
+            if prop.hold_on_offer_acceptance:
+                from datetime import timedelta
+                prop.offer_hold_expires_at = now_naive_utc() + timedelta(hours=max(1, prop.offer_hold_hours or 48))
+                row.hold_expires_at = prop.offer_hold_expires_at
+                row.expires_at = min(row.expires_at, row.hold_expires_at) if row.expires_at else row.hold_expires_at
+                prop.status = "Reserved"
+    else:
+        row.status = payload.decision
+    row.response_notes = payload.response_notes
+    row.responded_by = None
+    row.responded_at = now_naive_utc()
+    row.updated_at = now_naive_utc()
+    db.flush()
+    if payload.decision == "Countered":
+        counter = PropertyOffer(
+            tenant_id=portal["tenant_id"], property_match_id=row.property_match_id,
+            parent_offer_id=row.id, offered_price=payload.counter_price,
+            price_frequency=row.price_frequency, terms=payload.counter_terms or row.terms,
+            expires_at=now_naive_utc() + timedelta(days=7), created_by=None, status="Submitted", offer_type="Buyer",
+        )
+        db.add(counter)
+        db.flush()
+        _notify_staff_user(db, portal["tenant_id"], match.assigned_to or requirement.assigned_to or requirement.created_by,
+            "Customer sent a property counteroffer", f"The customer countered with {payload.counter_price}. Please review the property counteroffer.",
+            "property_offers", counter.id)
+    else:
+        # An accepted offer is the commercial source of truth for the agreement.
+        _notify_staff_user(db, portal["tenant_id"], match.assigned_to or requirement.assigned_to or requirement.created_by,
+            f"Customer {payload.decision.lower()} the rental offer",
+            f"The customer {payload.decision.lower()} offer {row.id}.", "property_offers", row.id)
+    log_audit(db, portal["tenant_id"], None, "CUSTOMER_DECISION", "property_offers", row.id,
+        f"Customer {portal['email']} {payload.decision.lower()} offer", after_data={"status": row.status, "response_notes": row.response_notes, "counter_price": str(payload.counter_price) if payload.counter_price is not None else None})
+    db.commit(); db.refresh(row)
+    return row
+
+
+# ---------------------------------------------------------------------------
+# Rental and lease customer-portal lifecycle
+# ---------------------------------------------------------------------------
+
+def _portal_rental_agreement(db: Session, portal: dict, agreement_id: UUID) -> RentalAgreement:
+    row = db.query(RentalAgreement).filter(
+        RentalAgreement.id == agreement_id,
+        RentalAgreement.tenant_id == portal["tenant_id"],
+        RentalAgreement.contact_id == portal["contact_id"],
+    ).first()
+    if not row or row.status in ("Draft", "Cancelled"):
+        raise HTTPException(status_code=404, detail="Rental agreement not found for this customer.")
+    return row
+
+
+def _portal_rental_agreement_payload(row: RentalAgreement) -> dict:
+    return {
+        "id": str(row.id), "property_id": str(row.property_id),
+        "agreement_type": row.agreement_type, "status": row.status,
+        "customer_name": row.customer_name, "customer_email": row.customer_email,
+        "customer_phone": row.customer_phone, "rent_amount": str(row.rent_amount),
+        "rent_frequency": row.rent_frequency, "deposit_amount": str(row.deposit_amount),
+        "maintenance_amount": str(row.maintenance_amount),
+        "maintenance_frequency": row.maintenance_frequency,
+        "agreement_start": row.agreement_start, "agreement_end": row.agreement_end,
+        "lock_in_months": row.lock_in_months, "notice_period_days": row.notice_period_days,
+        "due_day": row.due_day, "late_fee_type": row.late_fee_type,
+        "late_fee_amount": str(row.late_fee_amount), "late_fee_grace_days": row.late_fee_grace_days,
+        "escalation_percentage": str(row.escalation_percentage) if row.escalation_percentage is not None else None,
+        "escalation_interval_months": row.escalation_interval_months,
+        "agreement_document_url": row.agreement_document_url,
+        "signed_at": row.signed_at, "customer_signed_at": row.customer_signed_at,
+        "customer_signature_name": row.customer_signature_name,
+        "customer_signature_method": row.customer_signature_method,
+        "customer_signature_document_url": row.customer_signature_document_url,
+        "customer_signature_ip": row.customer_signature_ip,
+        "customer_signature_user_agent": row.customer_signature_user_agent,
+        "activated_at": row.activated_at,
+        "notes": row.notes, "created_at": row.created_at, "updated_at": row.updated_at,
+    }
+
+
+def _portal_rental_payment_payload(row: RentalPayment) -> dict:
+    return {
+        "id": str(row.id), "agreement_id": str(row.agreement_id),
+        "schedule_id": str(row.schedule_id) if row.schedule_id else None,
+        "settlement_id": str(row.settlement_id) if row.settlement_id else None,
+        "payment_type": row.payment_type, "amount": str(row.amount),
+        "payment_method": row.payment_method, "transaction_reference": row.transaction_reference,
+        "proof_document_url": row.proof_document_url, "receipt_number": row.receipt_number,
+        "payment_date": row.payment_date, "status": row.status,
+        "verified_at": row.verified_at, "notes": row.notes, "created_at": row.created_at,
+    }
+
+
+@router.get("/rental-agreements")
+def portal_list_rental_agreements(
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(RentalAgreement).filter(
+        RentalAgreement.tenant_id == portal["tenant_id"],
+        RentalAgreement.contact_id == portal["contact_id"],
+        RentalAgreement.status.notin_(("Draft", "Cancelled")),
+    ).order_by(RentalAgreement.created_at.desc()).all()
+    return [_portal_rental_agreement_payload(row) for row in rows]
+
+
+@router.get("/rental-agreements/{agreement_id}")
+def portal_read_rental_agreement(
+    agreement_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    row = _portal_rental_agreement(db, portal, agreement_id)
+    schedules = db.query(RentalPaymentSchedule).filter(
+        RentalPaymentSchedule.tenant_id == portal["tenant_id"],
+        RentalPaymentSchedule.agreement_id == row.id,
+    ).order_by(RentalPaymentSchedule.sequence.asc()).all()
+    payments = db.query(RentalPayment).filter(
+        RentalPayment.tenant_id == portal["tenant_id"],
+        RentalPayment.agreement_id == row.id,
+    ).order_by(RentalPayment.created_at.desc()).all()
+    inspections = db.query(RentalInspection).filter(
+        RentalInspection.tenant_id == portal["tenant_id"],
+        RentalInspection.agreement_id == row.id,
+    ).order_by(RentalInspection.inspected_at.asc()).all()
+    settlement = db.query(RentalSettlement).filter(
+        RentalSettlement.tenant_id == portal["tenant_id"], RentalSettlement.agreement_id == row.id,
+    ).first()
+    schedule_payload = []
+    for item in schedules:
+        paid = money(db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(
+            RentalPayment.tenant_id == portal["tenant_id"], RentalPayment.schedule_id == item.id,
+            RentalPayment.status == "Verified",
+        ).scalar())
+        if item.charge_type == "Rent" and row.late_fee_amount > 0 and date.today() > item.due_date + timedelta(days=row.late_fee_grace_days or 0) and item.late_fee_applied_at is None and paid < money(item.amount):
+            if row.late_fee_type == "Percentage":
+                item.late_fee_amount = money(money(item.amount) * money(row.late_fee_amount) / Decimal("100"))
+            else:
+                item.late_fee_amount = money(row.late_fee_amount)
+            item.late_fee_applied_at = now_naive_utc()
+        total_due = money(item.amount) + money(item.late_fee_amount)
+        item.status = "Paid" if paid >= total_due else ("Partially Paid" if paid > 0 else ("Overdue" if item.due_date < date.today() else "Pending"))
+        schedule_payload.append({
+            "id": str(item.id), "sequence": item.sequence, "charge_type": item.charge_type,
+            "period_start": item.period_start, "period_end": item.period_end,
+            "due_date": item.due_date, "amount": str(item.amount), "late_fee_amount": str(item.late_fee_amount),
+            "total_due": str(total_due), "paid": str(paid),
+            "outstanding": str(max(Decimal("0.00"), total_due - paid)), "status": item.status,
+        })
+    db.commit()
+    inspection_payload = [{
+        "id": str(item.id), "inspection_type": item.inspection_type, "condition": item.condition,
+        "damage_details": item.damage_details, "damage_amount": str(item.damage_amount),
+        "photographs": item.photographs or [], "meter_readings": item.meter_readings,
+        "inspected_at": item.inspected_at, "tenant_acknowledged": item.tenant_acknowledged,
+        "tenant_acknowledgement_notes": item.tenant_acknowledgement_notes,
+        "tenant_acknowledged_at": item.tenant_acknowledged_at, "notes": item.notes,
+    } for item in inspections]
+    settlement_payload = None if not settlement else {
+        "id": str(settlement.id), "status": settlement.status,
+        "deposit_balance": str(settlement.deposit_balance), "rent_arrears": str(settlement.rent_arrears),
+        "utility_charges": str(settlement.utility_charges), "damage_charges": str(settlement.damage_charges),
+        "early_exit_charge": str(settlement.early_exit_charge), "notice_shortfall_charge": str(settlement.notice_shortfall_charge),
+        "other_charges": str(settlement.other_charges), "deductions_total": str(settlement.deductions_total),
+        "refund_amount": str(settlement.refund_amount), "amount_due_from_tenant": str(settlement.amount_due_from_tenant),
+        "approved_at": settlement.approved_at, "refunded_at": settlement.refunded_at,
+    }
+    return {"agreement": _portal_rental_agreement_payload(row), "payment_schedule": schedule_payload,
+            "payments": [_portal_rental_payment_payload(item) for item in payments],
+            "inspections": inspection_payload, "settlement": settlement_payload}
+
+
+@router.post("/rental-agreements/{agreement_id}/sign")
+def portal_sign_rental_agreement(
+    agreement_id: UUID,
+    payload: RentalAgreementSignRequest,
+    request: Request,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    agreement = _portal_rental_agreement(db, portal, agreement_id)
+    if agreement.status != "Pending Signature":
+        raise HTTPException(status_code=409, detail="Only a pending-signature rental agreement can be signed.")
+    if not agreement.agreement_document_url:
+        raise HTTPException(status_code=409, detail="The agreement document is not available for review.")
+    contact = db.query(Contact).filter(Contact.id == portal["contact_id"], Contact.tenant_id == portal["tenant_id"]).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Customer contact was not found.")
+    if agreement.customer_signed_at:
+        raise HTTPException(status_code=409, detail="This customer has already signed the agreement.")
+    typed_name = payload.signature_name.strip()
+    if typed_name.casefold() != contact.full_name.strip().casefold():
+        raise HTTPException(status_code=400, detail="Typed signature name must match the authenticated contact's full name.")
+    agreement.customer_signed_at = now_naive_utc()
+    agreement.customer_signature_name = typed_name
+    agreement.customer_signature_method = "Typed Name + Affirmative Consent"
+    agreement.customer_signature_ip = request.client.host if request and request.client else None
+    agreement.customer_signature_user_agent = (request.headers.get("user-agent", "")[:500] if request else None)
+    _notify_staff_user(db, portal["tenant_id"], agreement.created_by, "Customer signed rental agreement",
+        f"{contact.full_name} accepted and signed rental agreement {agreement.id}. Please verify the owner signature and deposit before activation.",
+        "rental_agreements", agreement.id)
+    log_audit(db, portal["tenant_id"], None, "CUSTOMER_SIGN", "rental_agreements", agreement.id,
+        f"Customer {portal['email']} signed the rental agreement", after_data={
+            "customer_signed_at": agreement.customer_signed_at.isoformat(),
+            "customer_signature_name": typed_name,
+            "signature_method": agreement.customer_signature_method,
+            "signature_ip": agreement.customer_signature_ip,
+            "signature_user_agent": agreement.customer_signature_user_agent,
+            "accepted_terms": payload.accepted_terms,
+        })
+    db.commit()
+    return {"agreement_id": str(agreement.id), "customer_signed_at": agreement.customer_signed_at,
+            "customer_signature_name": agreement.customer_signature_name,
+            "signature_method": agreement.customer_signature_method}
+
+
+@router.post("/rental-agreements/{agreement_id}/inspections/{inspection_id}/acknowledge")
+def portal_acknowledge_rental_inspection(
+    agreement_id: UUID,
+    inspection_id: UUID,
+    payload: RentalInspectionAcknowledge,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    agreement = _portal_rental_agreement(db, portal, agreement_id)
+    inspection = db.query(RentalInspection).filter(
+        RentalInspection.id == inspection_id,
+        RentalInspection.tenant_id == portal["tenant_id"],
+        RentalInspection.agreement_id == agreement.id,
+    ).with_for_update().first()
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found for this agreement.")
+    if inspection.tenant_acknowledged:
+        raise HTTPException(status_code=409, detail="This inspection has already been acknowledged.")
+    inspection.tenant_acknowledged = True
+    inspection.tenant_acknowledgement_notes = payload.notes
+    inspection.tenant_acknowledged_at = now_naive_utc()
+    _notify_staff_user(db, portal["tenant_id"], agreement.created_by, "Customer acknowledged rental inspection",
+        f"{agreement.customer_name} acknowledged the {inspection.inspection_type.lower()} inspection for agreement {agreement.id}.",
+        "rental_inspections", inspection.id)
+    log_audit(db, portal["tenant_id"], None, "CUSTOMER_ACKNOWLEDGE", "rental_inspections", inspection.id,
+        f"Customer {portal['email']} acknowledged rental inspection", after_data={"tenant_acknowledged": True, "notes": payload.notes})
+    db.commit()
+    return {"inspection_id": str(inspection.id), "tenant_acknowledged": True, "tenant_acknowledged_at": inspection.tenant_acknowledged_at}
+
+
+@router.post("/rental-agreements/{agreement_id}/payments", status_code=status.HTTP_201_CREATED)
+def portal_submit_rental_payment(
+    agreement_id: UUID,
+    payload: RentalPaymentCreate,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    agreement = _portal_rental_agreement(db, portal, agreement_id)
+    if payload.payment_type in ("Rent", "Maintenance") and not payload.schedule_id:
+        raise HTTPException(status_code=400, detail="Select the relevant rent or maintenance schedule item before submitting a payment.")
+    if payload.payment_type == "Other":
+        raise HTTPException(status_code=400, detail="Other/manual charges must be recorded by staff. Customers can submit deposits, rent, and maintenance payments.")
+    if payload.payment_type == "Deposit":
+        if agreement.status != "Pending Signature":
+            raise HTTPException(status_code=409, detail="The initial security deposit can be submitted only while the agreement is pending signature.")
+    elif agreement.status not in ("Active", "Expired", "Termination Requested"):
+        raise HTTPException(status_code=409, detail="Recurring payments can be submitted only for an active or expired-but-not-handed-over agreement.")
+    schedule = None
+    if payload.payment_type == "Deposit":
+        if not agreement.customer_signed_at:
+            raise HTTPException(status_code=409, detail="Sign the rental agreement before submitting the initial security deposit.")
+        reserved_deposit = db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(
+            RentalPayment.tenant_id == portal["tenant_id"],
+            RentalPayment.agreement_id == agreement.id,
+            RentalPayment.payment_type == "Deposit",
+            RentalPayment.status.in_(("Pending", "Under Verification", "Verified")),
+        ).scalar() or 0
+        if money(reserved_deposit) + money(payload.amount) > money(agreement.deposit_amount):
+            raise HTTPException(status_code=400, detail="Deposit payment exceeds the agreed security deposit.")
+    if payload.schedule_id:
+        schedule = db.query(RentalPaymentSchedule).filter(
+            RentalPaymentSchedule.id == payload.schedule_id,
+            RentalPaymentSchedule.tenant_id == portal["tenant_id"],
+            RentalPaymentSchedule.agreement_id == agreement.id,
+        ).first()
+        if not schedule:
+            raise HTTPException(status_code=404, detail="Rental payment schedule item not found.")
+        if payload.payment_type != schedule.charge_type:
+            raise HTTPException(status_code=400, detail=f"This schedule item accepts {schedule.charge_type} payments only.")
+        if schedule.charge_type == "Rent" and agreement.late_fee_amount > 0 and date.today() > schedule.due_date + timedelta(days=agreement.late_fee_grace_days or 0) and schedule.late_fee_applied_at is None:
+            if agreement.late_fee_type == "Percentage":
+                schedule.late_fee_amount = money(money(schedule.amount) * money(agreement.late_fee_amount) / Decimal("100"))
+            else:
+                schedule.late_fee_amount = money(agreement.late_fee_amount)
+            schedule.late_fee_applied_at = now_naive_utc()
+        reserved = db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(
+            RentalPayment.tenant_id == portal["tenant_id"],
+            RentalPayment.schedule_id == schedule.id,
+            RentalPayment.status.in_(("Pending", "Under Verification", "Verified")),
+        ).scalar() or 0
+        total_due = money(schedule.amount) + money(schedule.late_fee_amount)
+        if money(payload.amount) + money(reserved) > total_due:
+            raise HTTPException(status_code=400, detail=f"Payment exceeds the remaining scheduled amount including late fees ({max(Decimal('0.00'), total_due - money(reserved))}).")
+    payment = RentalPayment(
+        tenant_id=portal["tenant_id"], agreement_id=agreement.id,
+        schedule_id=schedule.id if schedule else None, settlement_id=None, payment_type=payload.payment_type,
+        amount=payload.amount, payment_method=payload.payment_method,
+        transaction_reference=payload.transaction_reference, proof_document_url=payload.proof_document_url,
+        payment_date=payload.payment_date, status="Under Verification", created_by=None, notes=payload.notes,
+    )
+    db.add(payment)
+    db.flush()
+    _notify_staff_user(db, portal["tenant_id"], agreement.created_by, "Customer submitted rental payment",
+        f"{agreement.customer_name} submitted a {payload.payment_type.lower()} payment of {payload.amount} for rental agreement {agreement.id}.",
+        "rental_payments", payment.id)
+    db.commit(); db.refresh(payment)
+    return _portal_rental_payment_payload(payment)
+
+
+@router.get("/rental-agreements/{agreement_id}/payments/{payment_id}/receipt")
+def portal_read_rental_payment_receipt(
+    agreement_id: UUID, payment_id: UUID,
+    portal: dict = Depends(require_portal_user), db: Session = Depends(get_db),
+):
+    agreement = _portal_rental_agreement(db, portal, agreement_id)
+    payment = db.query(RentalPayment).filter(
+        RentalPayment.id == payment_id, RentalPayment.tenant_id == portal["tenant_id"],
+        RentalPayment.agreement_id == agreement.id,
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Rental payment not found.")
+    if payment.status != "Verified" or not payment.receipt_number:
+        raise HTTPException(status_code=409, detail="A receipt is available only after payment verification.")
+    prop = db.query(Property).filter(Property.id == agreement.property_id, Property.tenant_id == portal["tenant_id"]).first()
+    return {"receipt_number": payment.receipt_number, "payment_id": str(payment.id),
+            "agreement_id": str(agreement.id), "customer_name": agreement.customer_name,
+            "payment_type": payment.payment_type, "amount": str(payment.amount),
+            "currency": prop.currency if prop else "INR", "payment_method": payment.payment_method,
+            "transaction_reference": payment.transaction_reference,
+            "payment_date": payment.payment_date, "verified_at": payment.verified_at,
+            "notes": payment.notes}
+
+
+@router.post("/rental-agreements/{agreement_id}/exit-requests", status_code=status.HTTP_201_CREATED)
+def portal_request_rental_exit(
+    agreement_id: UUID,
+    payload: RentalExitRequestCreate,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    agreement = _portal_rental_agreement(db, portal, agreement_id)
+    if agreement.status not in ("Active", "Expired"):
+        raise HTTPException(status_code=409, detail="Only an active or expired-but-not-handed-over agreement can receive an exit request.")
+    if payload.requested_vacate_date < date.today():
+        raise HTTPException(status_code=400, detail="Requested vacate date cannot be in the past.")
+    if payload.notice_served_date and payload.notice_served_date > date.today():
+        raise HTTPException(status_code=400, detail="Notice served date cannot be in the future.")
+    existing = db.query(RentalExitRequest).filter(
+        RentalExitRequest.tenant_id == portal["tenant_id"],
+        RentalExitRequest.agreement_id == agreement.id,
+        RentalExitRequest.status.in_(("Requested", "Under Review", "Approved", "Inspection Pending", "Settlement Pending")),
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="An exit request is already open for this agreement.")
+    row = RentalExitRequest(
+        tenant_id=portal["tenant_id"], agreement_id=agreement.id,
+        requested_vacate_date=payload.requested_vacate_date,
+        notice_served_date=payload.notice_served_date or date.today(),
+        reason=payload.reason, status="Requested", created_by=None,
+    )
+    agreement.status = "Termination Requested"
+    db.add(row)
+    db.flush()
+    _notify_staff_user(db, portal["tenant_id"], agreement.created_by, "Customer requested rental termination",
+        f"{agreement.customer_name} requested to vacate on {payload.requested_vacate_date.isoformat()}. Please review the lock-in and notice terms.",
+        "rental_exit_requests", row.id)
+    db.commit(); db.refresh(row)
+    lock_end = agreement.agreement_start
+    month_index = lock_end.month - 1 + agreement.lock_in_months
+    year = lock_end.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(lock_end.day, calendar.monthrange(year, month)[1])
+    lock_end = date(year, month, day)
+    return {"id": str(row.id), "status": row.status, "requested_vacate_date": row.requested_vacate_date, "inside_lock_in": row.requested_vacate_date < lock_end, "lock_in_end_date": lock_end}
+
+
+@router.post("/rental-agreements/{agreement_id}/renewals", status_code=status.HTTP_201_CREATED)
+def portal_request_rental_renewal(
+    agreement_id: UUID,
+    payload: RentalRenewalCreate,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    agreement = _portal_rental_agreement(db, portal, agreement_id)
+    if agreement.status not in ("Active", "Expired"):
+        raise HTTPException(status_code=409, detail="Only active or expired agreements can be renewed.")
+    if agreement.agreement_end is None or payload.new_end_date <= agreement.agreement_end:
+        raise HTTPException(status_code=400, detail="Renewal end date must extend the current fixed-term agreement.")
+    current = db.query(func.coalesce(func.max(RentalAgreementRevision.revision_number), 0)).filter(
+        RentalAgreementRevision.tenant_id == portal["tenant_id"],
+        RentalAgreementRevision.agreement_id == agreement.id,
+    ).scalar() or 0
+    revision = RentalAgreementRevision(
+        tenant_id=portal["tenant_id"], agreement_id=agreement.id,
+        revision_number=int(current) + 1, revision_type="Renewal",
+        old_end_date=agreement.agreement_end, new_end_date=payload.new_end_date,
+        old_rent_amount=agreement.rent_amount, new_rent_amount=payload.new_rent_amount,
+        reason=payload.reason, status="Pending", requested_by=None,
+    )
+    db.add(revision)
+    db.flush()
+    _notify_staff_user(db, portal["tenant_id"], agreement.created_by, "Customer requested rental renewal",
+        f"{agreement.customer_name} requested renewal through {payload.new_end_date.isoformat()} at {payload.new_rent_amount}.",
+        "rental_agreement_revisions", revision.id)
+    db.commit(); db.refresh(revision)
+    return {"id": str(revision.id), "agreement_id": str(revision.agreement_id),
+            "revision_number": revision.revision_number, "revision_type": revision.revision_type,
+            "new_end_date": revision.new_end_date, "new_rent_amount": str(revision.new_rent_amount),
+            "reason": revision.reason, "status": revision.status, "created_at": revision.created_at}

@@ -115,10 +115,27 @@ class Property(Base):
         nullable=True,
     )
 
+    minimum_acceptable_price: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    require_owner_approval: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="false")
+    hold_on_offer_acceptance: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="false")
+    offer_hold_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=48, server_default="48")
+    offer_hold_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     price: Mapped[float] = mapped_column(
         Numeric(14, 2),
         nullable=False,
     )
+
+    price_frequency: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="One-time", server_default="One-time"
+    )
+
+    security_deposit: Mapped[float | None] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
+
+    minimum_term_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    maximum_term_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     currency: Mapped[str] = mapped_column(
         String(3),

@@ -14,8 +14,11 @@ from app.core.permissions import require_permission
 from app.models.property import Property
 from app.models.property_image import PropertyImage
 from app.models.booking import Booking
+from app.models.rental import RentalAgreement
 from app.models.building import Building
 from app.models.user import User
+from app.models.role import Role
+from app.models.user_role import UserRole
 from app.schemas.property import PropertyCreate, PropertyUpdate, PropertyResponse
 from app.services.audit_service import log_audit
 
@@ -129,14 +132,14 @@ def validate_unit_number(
         )
 
 
-BOOKING_MANAGED_STATUSES = ("Reserved", "Sold")
+BOOKING_MANAGED_STATUSES = ("Reserved", "Sold", "Rented")
 
 
 def ensure_status_not_booking_managed(
     current_status: str | None,
     new_status: str | None,
 ):
-    """Reserved and Sold are controlled only by the booking endpoints."""
+    """Transaction-managed property statuses can only be changed by their lifecycle endpoints."""
     if new_status is None or new_status == current_status:
         return
 
@@ -145,8 +148,7 @@ def ensure_status_not_booking_managed(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"A property cannot be set to {new_status} manually. "
-                "Create a booking to reserve it, and complete the "
-                "booking to mark it as sold."
+                "Sale status is controlled by the booking workflow; occupied Rent/Lease status is controlled by rental agreement activation."
             ),
         )
 
@@ -154,9 +156,8 @@ def ensure_status_not_booking_managed(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"This property is {current_status} through a booking. "
-                "Cancel the booking to release it; its status cannot be "
-                "changed manually."
+                f"This property is {current_status} through an active transaction. "
+                "Complete the applicable booking cancellation or rental exit/handover workflow to release it; its status cannot be changed manually."
             ),
         )
 
@@ -175,6 +176,14 @@ def property_snapshot(property_record: Property) -> dict:
         "city": property_record.city,
         "state": property_record.state,
         "price": str(property_record.price),
+        "minimum_acceptable_price": str(property_record.minimum_acceptable_price) if property_record.minimum_acceptable_price is not None else None,
+        "require_owner_approval": property_record.require_owner_approval,
+        "hold_on_offer_acceptance": property_record.hold_on_offer_acceptance,
+        "offer_hold_hours": property_record.offer_hold_hours,
+        "price_frequency": property_record.price_frequency,
+        "security_deposit": str(property_record.security_deposit) if property_record.security_deposit is not None else None,
+        "minimum_term_months": property_record.minimum_term_months,
+        "maximum_term_months": property_record.maximum_term_months,
         "status": property_record.status,
         "assigned_to": (
             str(property_record.assigned_to)
@@ -196,6 +205,12 @@ def create_property(
 ):
     tenant_id, user_id = get_tenant_and_user(current_user)
     ensure_status_not_booking_managed(None, data.status)
+    if data.minimum_acceptable_price is not None and data.minimum_acceptable_price > data.price:
+        raise HTTPException(status_code=400, detail="Minimum acceptable price cannot exceed the listing price.")
+    if data.minimum_acceptable_price is not None or data.require_owner_approval or data.hold_on_offer_acceptance or data.offer_hold_hours != 48:
+        roles = {name for (name,) in db.query(Role.name).join(UserRole, UserRole.role_id == Role.id).filter(UserRole.user_id == user_id).all()}
+        if not (roles & {"Platform Super Admin", "Tenant Owner", "Owner", "Tenant Admin", "Admin"}):
+            raise HTTPException(status_code=403, detail="Only a tenant owner or administrator can configure offer governance.")
 
     validate_assigned_user(db, data.assigned_to, tenant_id)
     validate_building(db, data.building_id, tenant_id)
@@ -374,6 +389,24 @@ def update_property(
         )
 
     changes = data.model_dump(exclude_unset=True)
+    governance_fields = {"minimum_acceptable_price", "require_owner_approval", "hold_on_offer_acceptance", "offer_hold_hours"}
+    price_changed = "price" in changes and changes["price"] != property_record.price
+    governance_changed = bool(governance_fields.intersection(changes))
+    user_roles = set()
+    if price_changed or governance_changed:
+        user_roles = {
+            name for (name,) in db.query(Role.name).join(UserRole, UserRole.role_id == Role.id)
+            .filter(UserRole.user_id == user_id).all()
+        }
+    price_roles = {"Platform Super Admin", "Tenant Owner", "Owner", "Tenant Admin", "Admin", "Sales Manager", "Property Manager"}
+    owner_roles = {"Platform Super Admin", "Tenant Owner", "Owner", "Tenant Admin", "Admin"}
+    if price_changed and not (user_roles & price_roles):
+        raise HTTPException(status_code=403, detail="Only an owner, administrator, or sales/property manager can change a listing price.")
+    if governance_changed and not (user_roles & owner_roles):
+        raise HTTPException(status_code=403, detail="Only a tenant owner or administrator can change minimum price, owner approval, or offer-hold settings.")
+    for non_nullable in ("require_owner_approval", "hold_on_offer_acceptance", "offer_hold_hours"):
+        if non_nullable in changes and changes[non_nullable] is None:
+            raise HTTPException(status_code=400, detail=f"{non_nullable} cannot be null.")
 
     if "status" in changes:
         ensure_status_not_booking_managed(
@@ -410,6 +443,27 @@ def update_property(
     before_data = property_snapshot(property_record)
 
     try:
+        if "listing_type" in changes and changes["listing_type"] != property_record.listing_type:
+            active_bookings = db.query(Booking.id).filter(Booking.tenant_id == tenant_id, Booking.property_id == property_record.id, Booking.status.in_(("Pending", "Confirmed"))).first()
+            active_rental = db.query(RentalAgreement.id).filter(RentalAgreement.tenant_id == tenant_id, RentalAgreement.property_id == property_record.id, RentalAgreement.status.in_(("Active", "Termination Requested"))).first()
+            if active_bookings or active_rental or property_record.status in ("Reserved", "Sold", "Rented"):
+                raise HTTPException(status_code=409, detail="Listing type cannot be changed while the property has an active or completed transaction history. Create a new listing instead.")
+        if "listing_type" in changes and "price_frequency" not in changes:
+            changes["price_frequency"] = "One-time" if changes["listing_type"] == "Sale" else "Monthly"
+        final_listing_type = changes.get("listing_type", property_record.listing_type)
+        final_price_frequency = changes.get("price_frequency", property_record.price_frequency)
+        if final_listing_type == "Sale" and final_price_frequency != "One-time":
+            raise HTTPException(status_code=400, detail="Sale listings must use One-time pricing.")
+        if final_listing_type in ("Rent", "Lease") and final_price_frequency == "One-time":
+            raise HTTPException(status_code=400, detail="Rent and Lease listings must use a recurring price frequency.")
+        final_listing_price = changes.get("price", property_record.price)
+        final_minimum_acceptable = changes.get("minimum_acceptable_price", property_record.minimum_acceptable_price)
+        if final_minimum_acceptable is not None and final_minimum_acceptable > final_listing_price:
+            raise HTTPException(status_code=400, detail="Minimum acceptable price cannot exceed the listing price.")
+        final_minimum_term = changes.get("minimum_term_months", property_record.minimum_term_months)
+        final_maximum_term = changes.get("maximum_term_months", property_record.maximum_term_months)
+        if final_minimum_term is not None and final_maximum_term is not None and final_minimum_term > final_maximum_term:
+            raise HTTPException(status_code=400, detail="Minimum term cannot exceed maximum term.")
         for field, value in changes.items():
             setattr(property_record, field, value)
 
@@ -470,12 +524,16 @@ def delete_property(
         Booking.property_id == property_record.id,
     ).count()
 
-    if booking_count:
+    rental_count = db.query(RentalAgreement).filter(
+        RentalAgreement.tenant_id == tenant_id,
+        RentalAgreement.property_id == property_record.id,
+    ).count()
+    if booking_count or rental_count:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"This property has {booking_count} booking(s) and cannot "
-                "be deleted. Set its status to Inactive instead."
+                f"This property has {booking_count} sale booking(s) and {rental_count} rental agreement(s); "
+                "it cannot be deleted. Set its status to Inactive instead."
             ),
         )
 

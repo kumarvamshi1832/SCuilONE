@@ -88,7 +88,7 @@ SOFTWARE_REQUIRED_FIELDS = [
 ]
 
 FIELD_LABELS = {
-    "buy_or_rent": "whether you want to Buy or Rent",
+    "buy_or_rent": "whether you want to Buy, Rent or Lease",
     "city": "preferred city",
     "locality": "preferred locality / neighborhood",
     "property_type": "property type (e.g., Apartment, Villa, Plot, Office)",
@@ -197,7 +197,7 @@ def _serialize_json_safe(data: dict[str, Any]) -> dict[str, Any]:
 
 
 class RealEstateExtractedRequirement(BaseModel):
-    buy_or_rent: Literal["Buy", "Rent"] | None = None
+    buy_or_rent: Literal["Buy", "Rent", "Lease"] | None = None
     city: str | None = None
     locality: str | None = None
     property_type: str | None = None
@@ -220,7 +220,9 @@ class RealEstateExtractedRequirement(BaseModel):
         s = str(v).strip().lower()
         if s in {"buy", "purchase", "sale", "buying", "own"}:
             return "Buy"
-        if s in {"rent", "rental", "lease", "renting", "leasing"}:
+        if s in {"lease", "leasing", "commercial lease"}:
+            return "Lease"
+        if s in {"rent", "rental", "renting"}:
             return "Rent"
         return None
 
