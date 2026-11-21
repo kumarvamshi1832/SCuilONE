@@ -1,5 +1,5 @@
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -37,6 +37,13 @@ from app.schemas.booking import (
 from app.services.audit_service import log_audit
 from app.services.customer_portal_notifications import notify_booking_customer
 from app.services.payment_allocation import IN_FLIGHT_STATUSES
+from app.services.real_estate_lifecycle import (
+    expire_single_walkin_sale_booking,
+    get_setting_int,
+    has_conflicting_property_commitment,
+    release_expired_holds_for_property,
+    utcnow,
+)
 
 
 router = APIRouter(
@@ -106,6 +113,9 @@ def booking_snapshot(booking: Booking) -> dict:
         "booking_amount": booking.booking_amount,
         "refund_amount": booking.refund_amount,
         "status": booking.status,
+        "hold_created_at": booking.hold_created_at,
+        "hold_expires_at": booking.hold_expires_at,
+        "expired_at": booking.expired_at,
         "booking_date": booking.booking_date,
         "cancellation_reason": booking.cancellation_reason,
         "created_by": booking.created_by,
@@ -398,23 +408,30 @@ def create_booking(
                 detail="Bookings are currently supported only for sale properties.",
             )
 
-        if (
-            property_record.status == "Reserved"
-            and property_record.offer_hold_expires_at is not None
-            and property_record.offer_hold_expires_at <= datetime.utcnow()
-        ):
-            property_record.status = "Available"
-            property_record.offer_hold_expires_at = None
+        now = utcnow()
+        release_expired_holds_for_property(db, tenant_id, property_record.id, now=now)
+        db.refresh(property_record)
         offer_hold_valid = (
             property_record.status == "Reserved"
             and payload.accepted_offer_id is not None
             and property_record.offer_hold_expires_at is not None
-            and property_record.offer_hold_expires_at > datetime.utcnow()
+            and property_record.offer_hold_expires_at > now
         )
         if property_record.status != "Available" and not offer_hold_valid:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only available properties or properties held for this accepted offer can be booked.",
+            )
+        if has_conflicting_property_commitment(
+            db,
+            tenant_id,
+            property_record.id,
+            now=now,
+            exclude_offer_id=payload.accepted_offer_id,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This property already has an active hold, booking, or rental/lease commitment.",
             )
 
         linked_lead_id = payload.lead_id
@@ -633,6 +650,11 @@ def create_booking(
             agreed_price=effective_agreed_price,
             refund_amount=Decimal("0.00"),
             status="Pending",
+            hold_created_at=now,
+            hold_expires_at=now + timedelta(
+                hours=payload.hold_hours
+                or get_setting_int("WALKIN_SALE_BOOKING_HOLD_HOURS", 48)
+            ),
             created_by=user_id,
         )
 
@@ -822,12 +844,19 @@ def list_bookings(
     if property_id:
         query = query.filter(Booking.property_id == property_id)
 
-    return (
+    rows = (
         query.order_by(Booking.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
+    changed = False
+    for row in rows:
+        if expire_single_walkin_sale_booking(db, row):
+            changed = True
+    if changed:
+        db.commit()
+    return rows
 
 
 @router.get("/{booking_id}", response_model=BookingResponse)
@@ -838,7 +867,11 @@ def get_booking(
     _permission=Depends(require_permission("booking.view")),
 ):
     tenant_id, _ = get_tenant_and_user(current_user)
-    return get_booking_or_404(db, booking_id, tenant_id)
+    booking = get_booking_or_404(db, booking_id, tenant_id)
+    if expire_single_walkin_sale_booking(db, booking):
+        db.commit()
+        db.refresh(booking)
+    return booking
 
 
 @router.patch("/{booking_id}", response_model=BookingResponse)
@@ -868,10 +901,17 @@ def update_booking(
                 detail="Booking not found.",
             )
 
-        if booking.status in ("Cancelled", "Completed"):
+        if expire_single_walkin_sale_booking(db, booking):
+            db.commit()
             raise HTTPException(
                 status_code=409,
-                detail="Cancelled or completed bookings cannot be updated.",
+                detail=f"Booking hold has expired (status: {booking.status}).",
+            )
+
+        if booking.status in ("Cancelled", "Completed", "Expired", "Expired - Payment Review"):
+            raise HTTPException(
+                status_code=409,
+                detail="Cancelled, expired, or completed bookings cannot be updated.",
             )
 
         changes = payload.model_dump(exclude_unset=True)
@@ -956,8 +996,14 @@ def update_booking(
                         )
 
                     journey.status = "Confirmed"
-                    journey.final_confirmed_at = datetime.utcnow()
+                    journey.final_confirmed_at = utcnow()
                     journey.hold_expires_at = None
+                elif booking.hold_expires_at and booking.hold_expires_at <= utcnow():
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Walk-in booking hold has expired. Rebook or resolve payment review before confirming.",
+                    )
+                booking.hold_expires_at = None
 
         before_data = booking_snapshot(booking)
 
@@ -1066,10 +1112,10 @@ def cancel_booking(
                 detail="Booking not found.",
             )
 
-        if booking.status in ("Cancelled", "Completed"):
+        if booking.status in ("Cancelled", "Completed", "Expired"):
             raise HTTPException(
                 status_code=409,
-                detail="Cancelled or completed bookings cannot be cancelled again.",
+                detail="Cancelled, expired, or completed bookings cannot be cancelled again.",
             )
 
         property_record = get_locked_property(
@@ -1137,6 +1183,7 @@ def cancel_booking(
         }
 
         booking.status = "Cancelled"
+        booking.hold_expires_at = None
         booking.cancellation_reason = payload.cancellation_reason.strip()
         booking.updated_at = datetime.utcnow()
 
@@ -1384,7 +1431,8 @@ def complete_booking(
         }
 
         booking.status = "Completed"
-        booking.updated_at = datetime.utcnow()
+        booking.hold_expires_at = None
+        booking.updated_at = utcnow()
 
         notify_booking_customer(
             db,

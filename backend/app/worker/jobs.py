@@ -524,95 +524,51 @@ JOBS = {
 
 
 def expire_customer_booking_holds(db: Session, today: date) -> dict:
-    """Expire 48-hour customer booking holds and safely release pending reservations."""
-    from app.models.customer_booking_journey import CustomerBookingRequest
-    from app.models.booking import Booking
-    from app.models.property import Property
-    from app.models.notification import Notification
-    from app.models.user import User
-    from app.models.property_match import PropertyMatch
-    from app.models.payment import Payment
-    from app.models.payment_plan import PaymentPlan
-    from app.models.payment_refund import PaymentRefund
-    from app.services.payment_allocation import IN_FLIGHT_STATUSES
+    """Expire portal Sale, walk-in Sale, and Rent/Lease booking holds idempotently."""
+    from app.services.real_estate_lifecycle import (
+        expire_customer_booking_requests,
+        expire_rental_booking_requests,
+        expire_walkin_sale_bookings,
+    )
 
-    now = datetime.utcnow()
-    expired = 0
-    while True:
-        rows = (
-            db.query(CustomerBookingRequest)
-            .filter(
-                CustomerBookingRequest.status == "Approved",
-                CustomerBookingRequest.hold_expires_at.is_not(None),
-                CustomerBookingRequest.hold_expires_at <= now,
-            )
-            .order_by(CustomerBookingRequest.hold_expires_at.asc())
-            .limit(BATCH_SIZE)
-            .with_for_update(skip_locked=True)
-            .all()
-        )
-        if not rows:
-            break
-        for row in rows:
-            booking = None
-            if row.booking_id:
-                booking = (
-                    db.query(Booking)
-                    .filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id)
-                    .with_for_update()
-                    .first()
-                )
-            payment_review_required = False
-            if booking and booking.status == "Pending":
-                verified = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status == "Verified").all()
-                verified_total = sum((Decimal(str(p.amount)) for p in verified), Decimal("0.00"))
-                verified_ids = [p.id for p in verified]
-                refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == row.tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(verified_ids) if verified_ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
-                net_verified = verified_total - sum((Decimal(str(r.amount)) for r in refunds), Decimal("0.00"))
-                if net_verified > 0:
-                    # Never release a property automatically while verified customer funds remain.
-                    payment_review_required = True
-                else:
-                    before_status = booking.status
-                    booking.status = "Cancelled"
-                    booking.cancellation_reason = "Customer booking hold expired before final confirmation."
-                    prop = (
-                        db.query(Property)
-                        .filter(Property.id == booking.property_id, Property.tenant_id == row.tenant_id)
-                        .with_for_update()
-                        .first()
-                    )
-                    if prop and prop.status == "Reserved":
-                        prop.status = "Available"
-                        prop.updated_at = now
-                    active_plan = db.query(PaymentPlan).filter(PaymentPlan.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").with_for_update().first()
-                    if active_plan:
-                        active_plan.status = "Cancelled"
-                    pending = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status.in_(IN_FLIGHT_STATUSES)).with_for_update().all()
-                    for payment in pending:
-                        payment.status = "Rejected"
-                        payment.notes = ((payment.notes or "") + "\nAutomatically rejected because the booking hold expired without verified funds.").strip()
-                    log_audit(
-                        db, row.tenant_id, None, "AUTO_EXPIRE", "bookings", booking.id,
-                        "Pending booking cancelled and property released after customer hold expired.",
-                        before_data={"status": before_status}, after_data={"status": "Cancelled"},
-                    )
-            row.status = "Expired - Payment Review" if payment_review_required else "Expired"
-            row.hold_expires_at = None
-            # Notify the property/booking owner, if one can be resolved from the linked match.
-            match = db.query(PropertyMatch).filter(PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == row.tenant_id).first()
-            recipient_id = match.assigned_to if match else None
-            recipient = db.query(User).filter(User.id == recipient_id, User.tenant_id == row.tenant_id, User.status == "Active").first() if recipient_id else None
-            if recipient:
-                db.add(Notification(tenant_id=row.tenant_id, recipient_user_id=recipient.id, workflow_id=None, title="Customer booking hold expired", message=(f"The 48-hour booking hold for property {row.property_id} expired. Staff review is required because verified funds remain." if payment_review_required else f"The 48-hour booking hold for property {row.property_id} expired and the property reservation was released."), notification_type="customer_booking_hold_expired", related_module="customer_booking_requests", related_record_id=row.id, is_read=False))
-            log_audit(db, row.tenant_id, None, "AUTO_EXPIRE", "customer_booking_requests", row.id, "Customer booking request hold expired.", before_data={"status": "Approved"}, after_data={"status": row.status})
-            expired += 1
-        db.commit()
-    return {"expired_holds": expired}
+    portal_res = expire_customer_booking_requests(db, batch_size=BATCH_SIZE)
+    walkin_res = expire_walkin_sale_bookings(db, batch_size=BATCH_SIZE)
+    rental_res = expire_rental_booking_requests(db, batch_size=BATCH_SIZE)
+    return {
+        "expired_holds": portal_res["expired_holds"],
+        "expired_walkin_bookings": walkin_res["expired_walkin_bookings"],
+        "walkin_payment_review": walkin_res["payment_review_required"],
+        "expired_rental_booking_holds": rental_res["expired_rental_booking_holds"],
+        "rental_payment_review": rental_res["payment_review_required"],
+    }
 
 
-# Register after the function definition so module import order is deterministic.
+def expire_walkin_sale_holds(db: Session, today: date) -> dict:
+    """Expire walk-in Sale booking holds idempotently."""
+    from app.services.real_estate_lifecycle import expire_walkin_sale_bookings
+
+    return expire_walkin_sale_bookings(db, batch_size=BATCH_SIZE)
+
+
+def expire_rental_booking_holds(db: Session, today: date) -> dict:
+    """Expire Rent and Lease booking request holds idempotently."""
+    from app.services.real_estate_lifecycle import expire_rental_booking_requests
+
+    return expire_rental_booking_requests(db, batch_size=BATCH_SIZE)
+
+
+def extend_open_ended_rental_schedules_job(db: Session, today: date) -> dict:
+    """Automatically extend payment schedules for Active open-ended rental agreements."""
+    from app.services.real_estate_lifecycle import extend_open_ended_rental_schedules
+
+    return extend_open_ended_rental_schedules(db, today=today)
+
+
+# Register after function definitions so module import order is deterministic.
 JOBS["expire_customer_booking_holds"] = expire_customer_booking_holds
+JOBS["expire_walkin_sale_holds"] = expire_walkin_sale_holds
+JOBS["expire_rental_booking_holds"] = expire_rental_booking_holds
+JOBS["extend_open_ended_rental_schedules"] = extend_open_ended_rental_schedules_job
 
 
 def customer_booking_payment_reminders(db: Session, today: date) -> dict:
@@ -969,7 +925,19 @@ def rental_lifecycle_job(db: Session, today: date) -> dict:
                         is_read=False,
                     ))
     db.commit()
-    return {"overdue_schedule_items": overdue_updated, "late_fees_applied": late_fees_applied, "offers_expired": offers_expired, "property_holds_released": property_holds_released, "agreements_expired": agreements_expired, "payment_reminders_sent": reminders_sent, "agreement_expiry_reminders_sent": expiry_reminders_sent}
+    from app.services.real_estate_lifecycle import extend_open_ended_rental_schedules
+    ext_res = extend_open_ended_rental_schedules(db, today=today)
+    return {
+        "overdue_schedule_items": overdue_updated,
+        "late_fees_applied": late_fees_applied,
+        "offers_expired": offers_expired,
+        "property_holds_released": property_holds_released,
+        "agreements_expired": agreements_expired,
+        "payment_reminders_sent": reminders_sent,
+        "agreement_expiry_reminders_sent": expiry_reminders_sent,
+        "open_ended_agreements_extended": ext_res["extended_agreements"],
+        "open_ended_schedules_created": ext_res["schedules_created"],
+    }
 
 
 JOBS["rental_lifecycle"] = rental_lifecycle_job

@@ -45,8 +45,9 @@ from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.models.property import Property
+from sqlalchemy.exc import IntegrityError
 from app.models.rental import (
-    RentalAgreement, RentalPaymentSchedule, RentalPayment, RentalExitRequest, RentalAgreementRevision, RentalInspection, RentalSettlement
+    RentalAgreement, RentalBookingRequest, RentalPaymentSchedule, RentalPayment, RentalExitRequest, RentalAgreementRevision, RentalInspection, RentalSettlement
 )
 from app.models.property_image import PropertyImage
 from app.models.customer_property_shortlist import CustomerPropertyShortlist
@@ -94,7 +95,21 @@ from app.schemas.customer_portal import (
     PortalTicketResponse,
 )
 from app.schemas.property_offer import PropertyOfferCreate, PropertyOfferDecision, PropertyOfferResponse
-from app.schemas.rental import RentalPaymentCreate, RentalExitRequestCreate, RentalRenewalCreate, RentalAgreementSignRequest, RentalInspectionAcknowledge
+from app.schemas.rental import (
+    RentalPaymentCreate, RentalExitRequestCreate, RentalRenewalCreate,
+    RentalAgreementSignRequest, RentalInspectionAcknowledge,
+    RentalBookingRequestPortalCreate, RentalBookingRequestCancel,
+)
+from app.services.real_estate_lifecycle import (
+    _release_property_if_uncommitted,
+    apply_offer_acceptance,
+    expire_single_rental_booking_request,
+    get_setting_int,
+    has_conflicting_property_commitment,
+    release_expired_holds_for_property,
+    rental_agreement_verified_payments,
+)
+from app.services.rental_calculations import add_months
 from app.services.audit_service import log_audit
 from app.services.customer_chat_service import ensure_invitation_conversation
 from app.services.email_service import (
@@ -3217,35 +3232,7 @@ def portal_decide_property_offer(
     if payload.decision == "Accepted":
         if not prop:
             raise HTTPException(status_code=404, detail="Property not found.")
-        if prop.offer_hold_expires_at and prop.offer_hold_expires_at <= now_naive_utc():
-            prop.status = "Available"
-            prop.offer_hold_expires_at = None
-        if prop.status != "Available":
-            raise HTTPException(status_code=409, detail="This property is no longer available for a new accepted offer.")
-        if prop.minimum_acceptable_price is not None and row.offered_price < prop.minimum_acceptable_price:
-            raise HTTPException(status_code=409, detail=f"Offer is below the property's minimum acceptable price ({prop.minimum_acceptable_price}).")
-        competing = db.query(PropertyOffer.id).join(PropertyMatch, PropertyMatch.id == PropertyOffer.property_match_id).filter(
-            PropertyOffer.tenant_id == portal["tenant_id"], PropertyMatch.tenant_id == portal["tenant_id"],
-            PropertyMatch.property_id == prop.id, PropertyOffer.id != row.id,
-            PropertyOffer.status.in_(("Accepted", "Pending Owner Approval")),
-            (PropertyOffer.expires_at.is_(None) | (PropertyOffer.expires_at > now_naive_utc())),
-            (PropertyOffer.hold_expires_at.is_(None) | (PropertyOffer.hold_expires_at > now_naive_utc())),
-        ).first()
-        if competing:
-            raise HTTPException(status_code=409, detail="Another buyer already has an accepted or owner-pending offer on this property.")
-        row.status = "Pending Owner Approval" if prop.require_owner_approval else "Accepted"
-        if row.status == "Accepted":
-            match.status = "Offer Accepted"
-            if requirement.lead_id:
-                lead = db.query(Lead).filter(Lead.id == requirement.lead_id, Lead.tenant_id == portal["tenant_id"]).first()
-                if lead:
-                    lead.status = "Offer Accepted"
-            if prop.hold_on_offer_acceptance:
-                from datetime import timedelta
-                prop.offer_hold_expires_at = now_naive_utc() + timedelta(hours=max(1, prop.offer_hold_hours or 48))
-                row.hold_expires_at = prop.offer_hold_expires_at
-                row.expires_at = min(row.expires_at, row.hold_expires_at) if row.expires_at else row.hold_expires_at
-                prop.status = "Reserved"
+        apply_offer_acceptance(db, portal["tenant_id"], row, match, prop, now=now_naive_utc())
     else:
         row.status = payload.decision
     row.response_notes = payload.response_notes
@@ -3492,6 +3479,17 @@ def portal_submit_rental_payment(
     db: Session = Depends(get_db),
 ):
     agreement = _portal_rental_agreement(db, portal, agreement_id)
+    prop_check = db.query(Property).filter(Property.id == agreement.property_id, Property.tenant_id == portal["tenant_id"]).first()
+    if payload.currency and prop_check and payload.currency.upper() != (prop_check.currency or "INR").upper():
+        raise HTTPException(status_code=400, detail=f"Payment currency ({payload.currency}) does not match property currency ({prop_check.currency}).")
+    if payload.transaction_reference and payload.transaction_reference.strip():
+        dup = db.query(RentalPayment.id).filter(
+            RentalPayment.tenant_id == portal["tenant_id"],
+            func.lower(RentalPayment.transaction_reference) == payload.transaction_reference.strip().lower(),
+            RentalPayment.status.in_(("Pending", "Under Verification", "Verified")),
+        ).first()
+        if dup:
+            raise HTTPException(status_code=409, detail="A rental payment with this transaction reference already exists.")
     if payload.payment_type in ("Rent", "Maintenance") and not payload.schedule_id:
         raise HTTPException(status_code=400, detail="Select the relevant rent or maintenance schedule item before submitting a payment.")
     if payload.payment_type == "Other":
@@ -3653,3 +3651,340 @@ def portal_request_rental_renewal(
             "revision_number": revision.revision_number, "revision_type": revision.revision_type,
             "new_end_date": revision.new_end_date, "new_rent_amount": str(revision.new_rent_amount),
             "reason": revision.reason, "status": revision.status, "created_at": revision.created_at}
+
+
+# ---------------------------------------------------------------------------
+# Portal Rent & Lease Property Discovery and Booking Requests (Problems 5, 6, 9)
+# ---------------------------------------------------------------------------
+
+def _portal_rental_booking_request_payload(row: RentalBookingRequest) -> dict:
+    return {
+        "id": str(row.id),
+        "tenant_id": str(row.tenant_id),
+        "property_id": str(row.property_id),
+        "booking_type": row.booking_type,
+        "channel": row.channel,
+        "portal_user_id": str(row.portal_user_id) if row.portal_user_id else None,
+        "contact_id": str(row.contact_id) if row.contact_id else None,
+        "lead_id": str(row.lead_id) if row.lead_id else None,
+        "buyer_requirement_id": str(row.buyer_requirement_id) if row.buyer_requirement_id else None,
+        "property_match_id": str(row.property_match_id) if row.property_match_id else None,
+        "accepted_offer_id": str(row.accepted_offer_id) if row.accepted_offer_id else None,
+        "rental_agreement_id": str(row.rental_agreement_id) if row.rental_agreement_id else None,
+        "customer_name": row.customer_name,
+        "customer_email": row.customer_email,
+        "customer_phone": row.customer_phone,
+        "proposed_rent_amount": str(row.proposed_rent_amount),
+        "approved_rent_amount": str(row.approved_rent_amount) if row.approved_rent_amount is not None else None,
+        "rent_frequency": row.rent_frequency,
+        "proposed_deposit_amount": str(row.proposed_deposit_amount),
+        "approved_deposit_amount": str(row.approved_deposit_amount) if row.approved_deposit_amount is not None else None,
+        "maintenance_amount": str(row.maintenance_amount),
+        "maintenance_frequency": row.maintenance_frequency,
+        "desired_start_date": row.desired_start_date,
+        "desired_end_date": row.desired_end_date,
+        "duration_months": row.duration_months,
+        "lock_in_months": row.lock_in_months,
+        "notice_period_days": row.notice_period_days,
+        "due_day": row.due_day,
+        "status": row.status,
+        "hold_created_at": row.hold_created_at,
+        "hold_expires_at": row.hold_expires_at,
+        "expired_at": row.expired_at,
+        "terms_notes": row.terms_notes,
+        "customer_notes": row.customer_notes,
+        "rejection_reason": row.rejection_reason,
+        "cancellation_reason": row.cancellation_reason,
+        "reviewed_at": row.reviewed_at,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+@router.get("/rental-properties")
+def portal_list_eligible_rental_properties(
+    listing_type: str | None = Query(default=None, pattern="^(Rent|Lease)$"),
+    city: str | None = None,
+    property_type: str | None = None,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    """List eligible Available Rent and Lease properties in the authenticated customer's tenant."""
+    q = db.query(Property).filter(
+        Property.tenant_id == portal["tenant_id"],
+        Property.status == "Available",
+        Property.listing_type.in_(("Rent", "Lease")),
+    )
+    if listing_type:
+        q = q.filter(Property.listing_type == listing_type)
+    if city:
+        q = q.filter(func.lower(Property.city) == city.strip().lower())
+    if property_type:
+        q = q.filter(Property.property_type == property_type)
+    rows = q.order_by(Property.created_at.desc()).all()
+    return [
+        {
+            "id": str(p.id),
+            "name": p.name,
+            "property_type": p.property_type,
+            "listing_type": p.listing_type,
+            "city": p.city,
+            "state": p.state,
+            "address": p.address,
+            "price": str(p.price),
+            "price_frequency": p.price_frequency,
+            "security_deposit": str(p.security_deposit) if p.security_deposit is not None else None,
+            "minimum_term_months": p.minimum_term_months,
+            "maximum_term_months": p.maximum_term_months,
+            "currency": p.currency,
+            "bedrooms": p.bedrooms,
+            "bathrooms": p.bathrooms,
+            "furnishing": p.furnishing,
+            "status": p.status,
+        }
+        for p in rows
+    ]
+
+
+@router.post("/rental-booking-requests", status_code=status.HTTP_201_CREATED)
+def portal_create_rental_booking_request(
+    payload: RentalBookingRequestPortalCreate,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    """Submit a customer portal Rent or Lease booking request and place an immediate temporary hold."""
+    tenant_id = portal["tenant_id"]
+    now = now_naive_utc()
+    try:
+        prop = db.query(Property).filter(
+            Property.id == payload.property_id,
+            Property.tenant_id == tenant_id,
+        ).with_for_update().first()
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found.")
+        if prop.listing_type not in ("Rent", "Lease"):
+            raise HTTPException(status_code=400, detail="Only Rent and Lease properties can be booked through this endpoint.")
+        booking_type = payload.booking_type or prop.listing_type
+        if prop.listing_type != booking_type:
+            raise HTTPException(status_code=400, detail=f"This property is listed for {prop.listing_type}, not {booking_type}.")
+
+        release_expired_holds_for_property(db, tenant_id, prop.id, now=now)
+        db.refresh(prop)
+
+        offer_hold_valid = (
+            prop.status == "Reserved"
+            and payload.accepted_offer_id is not None
+            and prop.offer_hold_expires_at is not None
+            and prop.offer_hold_expires_at > now
+        )
+        if prop.status != "Available" and not offer_hold_valid:
+            raise HTTPException(status_code=409, detail="This property is currently held or no longer available.")
+        if has_conflicting_property_commitment(db, tenant_id, prop.id, now=now, exclude_offer_id=payload.accepted_offer_id):
+            raise HTTPException(status_code=409, detail="This property already has an active booking hold or agreement.")
+
+        end_date = payload.desired_end_date
+        dur = payload.duration_months
+        if end_date is None and dur is not None:
+            end_date = add_months(payload.desired_start_date, dur) - timedelta(days=1)
+        elif end_date is not None and dur is None:
+            dur = max(1, (end_date.year - payload.desired_start_date.year) * 12 + end_date.month - payload.desired_start_date.month + (1 if end_date.day >= payload.desired_start_date.day else 0))
+
+        if booking_type == "Lease" and end_date is None:
+            raise HTTPException(status_code=400, detail="Lease booking requests require a fixed duration_months or desired_end_date.")
+        if dur is not None:
+            if prop.minimum_term_months is not None and dur < prop.minimum_term_months:
+                raise HTTPException(status_code=400, detail=f"Requested duration is below the minimum term of {prop.minimum_term_months} months.")
+            if prop.maximum_term_months is not None and dur > prop.maximum_term_months:
+                raise HTTPException(status_code=400, detail=f"Requested duration exceeds the maximum term of {prop.maximum_term_months} months.")
+
+        contact = db.query(Contact).filter(Contact.id == portal["contact_id"], Contact.tenant_id == tenant_id).first()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Customer contact record not found.")
+
+        lead_id = None
+        req_id = payload.buyer_requirement_id
+        match_id = payload.property_match_id
+        if match_id:
+            match, matched_req = _portal_owned_match(db, portal, match_id)
+            if match.property_id != prop.id:
+                raise HTTPException(status_code=400, detail="Property match does not match the selected property.")
+            req_id = req_id or matched_req.id
+        if req_id:
+            req_row = db.query(BuyerRequirement).filter(
+                BuyerRequirement.id == req_id,
+                BuyerRequirement.tenant_id == tenant_id,
+                BuyerRequirement.contact_id == portal["contact_id"],
+            ).first()
+            if not req_row:
+                raise HTTPException(status_code=404, detail="Buyer requirement not found for your account.")
+            if req_row.requirement_type != booking_type:
+                raise HTTPException(status_code=400, detail="Buyer requirement transaction type does not match this property.")
+            lead_id = req_row.lead_id
+
+        proposed_rent = payload.proposed_rent_amount if payload.proposed_rent_amount is not None else money(prop.price)
+        if payload.accepted_offer_id:
+            offer = db.query(PropertyOffer).filter(
+                PropertyOffer.id == payload.accepted_offer_id,
+                PropertyOffer.tenant_id == tenant_id,
+                PropertyOffer.status == "Accepted",
+            ).first()
+            if not offer or (offer.expires_at and offer.expires_at <= now):
+                raise HTTPException(status_code=409, detail="Accepted offer is invalid or expired.")
+            proposed_rent = money(offer.offered_price)
+
+        proposed_deposit = (
+            payload.proposed_deposit_amount
+            if payload.proposed_deposit_amount is not None
+            else (money(prop.security_deposit) if prop.security_deposit is not None else Decimal("0.00"))
+        )
+        hold_hours = get_setting_int("RENTAL_BOOKING_HOLD_HOURS", 48)
+
+        row = RentalBookingRequest(
+            tenant_id=tenant_id,
+            property_id=prop.id,
+            booking_type=booking_type,
+            channel="Portal",
+            portal_user_id=portal["portal_user_id"],
+            contact_id=contact.id,
+            account_id=portal["account_id"],
+            lead_id=lead_id,
+            buyer_requirement_id=req_id,
+            property_match_id=match_id,
+            accepted_offer_id=payload.accepted_offer_id,
+            customer_name=contact.full_name,
+            customer_email=portal["email"],
+            customer_phone=contact.phone,
+            proposed_rent_amount=proposed_rent,
+            rent_frequency=prop.price_frequency or "Monthly",
+            proposed_deposit_amount=proposed_deposit,
+            desired_start_date=payload.desired_start_date,
+            desired_end_date=end_date,
+            duration_months=dur,
+            status="Requested",
+            hold_created_at=now,
+            hold_expires_at=now + timedelta(hours=hold_hours),
+            customer_notes=payload.customer_notes,
+            created_by=None,
+        )
+        prop_before = {"id": str(prop.id), "status": prop.status}
+        prop.status = "Reserved"
+        prop.updated_at = now
+        db.add(row)
+        db.flush()
+
+        _notify_staff_user(
+            db, tenant_id, prop.assigned_to or prop.created_by,
+            f"Customer submitted {booking_type} booking request",
+            f"{contact.full_name} requested to {booking_type.lower()} {prop.name}. Property is held until {row.hold_expires_at.isoformat()}.",
+            "rental_booking_requests", row.id,
+        )
+        log_audit(db, tenant_id, None, "CUSTOMER_CREATE", "rental_booking_requests", row.id,
+                  f"Customer submitted portal {booking_type} booking request with immediate temporary hold.",
+                  after_data={"booking_type": booking_type, "property_id": str(prop.id), "hold_expires_at": row.hold_expires_at.isoformat()})
+        log_audit(db, tenant_id, None, "UPDATE", "properties", prop.id,
+                  f"Property temporarily held for portal {booking_type} booking request {row.id}.",
+                  before_data=prop_before, after_data={"id": str(prop.id), "status": prop.status})
+        db.commit()
+        db.refresh(row)
+        return _portal_rental_booking_request_payload(row)
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This property already has an active rental/lease booking hold.")
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.get("/rental-booking-requests")
+def portal_list_rental_booking_requests(
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(RentalBookingRequest).filter(
+        RentalBookingRequest.tenant_id == portal["tenant_id"],
+        RentalBookingRequest.portal_user_id == portal["portal_user_id"],
+    ).order_by(RentalBookingRequest.created_at.desc()).all()
+    changed = False
+    for row in rows:
+        if expire_single_rental_booking_request(db, row):
+            changed = True
+    if changed:
+        db.commit()
+    return [_portal_rental_booking_request_payload(r) for r in rows]
+
+
+@router.get("/rental-booking-requests/{request_id}")
+def portal_get_rental_booking_request(
+    request_id: UUID,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(RentalBookingRequest).filter(
+        RentalBookingRequest.id == request_id,
+        RentalBookingRequest.tenant_id == portal["tenant_id"],
+        RentalBookingRequest.portal_user_id == portal["portal_user_id"],
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Rental/lease booking request not found.")
+    if expire_single_rental_booking_request(db, row):
+        db.commit()
+        db.refresh(row)
+    data = _portal_rental_booking_request_payload(row)
+    if row.rental_agreement_id:
+        agreement = db.query(RentalAgreement).filter(
+            RentalAgreement.id == row.rental_agreement_id,
+            RentalAgreement.tenant_id == portal["tenant_id"],
+            RentalAgreement.contact_id == portal["contact_id"],
+        ).first()
+        if agreement and agreement.status not in ("Draft", "Cancelled"):
+            data["agreement"] = _portal_rental_agreement_payload(agreement)
+    return data
+
+
+@router.post("/rental-booking-requests/{request_id}/cancel")
+def portal_cancel_rental_booking_request(
+    request_id: UUID,
+    payload: RentalBookingRequestCancel,
+    portal: dict = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+):
+    tenant_id = portal["tenant_id"]
+    now = now_naive_utc()
+    row = db.query(RentalBookingRequest).filter(
+        RentalBookingRequest.id == request_id,
+        RentalBookingRequest.tenant_id == tenant_id,
+        RentalBookingRequest.portal_user_id == portal["portal_user_id"],
+    ).with_for_update().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Rental/lease booking request not found.")
+    if row.status not in ("Requested", "Approved", "Agreement Created"):
+        raise HTTPException(status_code=409, detail=f"Booking request in status {row.status} cannot be cancelled.")
+    if row.rental_agreement_id:
+        agreement = db.query(RentalAgreement).filter(
+            RentalAgreement.id == row.rental_agreement_id,
+            RentalAgreement.tenant_id == tenant_id,
+        ).with_for_update().first()
+        if agreement:
+            if agreement.status in ("Active", "Termination Requested", "Completed"):
+                raise HTTPException(status_code=409, detail="Active rental agreements must use the exit request workflow.")
+            verified = rental_agreement_verified_payments(db, tenant_id, agreement.id)
+            if verified > Decimal("0.00"):
+                raise HTTPException(status_code=409, detail="Verified deposit or rent payments exist. Contact staff to process a refund before cancellation.")
+            if agreement.status in ("Draft", "Pending Signature"):
+                agreement.status = "Cancelled"
+    row.status = "Cancelled"
+    row.cancellation_reason = payload.reason.strip()
+    row.hold_expires_at = None
+    row.updated_at = now
+    released = _release_property_if_uncommitted(
+        db, tenant_id, row.property_id, now=now, exclude_rental_request_id=row.id
+    )
+    log_audit(db, tenant_id, None, "CUSTOMER_CANCEL", "rental_booking_requests", row.id,
+              f"Customer cancelled {row.booking_type} booking request.",
+              after_data={"status": row.status, "property_released": released})
+    db.commit()
+    db.refresh(row)
+    return _portal_rental_booking_request_payload(row)

@@ -6,6 +6,139 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class RentalBookingRequestPortalCreate(BaseModel):
+    property_id: UUID
+    booking_type: Literal["Rent", "Lease"] | None = None
+    buyer_requirement_id: UUID | None = None
+    property_match_id: UUID | None = None
+    accepted_offer_id: UUID | None = None
+    proposed_rent_amount: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    proposed_deposit_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    desired_start_date: date
+    desired_end_date: date | None = None
+    duration_months: int | None = Field(default=None, ge=1, le=600)
+    customer_notes: str | None = Field(default=None, max_length=5000)
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.desired_end_date and self.desired_end_date < self.desired_start_date:
+            raise ValueError("Desired end date cannot be before start date.")
+        return self
+
+
+class RentalBookingRequestWalkInCreate(BaseModel):
+    property_id: UUID
+    booking_type: Literal["Rent", "Lease"] | None = None
+    contact_id: UUID | None = None
+    account_id: UUID | None = None
+    lead_id: UUID | None = None
+    buyer_requirement_id: UUID | None = None
+    property_match_id: UUID | None = None
+    accepted_offer_id: UUID | None = None
+    customer_name: str = Field(min_length=1, max_length=200)
+    customer_email: str | None = Field(default=None, max_length=255)
+    customer_phone: str | None = Field(default=None, max_length=30)
+    proposed_rent_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    proposed_deposit_amount: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=14, decimal_places=2)
+    maintenance_amount: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=14, decimal_places=2)
+    maintenance_frequency: Literal["Monthly", "Quarterly", "Yearly"] = "Monthly"
+    desired_start_date: date
+    desired_end_date: date | None = None
+    duration_months: int | None = Field(default=None, ge=1, le=600)
+    lock_in_months: int = Field(default=0, ge=0, le=600)
+    notice_period_days: int = Field(default=30, ge=0, le=365)
+    due_day: int = Field(default=5, ge=1, le=28)
+    late_fee_type: Literal["Fixed", "Percentage"] = "Fixed"
+    late_fee_amount: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=14, decimal_places=2)
+    late_fee_grace_days: int = Field(default=0, ge=0, le=365)
+    hold_hours: int | None = Field(default=None, ge=1, le=720)
+    terms_notes: str | None = Field(default=None, max_length=5000)
+    staff_notes: str | None = Field(default=None, max_length=5000)
+
+    @model_validator(mode="after")
+    def validate_walkin(self):
+        if self.desired_end_date and self.desired_end_date < self.desired_start_date:
+            raise ValueError("Desired end date cannot be before start date.")
+        if self.contact_id is None and self.lead_id is None and self.buyer_requirement_id is None:
+            raise ValueError("A walk-in rental/lease booking request must link a Contact, Lead, or BuyerRequirement.")
+        return self
+
+
+class RentalBookingRequestDecision(BaseModel):
+    decision: Literal["Approve", "Reject"]
+    approved_rent_amount: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    approved_deposit_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    maintenance_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    maintenance_frequency: Literal["Monthly", "Quarterly", "Yearly"] | None = None
+    desired_start_date: date | None = None
+    desired_end_date: date | None = None
+    duration_months: int | None = Field(default=None, ge=1, le=600)
+    lock_in_months: int | None = Field(default=None, ge=0, le=600)
+    notice_period_days: int | None = Field(default=None, ge=0, le=365)
+    due_day: int | None = Field(default=None, ge=1, le=28)
+    late_fee_type: Literal["Fixed", "Percentage"] | None = None
+    late_fee_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    late_fee_grace_days: int | None = Field(default=None, ge=0, le=365)
+    hold_hours: int | None = Field(default=None, ge=1, le=720)
+    terms_notes: str | None = Field(default=None, max_length=5000)
+    staff_notes: str | None = Field(default=None, max_length=5000)
+    rejection_reason: str | None = Field(default=None, max_length=5000)
+
+
+class RentalBookingRequestCancel(BaseModel):
+    reason: str = Field(min_length=3, max_length=5000)
+
+
+class RentalBookingRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    tenant_id: UUID
+    property_id: UUID
+    booking_type: str
+    channel: str
+    portal_user_id: UUID | None = None
+    contact_id: UUID | None = None
+    account_id: UUID | None = None
+    lead_id: UUID | None = None
+    buyer_requirement_id: UUID | None = None
+    property_match_id: UUID | None = None
+    accepted_offer_id: UUID | None = None
+    rental_agreement_id: UUID | None = None
+    customer_name: str
+    customer_email: str | None = None
+    customer_phone: str | None = None
+    proposed_rent_amount: Decimal
+    approved_rent_amount: Decimal | None = None
+    rent_frequency: str
+    proposed_deposit_amount: Decimal
+    approved_deposit_amount: Decimal | None = None
+    maintenance_amount: Decimal
+    maintenance_frequency: str
+    desired_start_date: date
+    desired_end_date: date | None = None
+    duration_months: int | None = None
+    lock_in_months: int
+    notice_period_days: int
+    due_day: int
+    late_fee_type: str = "Fixed"
+    late_fee_amount: Decimal = Decimal("0.00")
+    late_fee_grace_days: int = 0
+    status: str
+    hold_created_at: datetime | None = None
+    hold_expires_at: datetime | None = None
+    expired_at: datetime | None = None
+    terms_notes: str | None = None
+    customer_notes: str | None = None
+    staff_notes: str | None = None
+    rejection_reason: str | None = None
+    cancellation_reason: str | None = None
+    reviewed_by: UUID | None = None
+    reviewed_at: datetime | None = None
+    created_by: UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class RentalAgreementCreate(BaseModel):
     property_id: UUID
     lead_id: UUID | None = None
@@ -41,8 +174,8 @@ class RentalAgreementCreate(BaseModel):
             raise ValueError("Agreement end date cannot be before start date.")
         if self.escalation_percentage is not None and self.escalation_interval_months is None:
             raise ValueError("Escalation interval is required when escalation is configured.")
-        if self.lead_id is None and self.contact_id is None:
-            raise ValueError("A rental agreement must be linked to a Lead or Contact.")
+        if self.lead_id is None and self.contact_id is None and self.buyer_requirement_id is None:
+            raise ValueError("A rental agreement must be linked to a Lead, Contact, or BuyerRequirement.")
         if self.agreement_end:
             duration_months = max(0, (self.agreement_end.year - self.agreement_start.year) * 12 + self.agreement_end.month - self.agreement_start.month)
             if self.lock_in_months > duration_months:
@@ -159,6 +292,7 @@ class RentalPaymentCreate(BaseModel):
     schedule_id: UUID | None = None
     payment_type: Literal["Rent", "Deposit", "Maintenance", "Other"] = "Rent"
     amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
     payment_method: Literal["Cash", "Bank Transfer", "UPI", "Cheque", "Card", "Other"]
     transaction_reference: str | None = Field(default=None, max_length=255)
     proof_document_url: str | None = Field(default=None, max_length=5000)
@@ -279,6 +413,11 @@ class RentalSettlementCollectionCreate(BaseModel):
     transaction_reference: str | None = Field(default=None, max_length=255)
     payment_date: date = Field(default_factory=date.today)
     notes: str | None = None
+
+
+class RentalHandoverComplete(BaseModel):
+    allow_exception: bool = False
+    exception_reason: str | None = Field(default=None, max_length=2000)
 
 
 class RentalRenewalCreate(BaseModel):

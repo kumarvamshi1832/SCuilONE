@@ -1,4 +1,3 @@
-
 import uuid
 from datetime import datetime, date
 from decimal import Decimal
@@ -24,11 +23,11 @@ from app.database.connection import Base
 class Booking(Base):
     __tablename__ = "bookings"
 
-
     __table_args__ = (
         UniqueConstraint("tenant_id", "id", name="uq_bookings_tenant_id_id"),
         Index("ix_bookings_tenant_property", "tenant_id", "property_id"),
         Index("ix_bookings_tenant_status", "tenant_id", "status"),
+        Index("ix_bookings_hold_expiry", "tenant_id", "status", "hold_expires_at"),
         Index(
             "uq_bookings_one_active_per_property",
             "tenant_id",
@@ -49,7 +48,6 @@ class Booking(Base):
             name="ck_bookings_payment_preference_valid",
         ),
     )
-
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -98,6 +96,9 @@ class Booking(Base):
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="Pending"
     )
+    hold_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    hold_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     booking_date: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )

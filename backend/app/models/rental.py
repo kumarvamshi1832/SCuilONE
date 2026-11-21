@@ -13,6 +13,90 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database.connection import Base
 
 
+class RentalBookingRequest(Base):
+    """Unified Rent and Lease booking request supporting both Portal and Walk-in channels with temporary holds."""
+    __tablename__ = "rental_booking_requests"
+    __table_args__ = (
+        Index("ix_rental_booking_requests_tenant_status", "tenant_id", "status"),
+        Index("ix_rental_booking_requests_tenant_property", "tenant_id", "property_id"),
+        Index("ix_rental_booking_requests_hold_expiry", "tenant_id", "status", "hold_expires_at"),
+        Index(
+            "uq_rental_booking_requests_active_property",
+            "tenant_id",
+            "property_id",
+            unique=True,
+            postgresql_where=text("status IN ('Requested', 'Approved', 'Agreement Created')"),
+        ),
+        CheckConstraint("booking_type IN ('Rent', 'Lease')", name="ck_rental_booking_req_type"),
+        CheckConstraint("channel IN ('Portal', 'Walk-in')", name="ck_rental_booking_req_channel"),
+        CheckConstraint(
+            "status IN ('Requested', 'Approved', 'Agreement Created', 'Activated', 'Rejected', 'Cancelled', 'Expired', 'Expired - Payment Review')",
+            name="ck_rental_booking_req_status",
+        ),
+        CheckConstraint("proposed_rent_amount > 0", name="ck_rental_booking_req_rent_positive"),
+        CheckConstraint("approved_rent_amount IS NULL OR approved_rent_amount > 0", name="ck_rental_booking_req_approved_rent_positive"),
+        CheckConstraint("proposed_deposit_amount >= 0", name="ck_rental_booking_req_deposit_nonnegative"),
+        CheckConstraint("approved_deposit_amount IS NULL OR approved_deposit_amount >= 0", name="ck_rental_booking_req_approved_deposit_nonnegative"),
+        CheckConstraint("maintenance_amount >= 0", name="ck_rental_booking_req_maint_nonnegative"),
+        CheckConstraint("lock_in_months >= 0 AND notice_period_days >= 0", name="ck_rental_booking_req_terms_nonnegative"),
+        CheckConstraint("due_day >= 1 AND due_day <= 28", name="ck_rental_booking_req_due_day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    property_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("properties.id", ondelete="RESTRICT"), nullable=False)
+    booking_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'Rent' | 'Lease'
+    channel: Mapped[str] = mapped_column(String(20), nullable=False, default="Portal")  # 'Portal' | 'Walk-in'
+
+    portal_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("customer_portal_users.id", ondelete="SET NULL"), nullable=True)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
+    account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("leads.id", ondelete="SET NULL"), nullable=True)
+    buyer_requirement_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("buyer_requirements.id", ondelete="SET NULL"), nullable=True)
+    property_match_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("property_matches.id", ondelete="SET NULL"), nullable=True)
+    accepted_offer_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("property_offers.id", ondelete="SET NULL"), nullable=True)
+    rental_agreement_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("rental_agreements.id", ondelete="SET NULL"), nullable=True)
+
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+    proposed_rent_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    approved_rent_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    rent_frequency: Mapped[str] = mapped_column(String(20), nullable=False, default="Monthly")
+    proposed_deposit_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    approved_deposit_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    maintenance_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    maintenance_frequency: Mapped[str] = mapped_column(String(20), nullable=False, default="Monthly")
+
+    desired_start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    desired_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lock_in_months: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    notice_period_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    due_day: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    late_fee_type: Mapped[str] = mapped_column(String(12), nullable=False, default="Fixed", server_default="Fixed")
+    late_fee_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"), server_default="0")
+    late_fee_grace_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="Requested")
+    hold_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    hold_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    terms_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    customer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    staff_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class RentalAgreement(Base):
     __tablename__ = "rental_agreements"
     __table_args__ = (

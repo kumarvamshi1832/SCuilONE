@@ -7,6 +7,7 @@ from pathlib import Path
 import io
 import cloudinary.uploader
 from sqlalchemy import or_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.core.dependencies import require_active_user
 from app.core.permissions import require_permission
@@ -29,6 +30,14 @@ from app.services.payment_allocation import IN_FLIGHT_STATUSES, installment_posi
 from app.routes.customer_portal import require_portal_user, get_db, _notify_staff_user, staff_context
 from app.services.customer_portal_notifications import notify_customer
 from app.schemas.booking import CustomerBookingDetailsUpdate
+from app.services.real_estate_lifecycle import (
+    _release_property_if_uncommitted,
+    expire_single_customer_booking_request,
+    get_setting_int,
+    has_conflicting_property_commitment,
+    release_expired_holds_for_property,
+    utcnow,
+)
 
 router = APIRouter(tags=["Customer Portal - Real Estate Booking Journey"])
 
@@ -84,7 +93,7 @@ class PaymentSubmitIn(BaseModel):
 
 
 def _now():
-    return datetime.utcnow()
+    return utcnow()
 
 
 def _customer_request(db: Session, portal: dict, request_id: UUID, lock=False):
@@ -102,46 +111,14 @@ def _customer_request(db: Session, portal: dict, request_id: UUID, lock=False):
 
 
 def _expire_if_needed(db: Session, row: CustomerBookingRequest):
-    if row.status == "Approved" and row.hold_expires_at and row.hold_expires_at <= _now():
-        if row.booking_id:
-            booking = db.query(Booking).filter(Booking.id == row.booking_id, Booking.tenant_id == row.tenant_id, Booking.status == "Pending").with_for_update().first()
-            if booking:
-                verified = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status == "Verified").all()
-                verified_total = sum((Decimal(str(p.amount)) for p in verified), Decimal("0.00"))
-                verified_ids = [p.id for p in verified]
-                refunds = db.query(PaymentRefund).filter(PaymentRefund.tenant_id == row.tenant_id, PaymentRefund.booking_id == booking.id, PaymentRefund.payment_id.in_(verified_ids) if verified_ids else PaymentRefund.payment_id == None, PaymentRefund.status == "Processed").all()
-                net_verified = verified_total - sum((Decimal(str(r.amount)) for r in refunds), Decimal("0.00"))
-                if net_verified > 0:
-                    row.status = "Expired - Payment Review"
-                    row.hold_expires_at = None
-                    match = db.query(PropertyMatch).filter(PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == row.tenant_id).first()
-                    _notify_staff_user(db, row.tenant_id, match.assigned_to if match else None, "Expired booking hold requires payment review", "The customer hold expired but verified funds remain. Review the booking and refund/reinstatement before releasing the property.", "customer_booking_requests", row.id)
-                    log_audit(db, row.tenant_id, None, "AUTO_EXPIRE", "customer_booking_requests", row.id, "Booking hold expired with verified funds remaining; property reservation retained for staff review.", before_data={"status": "Approved"}, after_data={"status": row.status})
-                    db.flush()
-                    return
-                booking.status = "Cancelled"
-                booking.cancellation_reason = "Customer booking hold expired before final confirmation."
-                prop = db.query(Property).filter(Property.id == booking.property_id, Property.tenant_id == row.tenant_id).with_for_update().first()
-                if prop and prop.status == "Reserved":
-                    prop.status = "Available"
-                active_plan = db.query(PaymentPlan).filter(PaymentPlan.tenant_id == row.tenant_id, PaymentPlan.booking_id == booking.id, PaymentPlan.status == "Active").with_for_update().first()
-                if active_plan:
-                    active_plan.status = "Cancelled"
-                pending_payments = db.query(Payment).filter(Payment.tenant_id == row.tenant_id, Payment.booking_id == booking.id, Payment.status.in_(IN_FLIGHT_STATUSES)).with_for_update().all()
-                for payment in pending_payments:
-                    payment.status = "Rejected"
-                    payment.notes = ((payment.notes or "") + "\nAutomatically rejected because the booking hold expired without verified funds.").strip()
-        row.status = "Expired"
-        row.hold_expires_at = None
-        log_audit(db, row.tenant_id, None, "AUTO_EXPIRE", "customer_booking_requests", row.id, "Customer booking request hold expired and the unverified reservation was released.", before_data={"status": "Approved"}, after_data={"status": "Expired"})
-        db.flush()
+    expire_single_customer_booking_request(db, row, now=_now())
 
 
 def _request_payload(row: CustomerBookingRequest):
     return {
         "id": str(row.id), "status": row.status, "property_id": str(row.property_id),
         "site_visit_id": str(row.site_visit_id), "booking_id": str(row.booking_id) if row.booking_id else None,
-        "hold_expires_at": row.hold_expires_at, "extension_count": row.extension_count,
+        "hold_created_at": row.hold_created_at, "hold_expires_at": row.hold_expires_at, "extension_count": row.extension_count,
         "agreed_price": str(row.agreed_price) if row.agreed_price is not None else None,
         "booking_amount": str(row.booking_amount) if row.booking_amount is not None else None,
         "payment_preference": row.payment_preference, "payment_instructions": row.payment_instructions, "agreement_status": row.agreement_status,
@@ -185,45 +162,91 @@ def request_booking(site_visit_id: UUID, payload: BookingRequestIn, portal: dict
     feedback = db.query(CustomerSiteVisitFeedback).filter(CustomerSiteVisitFeedback.tenant_id == portal["tenant_id"], CustomerSiteVisitFeedback.portal_user_id == portal["portal_user_id"], CustomerSiteVisitFeedback.site_visit_id == visit.id).first()
     if not feedback or feedback.decision != "Interested":
         raise HTTPException(409, "Submit feedback with decision Interested before requesting a booking.")
-    existing = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == portal["tenant_id"], CustomerBookingRequest.portal_user_id == portal["portal_user_id"], CustomerBookingRequest.site_visit_id == visit.id).first()
-    if existing:
-        _expire_if_needed(db, existing)
-        if existing.status in ("Expired", "Rejected", "Cancelled"):
-            existing.status = "Requested"
-            existing.booking_id = None
-            existing.hold_expires_at = None
-            existing.extension_count = 0
-            existing.agreed_price = None
-            existing.booking_amount = None
-            existing.agreement_text = None
-            existing.agreement_status = "Not Prepared"
-            existing.agreement_customer_name = None
-            existing.agreement_acknowledged_at = None
-            existing.agreement_verified_by = None
-            existing.agreement_verified_at = None
-            existing.final_confirmed_at = None
-            existing.payment_preference = payload.payment_preference
-            existing.payment_instructions = None
-            existing.customer_notes = payload.notes
-            existing.customer_message = None
-            existing.staff_notes = None
-        db.commit()
-        return _request_payload(existing)
+    now = _now()
     match = db.query(PropertyMatch).filter(PropertyMatch.id == visit.property_match_id, PropertyMatch.tenant_id == portal["tenant_id"]).first()
     prop = db.query(Property).filter(Property.id == match.property_id, Property.tenant_id == portal["tenant_id"]).with_for_update().first()
-    if not prop or prop.status != "Available" or prop.listing_type != "Sale":
+    if not prop or prop.listing_type != "Sale":
         raise HTTPException(409, "This property is no longer available for sale.")
-    active = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == portal["tenant_id"], CustomerBookingRequest.property_id == prop.id, CustomerBookingRequest.status == "Approved", CustomerBookingRequest.hold_expires_at > _now()).with_for_update().first()
-    if active:
-        raise HTTPException(409, "This property is temporarily held for another customer.")
-    row = CustomerBookingRequest(tenant_id=portal["tenant_id"], portal_user_id=portal["portal_user_id"], buyer_requirement_id=match.buyer_requirement_id, property_match_id=match.id, property_id=prop.id, site_visit_id=visit.id, status="Requested", payment_preference=payload.payment_preference, customer_notes=payload.notes)
-    db.add(row)
-    requirement = db.query(BuyerRequirement).filter(BuyerRequirement.id == match.buyer_requirement_id, BuyerRequirement.tenant_id == portal["tenant_id"]).first()
-    recipient_id = match.assigned_to or (requirement.assigned_to if requirement else None)
-    _notify_staff_user(db, portal["tenant_id"], recipient_id, "Customer requested booking", f"A customer requested booking for {prop.name}. Review the request.", "customer_booking_requests", row.id)
-    log_audit(db, portal["tenant_id"], None, "CREATE", "customer_booking_requests", row.id, "Customer submitted a booking request after completing a site visit.")
-    db.commit(); db.refresh(row)
-    return _request_payload(row)
+    release_expired_holds_for_property(db, portal["tenant_id"], prop.id, now=now)
+    db.refresh(prop)
+
+    initial_hold_hours = get_setting_int("PORTAL_BOOKING_INITIAL_HOLD_HOURS", 24)
+    existing = db.query(CustomerBookingRequest).filter(
+        CustomerBookingRequest.tenant_id == portal["tenant_id"],
+        CustomerBookingRequest.portal_user_id == portal["portal_user_id"],
+        CustomerBookingRequest.site_visit_id == visit.id,
+    ).with_for_update().first()
+    if existing:
+        _expire_if_needed(db, existing)
+        if existing.status in ("Requested", "Approved", "Confirmed", "Completed"):
+            db.commit()
+            return _request_payload(existing)
+        if existing.status == "Expired - Payment Review":
+            db.commit()
+            raise HTTPException(409, "Your previous booking request is awaiting staff payment review.")
+        if prop.status != "Available" or has_conflicting_property_commitment(
+            db, portal["tenant_id"], prop.id, now=now, exclude_portal_request_id=existing.id
+        ):
+            raise HTTPException(409, "This property is temporarily held or no longer available for sale.")
+        existing.status = "Requested"
+        existing.booking_id = None
+        existing.hold_created_at = now
+        existing.hold_expires_at = now + timedelta(hours=initial_hold_hours)
+        existing.extension_count = 0
+        existing.agreed_price = None
+        existing.booking_amount = None
+        existing.agreement_text = None
+        existing.agreement_status = "Not Prepared"
+        existing.agreement_customer_name = None
+        existing.agreement_acknowledged_at = None
+        existing.agreement_verified_by = None
+        existing.agreement_verified_at = None
+        existing.final_confirmed_at = None
+        existing.payment_preference = payload.payment_preference
+        existing.payment_instructions = None
+        existing.customer_notes = payload.notes
+        existing.customer_message = None
+        existing.staff_notes = None
+        prop.status = "Reserved"
+        prop.updated_at = now
+        log_audit(db, portal["tenant_id"], None, "UPDATE", "customer_booking_requests", existing.id, "Customer re-submitted booking request with immediate temporary property hold.")
+        db.commit()
+        db.refresh(existing)
+        return _request_payload(existing)
+
+    if prop.status != "Available" or has_conflicting_property_commitment(db, portal["tenant_id"], prop.id, now=now):
+        raise HTTPException(409, "This property is temporarily held or no longer available for sale.")
+
+    row = CustomerBookingRequest(
+        tenant_id=portal["tenant_id"],
+        portal_user_id=portal["portal_user_id"],
+        buyer_requirement_id=match.buyer_requirement_id,
+        property_match_id=match.id,
+        property_id=prop.id,
+        site_visit_id=visit.id,
+        status="Requested",
+        hold_created_at=now,
+        hold_expires_at=now + timedelta(hours=initial_hold_hours),
+        payment_preference=payload.payment_preference,
+        customer_notes=payload.notes,
+    )
+    prop_before = {"id": str(prop.id), "status": prop.status}
+    prop.status = "Reserved"
+    prop.updated_at = now
+    try:
+        db.add(row)
+        db.flush()
+        requirement = db.query(BuyerRequirement).filter(BuyerRequirement.id == match.buyer_requirement_id, BuyerRequirement.tenant_id == portal["tenant_id"]).first()
+        recipient_id = match.assigned_to or (requirement.assigned_to if requirement else None)
+        _notify_staff_user(db, portal["tenant_id"], recipient_id, "Customer requested booking", f"A customer requested booking for {prop.name}. A temporary hold has been placed until {row.hold_expires_at.isoformat()}.", "customer_booking_requests", row.id)
+        log_audit(db, portal["tenant_id"], None, "CREATE", "customer_booking_requests", row.id, "Customer submitted a booking request with an immediate temporary property hold.", after_data={"status": row.status, "hold_expires_at": row.hold_expires_at.isoformat()})
+        log_audit(db, portal["tenant_id"], None, "UPDATE", "properties", prop.id, f"Property temporarily held for customer booking request {row.id}.", before_data=prop_before, after_data={"id": str(prop.id), "status": prop.status})
+        db.commit()
+        db.refresh(row)
+        return _request_payload(row)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "This property already has an active booking hold.")
 
 
 @router.get("/api/v1/customer-portal/booking-requests")
@@ -284,20 +307,32 @@ def staff_decide_booking_request(request_id: UUID, payload: BookingDecisionIn, c
     if not row: raise HTTPException(404, "Customer booking request not found.")
     _expire_if_needed(db, row)
     if row.status != "Requested": raise HTTPException(409, f"Request cannot be decided from status {row.status}.")
+    now = _now()
     if payload.decision == "Reject":
-        row.status, row.staff_notes, row.customer_message = "Rejected", payload.notes, payload.customer_message
+        row.status = "Rejected"
+        row.hold_expires_at = None
+        row.staff_notes = payload.notes
+        row.customer_message = payload.customer_message
+        released = _release_property_if_uncommitted(
+            db, tenant_id, row.property_id, now=now, exclude_portal_request_id=row.id
+        )
         notify_customer(db, tenant_id, row.portal_user_id, "Booking request declined",
                         payload.customer_message or "Your booking request was declined by the sales team.",
                         "booking_request", "customer_booking_requests", row.id)
-        log_audit(db, tenant_id, user_id, "UPDATE", "customer_booking_requests", row.id, "Customer booking request rejected.")
-        db.commit(); return _request_payload(row)
+        log_audit(db, tenant_id, user_id, "UPDATE", "customer_booking_requests", row.id, "Customer booking request rejected and hold released.", after_data={"status": row.status, "property_released": released})
+        db.commit()
+        return _request_payload(row)
     if payload.agreed_price is None or payload.booking_amount is None or payload.booking_amount > payload.agreed_price:
         raise HTTPException(422, "Provide agreed_price and booking_amount; booking amount cannot exceed agreed price.")
     prop = db.query(Property).filter(Property.id == row.property_id, Property.tenant_id == tenant_id).with_for_update().first()
-    if not prop or prop.status != "Available": raise HTTPException(409, "Property is no longer available.")
-    active_booking = db.query(Booking).filter(Booking.tenant_id == tenant_id, Booking.property_id == prop.id, Booking.status.in_(["Pending", "Confirmed"])).first()
-    active_hold = db.query(CustomerBookingRequest).filter(CustomerBookingRequest.tenant_id == tenant_id, CustomerBookingRequest.property_id == prop.id, CustomerBookingRequest.id != row.id, CustomerBookingRequest.status == "Approved", CustomerBookingRequest.hold_expires_at > _now()).first()
-    if active_booking or active_hold: raise HTTPException(409, "Property already has an active booking or hold.")
+    if not prop:
+        raise HTTPException(409, "Property is no longer available.")
+    release_expired_holds_for_property(db, tenant_id, prop.id, now=now)
+    db.refresh(prop)
+    if prop.status not in ("Available", "Reserved"):
+        raise HTTPException(409, "Property is no longer available.")
+    if has_conflicting_property_commitment(db, tenant_id, prop.id, now=now, exclude_portal_request_id=row.id):
+        raise HTTPException(409, "Property already has an active booking or hold.")
     portal_user = db.query(CustomerPortalUser).filter(CustomerPortalUser.id == row.portal_user_id, CustomerPortalUser.tenant_id == tenant_id).first()
     contact = db.query(Contact).filter(Contact.id == portal_user.contact_id, Contact.tenant_id == tenant_id).first() if portal_user else None
     account = db.query(Account).filter(Account.id == portal_user.account_id, Account.tenant_id == tenant_id).first() if portal_user else None
@@ -307,12 +342,29 @@ def staff_decide_booking_request(request_id: UUID, payload: BookingDecisionIn, c
     if requirement.lead_id and not db.query(Lead.id).filter(Lead.id == requirement.lead_id, Lead.tenant_id == tenant_id).first():
         raise HTTPException(409, "The buyer requirement's linked lead is not in this tenant.")
     property_before = {"id": str(prop.id), "status": prop.status}
-    booking = Booking(tenant_id=tenant_id, property_id=prop.id, lead_id=requirement.lead_id, buyer_requirement_id=row.buyer_requirement_id, buyer_name=contact.full_name if contact else (account.name if account else "Customer"), buyer_email=portal_user.email if portal_user else None, buyer_phone=contact.phone if contact else None, payment_preference=payload.payment_preference, installment_request_notes=payload.notes, booking_amount=payload.booking_amount, agreed_price=payload.agreed_price, status="Pending", created_by=user_id)
+    approved_hold_hours = get_setting_int("PORTAL_BOOKING_APPROVED_HOLD_HOURS", 48)
+    approved_expires_at = now + timedelta(hours=approved_hold_hours)
+    booking = Booking(
+        tenant_id=tenant_id, property_id=prop.id, lead_id=requirement.lead_id,
+        buyer_requirement_id=row.buyer_requirement_id,
+        buyer_name=contact.full_name if contact else (account.name if account else "Customer"),
+        buyer_email=portal_user.email if portal_user else None,
+        buyer_phone=contact.phone if contact else None,
+        payment_preference=payload.payment_preference,
+        installment_request_notes=payload.notes,
+        booking_amount=payload.booking_amount,
+        agreed_price=payload.agreed_price,
+        status="Pending",
+        hold_created_at=row.hold_created_at or now,
+        hold_expires_at=approved_expires_at,
+        created_by=user_id,
+    )
     db.add(booking); db.flush()
     prop.status = "Reserved"
-    prop.updated_at = _now()
+    prop.updated_at = now
     row.booking_id, row.status, row.agreed_price, row.booking_amount = booking.id, "Approved", payload.agreed_price, payload.booking_amount
-    row.payment_preference, row.hold_expires_at, row.staff_notes, row.customer_message = payload.payment_preference, _now() + timedelta(hours=48), payload.notes, payload.customer_message
+    row.hold_created_at = row.hold_created_at or now
+    row.payment_preference, row.hold_expires_at, row.staff_notes, row.customer_message = payload.payment_preference, approved_expires_at, payload.notes, payload.customer_message
     notify_customer(db, tenant_id, row.portal_user_id, "Booking request approved",
                     row.customer_message or f"Your booking request was approved. Booking amount: {payload.booking_amount:,.2f}. Please complete your buyer and nominee details, review the agreement, and submit payment details in your Customer Portal. Payment is subject to staff verification.",
                     "booking_request", "bookings", booking.id)

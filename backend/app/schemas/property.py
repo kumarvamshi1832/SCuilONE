@@ -1,4 +1,3 @@
-
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
@@ -19,7 +18,7 @@ PropertyType = Literal[
     "Other",
 ]
 ListingType = Literal["Sale", "Rent", "Lease"]
-PropertyStatus = Literal["Available", "Reserved", "Sold", "Rented", "Inactive"]
+PropertyStatus = Literal["Available", "Reserved", "Sold", "Rented", "Leased", "Inactive"]
 FurnishingType = Literal["Unfurnished", "Semi-Furnished", "Furnished"]
 
 

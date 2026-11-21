@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database.connection import Base
@@ -38,6 +38,13 @@ class CustomerBookingRequest(Base):
         CheckConstraint("booking_amount IS NULL OR agreed_price IS NULL OR booking_amount <= agreed_price", name="ck_customer_booking_request_amount_not_over_price"),
         Index("ix_customer_booking_requests_tenant_status", "tenant_id", "status"),
         Index("ix_customer_booking_requests_property_hold", "tenant_id", "property_id", "status", "hold_expires_at"),
+        Index(
+            "uq_customer_booking_requests_active_property",
+            "tenant_id",
+            "property_id",
+            unique=True,
+            postgresql_where=text("status IN ('Requested', 'Approved')"),
+        ),
         UniqueConstraint("tenant_id", "portal_user_id", "site_visit_id", name="uq_customer_booking_request_visit"),
     )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -49,6 +56,7 @@ class CustomerBookingRequest(Base):
     site_visit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("site_visits.id"), nullable=False)
     booking_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("bookings.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="Requested")
+    hold_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     hold_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     extension_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     agreed_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
@@ -70,6 +78,7 @@ class CustomerBookingRequest(Base):
     final_confirmed_by: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class CustomerPortalJourneyFile(Base):
     __tablename__ = "customer_portal_journey_files"

@@ -1,4 +1,3 @@
-
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Literal
@@ -7,7 +6,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator, EmailStr
 
 
-BookingStatus = Literal["Pending", "Confirmed", "Completed", "Cancelled"]
+BookingStatus = Literal[
+    "Pending",
+    "Confirmed",
+    "Completed",
+    "Cancelled",
+    "Expired",
+    "Expired - Payment Review",
+]
 
 
 class BookingNomineeInput(BaseModel):
@@ -52,6 +58,7 @@ class BookingCreate(BaseModel):
     booking_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     payment_preference: Literal["Full Payment", "Installments"] = "Full Payment"
     installment_request_notes: str | None = Field(default=None, max_length=2000)
+    hold_hours: int | None = Field(default=None, ge=1, le=720)
     agreed_price: Decimal | None = Field(
         default=None,
         gt=0,
@@ -107,6 +114,9 @@ class BookingResponse(BaseModel):
     agreed_price: Decimal
     refund_amount: Decimal
     status: BookingStatus
+    hold_created_at: datetime | None = None
+    hold_expires_at: datetime | None = None
+    expired_at: datetime | None = None
     booking_date: datetime
     cancellation_reason: str | None
     created_by: UUID | None

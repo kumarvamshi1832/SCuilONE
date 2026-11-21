@@ -20,20 +20,37 @@ from app.models.lead import Lead
 from app.models.property import Property
 from app.models.property_match import PropertyMatch
 from app.models.property_offer import PropertyOffer
+from app.models.account import Account
+from app.models.role import Role
+from app.models.user_role import UserRole
 from app.models.rental import (
-    RentalAgreement, RentalPaymentSchedule, RentalPayment,
+    RentalAgreement, RentalBookingRequest, RentalPaymentSchedule, RentalPayment,
     RentalDepositTransaction, RentalExitRequest, RentalInspection,
     RentalSettlement, RentalAgreementRevision,
 )
 from app.schemas.rental import (
     RentalAgreementCreate, RentalAgreementUpdate, RentalAgreementResponse, RentalAgreementActivate,
     RentalAgreementSendForSignature, RentalAgreementCancel,
+    RentalBookingRequestWalkInCreate, RentalBookingRequestDecision,
+    RentalBookingRequestCancel, RentalBookingRequestResponse,
+    RentalHandoverComplete,
     RentalScheduleGenerate, RentalPaymentCreate, RentalPaymentResponse,
     RentalPaymentDecision, RentalDepositTransactionCreate,
     RentalExitRequestCreate, RentalExitDecision, RentalInspectionCreate,
     RentalSettlementCalculate, RentalSettlementResponse, RentalRefundCreate,
     RentalInspectionAcknowledge, RentalAgreementWalkInSignature,
     RentalRenewalCreate, RentalRenewalDecision, RentalSettlementCollectionCreate,
+)
+from app.services.real_estate_lifecycle import (
+    _release_property_if_uncommitted,
+    calculate_rental_arrears,
+    expire_single_rental_booking_request,
+    generate_rental_schedule_rows,
+    get_setting_int,
+    has_conflicting_property_commitment,
+    release_expired_holds_for_property,
+    rental_agreement_verified_payments,
+    utcnow,
 )
 from app.services.audit_service import log_audit
 from app.services.customer_portal_notifications import notify_customer
@@ -140,59 +157,507 @@ def sync_schedule(db: Session, tenant_id: UUID, row: RentalPaymentSchedule) -> N
 
 
 def generate_schedule_rows(db: Session, agreement: RentalAgreement, through_date: date, start_from: date | None = None) -> int:
-    """Generate recurring rent and maintenance charges without duplicating periods."""
-    existing = db.query(RentalPaymentSchedule).filter(
-        RentalPaymentSchedule.tenant_id == agreement.tenant_id,
-        RentalPaymentSchedule.agreement_id == agreement.id,
-    ).all()
-    existing_keys = {(x.charge_type, x.period_start, x.period_end) for x in existing}
-    sequence = max((x.sequence for x in existing), default=0)
-    base_start = start_from or agreement.agreement_start
-    created = 0
+    return generate_rental_schedule_rows(db, agreement, through_date, start_from=start_from)
 
-    charge_specs = [("Rent", money(agreement.rent_amount), agreement.rent_frequency)]
-    if money(agreement.maintenance_amount) > ZERO:
-        charge_specs.append(("Maintenance", money(agreement.maintenance_amount), agreement.maintenance_frequency))
 
-    for charge_type, base_amount, frequency in charge_specs:
-        step = period_months(frequency)
-        cursor = base_start
-        while cursor <= through_date:
-            next_start = add_months(cursor, step)
-            period_end = next_start - timedelta(days=1)
-            if agreement.agreement_end and period_end > agreement.agreement_end:
-                period_end = agreement.agreement_end
-            if period_end < cursor:
-                break
-            key = (charge_type, cursor, period_end)
-            if key not in existing_keys:
-                sequence += 1
-                amount = base_amount
-                if charge_type == "Rent" and agreement.escalation_percentage is not None and agreement.escalation_interval_months:
-                    escalation_anchor = agreement.escalation_base_date or agreement.agreement_start
-                    months_elapsed = max(0, (cursor.year - escalation_anchor.year) * 12 + cursor.month - escalation_anchor.month)
-                    escalations = months_elapsed // agreement.escalation_interval_months
-                    for _ in range(escalations):
-                        amount = money(amount * (Decimal("1") + money(agreement.escalation_percentage) / Decimal("100")))
-                due_day = min(agreement.due_day, calendar.monthrange(cursor.year, cursor.month)[1])
-                due = date(cursor.year, cursor.month, due_day)
-                if due < cursor:
-                    due = cursor
-                db.add(RentalPaymentSchedule(
-                    tenant_id=agreement.tenant_id,
-                    agreement_id=agreement.id,
-                    sequence=sequence,
-                    charge_type=charge_type,
-                    period_start=cursor,
-                    period_end=period_end,
-                    due_date=due,
-                    amount=amount,
-                    status="Pending",
-                ))
-                existing_keys.add(key)
-                created += 1
-            cursor = next_start
-    return created
+def _resolve_duration_and_end_date(
+    booking_type: str,
+    start_date: date,
+    end_date: date | None,
+    duration_months: int | None,
+    prop: Property,
+) -> tuple[date | None, int | None]:
+    if end_date is None and duration_months is not None:
+        end_date = add_months(start_date, duration_months) - timedelta(days=1)
+    elif end_date is not None and duration_months is None:
+        duration_months = max(1, (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + (1 if end_date.day >= start_date.day else 0))
+
+    if booking_type == "Lease" and end_date is None:
+        raise HTTPException(400, "Lease bookings require a fixed duration_months or desired_end_date.")
+    if end_date is not None and end_date < start_date:
+        raise HTTPException(400, "End date cannot be before start date.")
+    if duration_months is not None:
+        if prop.minimum_term_months is not None and duration_months < prop.minimum_term_months:
+            raise HTTPException(400, f"Duration ({duration_months} months) is shorter than the property minimum term ({prop.minimum_term_months} months).")
+        if prop.maximum_term_months is not None and duration_months > prop.maximum_term_months:
+            raise HTTPException(400, f"Duration ({duration_months} months) exceeds the property maximum term ({prop.maximum_term_months} months).")
+    return end_date, duration_months
+
+
+# ---------------------------------------------------------------------------
+# Staff Rent & Lease Booking Requests (Walk-in & Portal Review)
+# ---------------------------------------------------------------------------
+
+@router.post("/booking-requests", response_model=RentalBookingRequestResponse, status_code=201,
+             dependencies=[Depends(require_permission("booking.create"))])
+def staff_create_rental_booking_request(
+    payload: RentalBookingRequestWalkInCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
+    """Create a staff-managed walk-in Rent or Lease booking request with an immediate temporary property hold."""
+    tenant_id, user_id = identity(user)
+    now = utcnow()
+    try:
+        prop = db.query(Property).filter(Property.id == payload.property_id, Property.tenant_id == tenant_id).with_for_update().first()
+        if not prop:
+            raise HTTPException(404, "Property not found in this tenant.")
+        if prop.listing_type not in ("Rent", "Lease"):
+            raise HTTPException(400, "Only Rent or Lease properties can receive rental/lease booking requests.")
+        booking_type = payload.booking_type or prop.listing_type
+        if prop.listing_type != booking_type:
+            raise HTTPException(400, f"A {booking_type} booking request requires a {booking_type} property listing.")
+
+        release_expired_holds_for_property(db, tenant_id, prop.id, now=now)
+        db.refresh(prop)
+
+        offer_hold_valid = (
+            prop.status == "Reserved"
+            and payload.accepted_offer_id is not None
+            and prop.offer_hold_expires_at is not None
+            and prop.offer_hold_expires_at > now
+        )
+        if prop.status != "Available" and not offer_hold_valid:
+            raise HTTPException(409, "Property is not available for a new rental/lease booking request.")
+        if has_conflicting_property_commitment(db, tenant_id, prop.id, now=now, exclude_offer_id=payload.accepted_offer_id):
+            raise HTTPException(409, "Property already has an active hold, booking, or rental/lease commitment.")
+
+        end_date, duration_months = _resolve_duration_and_end_date(
+            booking_type, payload.desired_start_date, payload.desired_end_date, payload.duration_months, prop
+        )
+        if duration_months is not None and payload.lock_in_months > duration_months:
+            raise HTTPException(400, "Lock-in period cannot exceed the booking duration.")
+
+        lead_id = payload.lead_id
+        contact_id = payload.contact_id
+        account_id = payload.account_id
+        req_id = payload.buyer_requirement_id
+        match_id = payload.property_match_id
+
+        if match_id:
+            match = db.query(PropertyMatch).filter(
+                PropertyMatch.id == match_id, PropertyMatch.tenant_id == tenant_id, PropertyMatch.property_id == prop.id
+            ).first()
+            if not match:
+                raise HTTPException(400, "Property match does not link this property in this tenant.")
+            if req_id and match.buyer_requirement_id != req_id:
+                raise HTTPException(400, "Property match belongs to a different buyer requirement.")
+            req_id = req_id or match.buyer_requirement_id
+
+        if req_id:
+            req_row = db.query(BuyerRequirement).filter(BuyerRequirement.id == req_id, BuyerRequirement.tenant_id == tenant_id).first()
+            if not req_row:
+                raise HTTPException(400, "Buyer requirement not found in this tenant.")
+            if req_row.requirement_type != booking_type:
+                raise HTTPException(400, "Buyer requirement transaction type does not match the booking type.")
+            if req_row.lead_id:
+                if lead_id and lead_id != req_row.lead_id:
+                    raise HTTPException(400, "Buyer requirement belongs to a different lead.")
+                lead_id = req_row.lead_id
+            if req_row.contact_id:
+                if contact_id and contact_id != req_row.contact_id:
+                    raise HTTPException(400, "Buyer requirement belongs to a different contact.")
+                contact_id = req_row.contact_id
+
+        if lead_id and not db.query(Lead.id).filter(Lead.id == lead_id, Lead.tenant_id == tenant_id).first():
+            raise HTTPException(400, "Lead does not belong to this tenant.")
+        if contact_id:
+            contact = db.query(Contact).filter(Contact.id == contact_id, Contact.tenant_id == tenant_id).first()
+            if not contact:
+                raise HTTPException(400, "Contact does not belong to this tenant.")
+            account_id = account_id or contact.account_id
+        if account_id and not db.query(Account.id).filter(Account.id == account_id, Account.tenant_id == tenant_id).first():
+            raise HTTPException(400, "Account does not belong to this tenant.")
+
+        if payload.accepted_offer_id:
+            offer = db.query(PropertyOffer).filter(
+                PropertyOffer.id == payload.accepted_offer_id,
+                PropertyOffer.tenant_id == tenant_id,
+                PropertyOffer.status == "Accepted",
+            ).first()
+            if not offer:
+                raise HTTPException(400, "Accepted offer not found in this tenant.")
+            if offer.expires_at and offer.expires_at <= now:
+                raise HTTPException(409, "Accepted offer has expired.")
+
+        hold_hours = payload.hold_hours or get_setting_int("RENTAL_BOOKING_HOLD_HOURS", 48)
+        row = RentalBookingRequest(
+            tenant_id=tenant_id,
+            property_id=prop.id,
+            booking_type=booking_type,
+            channel="Walk-in",
+            portal_user_id=None,
+            contact_id=contact_id,
+            account_id=account_id,
+            lead_id=lead_id,
+            buyer_requirement_id=req_id,
+            property_match_id=match_id,
+            accepted_offer_id=payload.accepted_offer_id,
+            customer_name=payload.customer_name.strip(),
+            customer_email=payload.customer_email,
+            customer_phone=payload.customer_phone,
+            proposed_rent_amount=payload.proposed_rent_amount,
+            rent_frequency=prop.price_frequency or "Monthly",
+            proposed_deposit_amount=payload.proposed_deposit_amount,
+            maintenance_amount=payload.maintenance_amount,
+            maintenance_frequency=payload.maintenance_frequency,
+            desired_start_date=payload.desired_start_date,
+            desired_end_date=end_date,
+            duration_months=duration_months,
+            lock_in_months=payload.lock_in_months,
+            notice_period_days=payload.notice_period_days,
+            due_day=payload.due_day,
+            late_fee_type=payload.late_fee_type,
+            late_fee_amount=payload.late_fee_amount,
+            late_fee_grace_days=payload.late_fee_grace_days,
+            status="Requested",
+            hold_created_at=now,
+            hold_expires_at=now + timedelta(hours=hold_hours),
+            terms_notes=payload.terms_notes,
+            staff_notes=payload.staff_notes,
+            created_by=user_id,
+        )
+        prop_before = {"id": str(prop.id), "status": prop.status}
+        prop.status = "Reserved"
+        prop.updated_at = now
+        db.add(row)
+        db.flush()
+        log_audit(db, tenant_id, user_id, "CREATE", "rental_booking_requests", row.id,
+                  f"Created walk-in {booking_type} booking request with temporary property hold.",
+                  after_data={"booking_type": booking_type, "channel": "Walk-in", "status": row.status, "hold_expires_at": row.hold_expires_at.isoformat()})
+        log_audit(db, tenant_id, user_id, "UPDATE", "properties", prop.id,
+                  f"Reserved property for {booking_type} booking request {row.id}.",
+                  before_data=prop_before, after_data={"id": str(prop.id), "status": prop.status})
+        db.commit()
+        db.refresh(row)
+        return row
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "An active rental/lease booking request already exists for this property.")
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.get("/booking-requests", response_model=list[RentalBookingRequestResponse],
+            dependencies=[Depends(require_permission("booking.view"))])
+def staff_list_rental_booking_requests(
+    status_filter: str | None = Query(default=None, alias="status"),
+    booking_type: str | None = None,
+    channel: str | None = None,
+    property_id: UUID | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
+    tenant_id, _ = identity(user)
+    q = db.query(RentalBookingRequest).filter(RentalBookingRequest.tenant_id == tenant_id)
+    if status_filter:
+        q = q.filter(RentalBookingRequest.status == status_filter)
+    if booking_type:
+        q = q.filter(RentalBookingRequest.booking_type == booking_type)
+    if channel:
+        q = q.filter(RentalBookingRequest.channel == channel)
+    if property_id:
+        q = q.filter(RentalBookingRequest.property_id == property_id)
+    rows = q.order_by(RentalBookingRequest.created_at.desc()).all()
+    changed = False
+    for row in rows:
+        if expire_single_rental_booking_request(db, row):
+            changed = True
+    if changed:
+        db.commit()
+    return rows
+
+
+@router.get("/booking-requests/{request_id}", response_model=RentalBookingRequestResponse,
+            dependencies=[Depends(require_permission("booking.view"))])
+def staff_get_rental_booking_request(
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
+    tenant_id, _ = identity(user)
+    row = db.query(RentalBookingRequest).filter(
+        RentalBookingRequest.id == request_id, RentalBookingRequest.tenant_id == tenant_id
+    ).first()
+    if not row:
+        raise HTTPException(404, "Rental/lease booking request not found.")
+    if expire_single_rental_booking_request(db, row):
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+@router.post("/booking-requests/{request_id}/decision", response_model=RentalBookingRequestResponse,
+             dependencies=[Depends(require_permission("booking.update"))])
+def staff_decide_rental_booking_request(
+    request_id: UUID,
+    payload: RentalBookingRequestDecision,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
+    """Approve (recording commercial terms & transitioning hold) or Reject (releasing hold) a Rent/Lease booking request."""
+    tenant_id, user_id = identity(user)
+    now = utcnow()
+    try:
+        row = db.query(RentalBookingRequest).filter(
+            RentalBookingRequest.id == request_id, RentalBookingRequest.tenant_id == tenant_id
+        ).with_for_update().first()
+        if not row:
+            raise HTTPException(404, "Rental/lease booking request not found.")
+        if expire_single_rental_booking_request(db, row, now=now):
+            db.commit()
+            raise HTTPException(409, f"Booking request hold has expired (status: {row.status}).")
+        if row.status != "Requested":
+            raise HTTPException(409, f"Cannot decide booking request in status {row.status}.")
+
+        prop = db.query(Property).filter(Property.id == row.property_id, Property.tenant_id == tenant_id).with_for_update().first()
+        if not prop:
+            raise HTTPException(404, "Property not found.")
+
+        row.reviewed_by = user_id
+        row.reviewed_at = now
+        if payload.staff_notes is not None:
+            row.staff_notes = payload.staff_notes
+
+        if payload.decision == "Reject":
+            row.status = "Rejected"
+            row.rejection_reason = payload.rejection_reason or payload.staff_notes
+            row.hold_expires_at = None
+            row.updated_at = now
+            released = _release_property_if_uncommitted(
+                db, tenant_id, row.property_id, now=now, exclude_rental_request_id=row.id
+            )
+            if row.portal_user_id:
+                notify_customer(
+                    db, tenant_id, row.portal_user_id,
+                    f"{row.booking_type} booking request declined",
+                    row.rejection_reason or f"Your {row.booking_type.lower()} booking request was declined by the property team.",
+                    "rental_booking_request", "rental_booking_requests", row.id,
+                )
+            log_audit(db, tenant_id, user_id, "UPDATE", "rental_booking_requests", row.id,
+                      f"Rejected {row.booking_type} booking request and released hold.",
+                      after_data={"status": row.status, "property_released": released})
+            db.commit()
+            db.refresh(row)
+            return row
+
+        # Approve
+        if has_conflicting_property_commitment(db, tenant_id, prop.id, now=now, exclude_rental_request_id=row.id, exclude_offer_id=row.accepted_offer_id):
+            raise HTTPException(409, "Property has a conflicting active booking or agreement.")
+
+        start_date = payload.desired_start_date or row.desired_start_date
+        end_date = payload.desired_end_date if payload.desired_end_date is not None else row.desired_end_date
+        dur = payload.duration_months if payload.duration_months is not None else row.duration_months
+        end_date, dur = _resolve_duration_and_end_date(row.booking_type, start_date, end_date, dur, prop)
+        lock_in = payload.lock_in_months if payload.lock_in_months is not None else row.lock_in_months
+        if dur is not None and lock_in > dur:
+            raise HTTPException(400, "Lock-in period cannot exceed the approved duration.")
+
+        row.approved_rent_amount = payload.approved_rent_amount or row.proposed_rent_amount
+        row.approved_deposit_amount = payload.approved_deposit_amount if payload.approved_deposit_amount is not None else row.proposed_deposit_amount
+        if payload.maintenance_amount is not None:
+            row.maintenance_amount = payload.maintenance_amount
+        if payload.maintenance_frequency is not None:
+            row.maintenance_frequency = payload.maintenance_frequency
+        row.desired_start_date = start_date
+        row.desired_end_date = end_date
+        row.duration_months = dur
+        row.lock_in_months = lock_in
+        if payload.notice_period_days is not None:
+            row.notice_period_days = payload.notice_period_days
+        if payload.due_day is not None:
+            row.due_day = payload.due_day
+        if payload.late_fee_type is not None:
+            row.late_fee_type = payload.late_fee_type
+        if payload.late_fee_amount is not None:
+            row.late_fee_amount = payload.late_fee_amount
+        if payload.late_fee_grace_days is not None:
+            row.late_fee_grace_days = payload.late_fee_grace_days
+        if payload.terms_notes is not None:
+            row.terms_notes = payload.terms_notes
+
+        hold_hours = payload.hold_hours or get_setting_int("RENTAL_BOOKING_HOLD_HOURS", 48)
+        row.status = "Approved"
+        row.hold_created_at = row.hold_created_at or now
+        row.hold_expires_at = now + timedelta(hours=hold_hours)
+        row.updated_at = now
+        prop.status = "Reserved"
+        prop.updated_at = now
+
+        if row.portal_user_id:
+            notify_customer(
+                db, tenant_id, row.portal_user_id,
+                f"{row.booking_type} booking request approved",
+                f"Your {row.booking_type.lower()} request was approved at {row.approved_rent_amount} ({row.rent_frequency.lower()}) with deposit {row.approved_deposit_amount}. The team will now prepare your agreement.",
+                "rental_booking_request", "rental_booking_requests", row.id,
+            )
+        log_audit(db, tenant_id, user_id, "UPDATE", "rental_booking_requests", row.id,
+                  f"Approved {row.booking_type} booking request.",
+                  after_data={"status": row.status, "approved_rent_amount": str(row.approved_rent_amount), "approved_deposit_amount": str(row.approved_deposit_amount), "hold_expires_at": row.hold_expires_at.isoformat()})
+        db.commit()
+        db.refresh(row)
+        return row
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/booking-requests/{request_id}/create-agreement", response_model=RentalAgreementResponse, status_code=201,
+             dependencies=[Depends(require_permission("booking.create"))])
+def staff_create_agreement_from_booking_request(
+    request_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
+    """Create a RentalAgreement directly from an Approved Rent/Lease booking request."""
+    tenant_id, user_id = identity(user)
+    now = utcnow()
+    try:
+        req = db.query(RentalBookingRequest).filter(
+            RentalBookingRequest.id == request_id, RentalBookingRequest.tenant_id == tenant_id
+        ).with_for_update().first()
+        if not req:
+            raise HTTPException(404, "Rental/lease booking request not found.")
+        if expire_single_rental_booking_request(db, req, now=now):
+            db.commit()
+            raise HTTPException(409, f"Booking request hold has expired (status: {req.status}).")
+        if req.status != "Approved":
+            raise HTTPException(409, f"Agreement can be created only from an Approved booking request (current: {req.status}).")
+        if req.rental_agreement_id:
+            raise HTTPException(409, "An agreement has already been created for this booking request.")
+
+        prop = db.query(Property).filter(Property.id == req.property_id, Property.tenant_id == tenant_id).with_for_update().first()
+        if not prop:
+            raise HTTPException(404, "Property not found.")
+        if has_conflicting_property_commitment(db, tenant_id, prop.id, now=now, exclude_rental_request_id=req.id, exclude_offer_id=req.accepted_offer_id):
+            raise HTTPException(409, "Property has a conflicting active commitment.")
+
+        agreement = RentalAgreement(
+            tenant_id=tenant_id,
+            property_id=req.property_id,
+            lead_id=req.lead_id,
+            contact_id=req.contact_id,
+            buyer_requirement_id=req.buyer_requirement_id,
+            property_match_id=req.property_match_id,
+            accepted_offer_id=req.accepted_offer_id,
+            agreement_type=req.booking_type,
+            status="Draft",
+            customer_name=req.customer_name,
+            customer_email=req.customer_email,
+            customer_phone=req.customer_phone,
+            rent_amount=req.approved_rent_amount or req.proposed_rent_amount,
+            rent_frequency=req.rent_frequency,
+            deposit_amount=req.approved_deposit_amount if req.approved_deposit_amount is not None else req.proposed_deposit_amount,
+            maintenance_amount=req.maintenance_amount,
+            maintenance_frequency=req.maintenance_frequency,
+            agreement_start=req.desired_start_date,
+            agreement_end=req.desired_end_date,
+            lock_in_months=req.lock_in_months,
+            notice_period_days=req.notice_period_days,
+            due_day=req.due_day,
+            late_fee_type=req.late_fee_type,
+            late_fee_amount=req.late_fee_amount,
+            late_fee_grace_days=req.late_fee_grace_days,
+            escalation_base_date=req.desired_start_date,
+            notes=req.terms_notes or req.staff_notes,
+            created_by=user_id,
+        )
+        db.add(agreement)
+        db.flush()
+
+        req.rental_agreement_id = agreement.id
+        req.status = "Agreement Created"
+        req.updated_at = now
+        log_audit(db, tenant_id, user_id, "CREATE", "rental_agreements", agreement.id,
+                  f"Created {agreement.agreement_type} agreement from booking request {req.id}.",
+                  after_data={"booking_request_id": str(req.id), "agreement_type": agreement.agreement_type, "rent_amount": str(agreement.rent_amount)})
+        db.commit()
+        db.refresh(agreement)
+        return agreement
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "A conflicting draft or active rental agreement already exists for this property.")
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/booking-requests/{request_id}/cancel", response_model=RentalBookingRequestResponse,
+             dependencies=[Depends(require_permission("booking.update"))])
+def staff_cancel_rental_booking_request(
+    request_id: UUID,
+    payload: RentalBookingRequestCancel,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
+    """Cancel a Rent/Lease booking request safely and release the property hold if no verified funds remain."""
+    tenant_id, user_id = identity(user)
+    now = utcnow()
+    try:
+        row = db.query(RentalBookingRequest).filter(
+            RentalBookingRequest.id == request_id, RentalBookingRequest.tenant_id == tenant_id
+        ).with_for_update().first()
+        if not row:
+            raise HTTPException(404, "Rental/lease booking request not found.")
+        if row.status in ("Activated", "Rejected", "Cancelled", "Expired"):
+            raise HTTPException(409, f"Booking request in status {row.status} cannot be cancelled.")
+
+        if row.rental_agreement_id:
+            agreement = db.query(RentalAgreement).filter(
+                RentalAgreement.id == row.rental_agreement_id, RentalAgreement.tenant_id == tenant_id
+            ).with_for_update().first()
+            if agreement:
+                if agreement.status in ("Active", "Termination Requested", "Completed"):
+                    raise HTTPException(409, "Cannot cancel a booking request whose agreement is already active.")
+                verified = rental_agreement_verified_payments(db, tenant_id, agreement.id)
+                if verified > ZERO:
+                    raise HTTPException(409, f"Verified payments ({verified:.2f}) exist on the linked agreement. Refund or resolve them before cancelling.")
+                if agreement.status in ("Draft", "Pending Signature"):
+                    agreement.status = "Cancelled"
+                    agreement.notes = ((agreement.notes or "") + f"\nCancelled via booking request: {payload.reason.strip()}").strip()
+                for p in db.query(RentalPayment).filter(
+                    RentalPayment.tenant_id == tenant_id,
+                    RentalPayment.agreement_id == agreement.id,
+                    RentalPayment.status.in_(("Pending", "Under Verification")),
+                ).with_for_update().all():
+                    p.status = "Rejected"
+
+        row.status = "Cancelled"
+        row.cancellation_reason = payload.reason.strip()
+        row.hold_expires_at = None
+        row.updated_at = now
+        released = _release_property_if_uncommitted(
+            db, tenant_id, row.property_id, now=now, exclude_rental_request_id=row.id
+        )
+        if row.portal_user_id:
+            notify_customer(
+                db, tenant_id, row.portal_user_id,
+                f"{row.booking_type} booking request cancelled",
+                f"Your {row.booking_type.lower()} booking request was cancelled. Reason: {row.cancellation_reason}",
+                "rental_booking_request", "rental_booking_requests", row.id,
+            )
+        log_audit(db, tenant_id, user_id, "CANCEL", "rental_booking_requests", row.id,
+                  f"Staff cancelled {row.booking_type} booking request.",
+                  after_data={"status": row.status, "property_released": released, "reason": row.cancellation_reason})
+        db.commit()
+        db.refresh(row)
+        return row
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/agreements", response_model=RentalAgreementResponse, status_code=201,
@@ -206,23 +671,27 @@ def create_rental_agreement(payload: RentalAgreementCreate, db: Session = Depend
         raise HTTPException(400, f"A {payload.agreement_type} agreement requires a {payload.agreement_type} property listing.")
     if prop.price_frequency != payload.rent_frequency:
         raise HTTPException(400, "Agreement payment frequency must match the property's listed price frequency.")
+    now = utcnow()
+    if payload.agreement_type == "Lease" and payload.agreement_end is None:
+        raise HTTPException(400, "A Lease agreement requires a fixed agreement_end date.")
     if payload.agreement_end:
         duration_months = max(0, (payload.agreement_end.year - payload.agreement_start.year) * 12 + payload.agreement_end.month - payload.agreement_start.month)
         if prop.minimum_term_months is not None and duration_months < prop.minimum_term_months:
             raise HTTPException(400, "Agreement duration is shorter than the property's minimum term.")
         if prop.maximum_term_months is not None and duration_months > prop.maximum_term_months:
             raise HTTPException(400, "Agreement duration exceeds the property's maximum term.")
-    if prop.offer_hold_expires_at and prop.offer_hold_expires_at <= datetime.utcnow():
-        prop.status = "Available"
-        prop.offer_hold_expires_at = None
+    release_expired_holds_for_property(db, tenant_id, prop.id, now=now)
+    db.refresh(prop)
     offer_hold_valid = (
         prop.status == "Reserved"
         and payload.accepted_offer_id is not None
         and prop.offer_hold_expires_at is not None
-        and prop.offer_hold_expires_at > datetime.utcnow()
+        and prop.offer_hold_expires_at > now
     )
     if prop.status != "Available" and not offer_hold_valid:
         raise HTTPException(409, "Only an Available property or a property held for this accepted offer can receive a rental agreement.")
+    if has_conflicting_property_commitment(db, tenant_id, prop.id, now=now, exclude_offer_id=payload.accepted_offer_id):
+        raise HTTPException(409, "Property already has an active hold, booking, or rental/lease commitment.")
     existing_draft = db.query(RentalAgreement.id).filter(
         RentalAgreement.tenant_id == tenant_id,
         RentalAgreement.property_id == prop.id,
@@ -230,53 +699,74 @@ def create_rental_agreement(payload: RentalAgreementCreate, db: Session = Depend
     ).first()
     if existing_draft:
         raise HTTPException(409, "A Draft rental/lease agreement already exists for this property. Edit or cancel it before creating another.")
-    if payload.lead_id and not db.query(Lead.id).filter(Lead.id == payload.lead_id, Lead.tenant_id == tenant_id).first():
-        raise HTTPException(400, "Lead does not belong to this tenant.")
-    if payload.contact_id and not db.query(Contact.id).filter(Contact.id == payload.contact_id, Contact.tenant_id == tenant_id).first():
-        raise HTTPException(400, "Contact does not belong to this tenant.")
-    if payload.buyer_requirement_id:
-        linked_requirement = db.query(BuyerRequirement).filter(BuyerRequirement.id == payload.buyer_requirement_id, BuyerRequirement.tenant_id == tenant_id).first()
-        if linked_requirement and payload.contact_id and linked_requirement.contact_id not in (None, payload.contact_id):
-            raise HTTPException(400, "Buyer requirement belongs to a different contact.")
-        if linked_requirement and payload.lead_id and linked_requirement.lead_id not in (None, payload.lead_id):
-            raise HTTPException(400, "Buyer requirement belongs to a different lead.")
-        # Customer Portal rental records are owned by the authenticated Contact.
-        # Carry the requirement's contact onto the agreement even when staff
-        # selected the lead-based workflow in the agreement form.
-        if linked_requirement and not payload.contact_id and linked_requirement.contact_id:
-            payload.contact_id = linked_requirement.contact_id
-    if payload.buyer_requirement_id:
-        req = db.query(BuyerRequirement).filter(BuyerRequirement.id == payload.buyer_requirement_id, BuyerRequirement.tenant_id == tenant_id).first()
-        if not req:
-            raise HTTPException(400, "Buyer requirement does not belong to this tenant.")
-        expected = "Buy" if payload.agreement_type == "Sale" else payload.agreement_type
-        if req.requirement_type != expected:
-            raise HTTPException(400, "Buyer requirement transaction type does not match the agreement.")
-    if payload.property_match_id:
-        match = db.query(PropertyMatch).filter(PropertyMatch.id == payload.property_match_id, PropertyMatch.tenant_id == tenant_id, PropertyMatch.property_id == prop.id).first()
+
+    resolved_lead_id = payload.lead_id
+    resolved_contact_id = payload.contact_id
+    resolved_req_id = payload.buyer_requirement_id
+    resolved_match_id = payload.property_match_id
+
+    if resolved_match_id:
+        match = db.query(PropertyMatch).filter(
+            PropertyMatch.id == resolved_match_id,
+            PropertyMatch.tenant_id == tenant_id,
+            PropertyMatch.property_id == prop.id,
+        ).first()
         if not match:
             raise HTTPException(400, "Property match does not link this property in this tenant.")
-        if payload.buyer_requirement_id and match.buyer_requirement_id != payload.buyer_requirement_id:
+        if resolved_req_id and match.buyer_requirement_id != resolved_req_id:
             raise HTTPException(400, "Property match belongs to a different buyer requirement.")
+        resolved_req_id = resolved_req_id or match.buyer_requirement_id
+
+    if resolved_req_id:
+        linked_requirement = db.query(BuyerRequirement).filter(
+            BuyerRequirement.id == resolved_req_id,
+            BuyerRequirement.tenant_id == tenant_id,
+        ).first()
+        if not linked_requirement:
+            raise HTTPException(400, "Buyer requirement does not belong to this tenant.")
+        expected = "Buy" if payload.agreement_type == "Sale" else payload.agreement_type
+        if linked_requirement.requirement_type != expected:
+            raise HTTPException(400, "Buyer requirement transaction type does not match the agreement.")
+        if linked_requirement.contact_id is not None:
+            if resolved_contact_id is not None and resolved_contact_id != linked_requirement.contact_id:
+                raise HTTPException(400, "Buyer requirement belongs to a different contact.")
+            resolved_contact_id = linked_requirement.contact_id
+        if linked_requirement.lead_id is not None:
+            if resolved_lead_id is not None and resolved_lead_id != linked_requirement.lead_id:
+                raise HTTPException(400, "Buyer requirement belongs to a different lead.")
+            resolved_lead_id = linked_requirement.lead_id
+
+    if resolved_lead_id is None and resolved_contact_id is None:
+        raise HTTPException(400, "A rental agreement must be linked to a valid Lead or Contact.")
+    if resolved_lead_id and not db.query(Lead.id).filter(Lead.id == resolved_lead_id, Lead.tenant_id == tenant_id).first():
+        raise HTTPException(400, "Lead does not belong to this tenant.")
+    if resolved_contact_id and not db.query(Contact.id).filter(Contact.id == resolved_contact_id, Contact.tenant_id == tenant_id).first():
+        raise HTTPException(400, "Contact does not belong to this tenant.")
+
     if payload.accepted_offer_id:
         offer = db.query(PropertyOffer).filter(PropertyOffer.id == payload.accepted_offer_id, PropertyOffer.tenant_id == tenant_id, PropertyOffer.status == "Accepted").first()
-        if not offer or (payload.property_match_id and offer.property_match_id != payload.property_match_id):
+        if not offer or (resolved_match_id and offer.property_match_id != resolved_match_id):
             raise HTTPException(400, "Accepted offer does not match this rental agreement.")
-        if offer.expires_at and offer.expires_at <= datetime.utcnow():
+        if offer.expires_at and offer.expires_at <= now:
             raise HTTPException(409, "The accepted offer has expired.")
-        if offer.hold_expires_at and offer.hold_expires_at <= datetime.utcnow():
+        if offer.hold_expires_at and offer.hold_expires_at <= now:
             raise HTTPException(409, "The accepted offer's property hold has expired.")
         if prop.status == "Reserved" and (
             not offer.hold_expires_at or offer.hold_expires_at != prop.offer_hold_expires_at
         ):
             raise HTTPException(409, "The property hold does not belong to this accepted offer.")
-        if not payload.property_match_id:
+        if not resolved_match_id:
             raise HTTPException(400, "An accepted offer requires the linked property_match_id.")
         if money(offer.offered_price) != money(payload.rent_amount):
             raise HTTPException(400, "Agreement rent amount must match the accepted offer amount.")
         if offer.price_frequency != prop.price_frequency:
             raise HTTPException(400, "Accepted offer price frequency does not match the property listing.")
+
     agreement_data = payload.model_dump()
+    agreement_data["lead_id"] = resolved_lead_id
+    agreement_data["contact_id"] = resolved_contact_id
+    agreement_data["buyer_requirement_id"] = resolved_req_id
+    agreement_data["property_match_id"] = resolved_match_id
     agreement_data["escalation_base_date"] = payload.agreement_start
     row = RentalAgreement(**agreement_data, tenant_id=tenant_id, created_by=user_id, status="Draft")
     try:
@@ -415,25 +905,97 @@ def activate_rental_agreement(agreement_id: UUID, payload: RentalAgreementActiva
     row.status = "Active"
     row.activated_at = datetime.utcnow()
     row.approved_by = user_id
+    now = utcnow()
     prop = db.query(Property).filter(Property.id == row.property_id, Property.tenant_id == tenant_id).with_for_update().first()
     if not prop:
         raise HTTPException(409, "Property is no longer available.")
+    linked_booking_request = db.query(RentalBookingRequest).filter(
+        RentalBookingRequest.tenant_id == tenant_id,
+        RentalBookingRequest.rental_agreement_id == row.id,
+    ).with_for_update().first()
     if row.accepted_offer_id:
         accepted_offer = db.query(PropertyOffer).filter(
             PropertyOffer.id == row.accepted_offer_id,
             PropertyOffer.tenant_id == tenant_id,
             PropertyOffer.status == "Accepted",
         ).first()
-        if not accepted_offer or (accepted_offer.expires_at and accepted_offer.expires_at <= datetime.utcnow()) or (accepted_offer.hold_expires_at and accepted_offer.hold_expires_at <= datetime.utcnow()):
+        if not accepted_offer or (accepted_offer.expires_at and accepted_offer.expires_at <= now) or (accepted_offer.hold_expires_at and accepted_offer.hold_expires_at <= now):
             raise HTTPException(409, "The accepted offer or its property hold has expired. Obtain a renewed offer before activation.")
-    if prop.status != "Available" and not (
-        prop.status == "Reserved" and prop.offer_hold_expires_at and prop.offer_hold_expires_at > datetime.utcnow()
-    ):
+    held_by_booking_request = (
+        linked_booking_request is not None
+        and linked_booking_request.status in ("Approved", "Agreement Created")
+        and (linked_booking_request.hold_expires_at is None or linked_booking_request.hold_expires_at > now)
+    )
+    held_by_offer = (
+        prop.status == "Reserved"
+        and prop.offer_hold_expires_at is not None
+        and prop.offer_hold_expires_at > now
+    )
+    if prop.status != "Available" and not (prop.status == "Reserved" and (held_by_booking_request or held_by_offer)):
         raise HTTPException(409, "Property is no longer available.")
-    prop.status = "Rented"
-    schedule_through = row.agreement_end or add_months(row.agreement_start, 12)
+    if has_conflicting_property_commitment(
+        db,
+        tenant_id,
+        prop.id,
+        now=now,
+        exclude_rental_request_id=linked_booking_request.id if linked_booking_request else None,
+        exclude_agreement_id=row.id,
+        exclude_offer_id=row.accepted_offer_id,
+    ):
+        raise HTTPException(409, "Property has a conflicting active booking or agreement.")
+
+    # Problem 11: Rent -> Rented, Lease -> Leased
+    target_property_status = "Leased" if row.agreement_type == "Lease" else "Rented"
+    prop_before_status = prop.status
+    prop.status = target_property_status
+    prop.offer_hold_expires_at = None
+    prop.updated_at = now
+
+    if linked_booking_request:
+        linked_booking_request.status = "Activated"
+        linked_booking_request.hold_expires_at = None
+        linked_booking_request.updated_at = now
+
+    # Problem 12: Lead & BuyerRequirement lifecycle on Rent/Lease activation
+    if row.lead_id:
+        lead = db.query(Lead).filter(Lead.id == row.lead_id, Lead.tenant_id == tenant_id).with_for_update().first()
+        if lead:
+            lead_before = lead.status
+            lead.status = target_property_status  # "Rented" or "Leased" (never "Converted", which means Sale)
+            lead.updated_at = now
+            log_audit(db, tenant_id, user_id, "UPDATE", "leads", lead.id,
+                      f"Updated lead status to {lead.status} upon {row.agreement_type.lower()} agreement activation.",
+                      before_data={"status": lead_before}, after_data={"status": lead.status})
+
+    if row.buyer_requirement_id:
+        requirement = db.query(BuyerRequirement).filter(
+            BuyerRequirement.id == row.buyer_requirement_id, BuyerRequirement.tenant_id == tenant_id
+        ).with_for_update().first()
+        if requirement:
+            req_before = requirement.status
+            requirement.status = "Closed"
+            requirement.updated_at = now
+            log_audit(db, tenant_id, user_id, "UPDATE", "buyer_requirements", requirement.id,
+                      f"Closed fulfilled requirement upon {row.agreement_type.lower()} agreement activation.",
+                      before_data={"status": req_before}, after_data={"status": requirement.status})
+
+    if row.property_match_id:
+        match = db.query(PropertyMatch).filter(
+            PropertyMatch.id == row.property_match_id, PropertyMatch.tenant_id == tenant_id
+        ).with_for_update().first()
+        if match:
+            match.status = target_property_status
+            match.updated_at = now
+
+    initial_horizon = get_setting_int("OPEN_ENDED_RENTAL_INITIAL_MONTHS", 12)
+    schedule_through = row.agreement_end or add_months(row.agreement_start, initial_horizon)
     generate_schedule_rows(db, row, schedule_through)
-    log_audit(db, tenant_id, user_id, "UPDATE", "rental_agreements", row.id, "Activated rental agreement", after_data={"status": row.status, "property_status": prop.status, "initial_schedule_through": schedule_through.isoformat()})
+    log_audit(db, tenant_id, user_id, "UPDATE", "properties", prop.id,
+              f"Updated property status to {prop.status} upon {row.agreement_type.lower()} activation.",
+              before_data={"status": prop_before_status}, after_data={"status": prop.status})
+    log_audit(db, tenant_id, user_id, "UPDATE", "rental_agreements", row.id,
+              f"Activated {row.agreement_type.lower()} agreement",
+              after_data={"status": row.status, "property_status": prop.status, "initial_schedule_through": schedule_through.isoformat()})
     try:
         db.commit(); db.refresh(row); return row
     except IntegrityError:
@@ -473,15 +1035,41 @@ def create_rental_payment(agreement_id: UUID, payload: RentalPaymentCreate, db: 
         raise HTTPException(409, "Only a pending-signature agreement can receive its initial deposit; recurring payments require an active agreement.")
     if row.status == "Pending Signature" and payload.payment_type == "Deposit" and not row.customer_signed_at:
         raise HTTPException(409, "The customer must sign the agreement before the initial deposit is recorded.")
+    prop = db.query(Property).filter(Property.id == row.property_id, Property.tenant_id == tenant_id).first()
+    if payload.currency and prop and payload.currency.upper() != (prop.currency or "INR").upper():
+        raise HTTPException(400, f"Payment currency ({payload.currency}) does not match property currency ({prop.currency}).")
+    if payload.payment_type in ("Rent", "Maintenance") and not payload.schedule_id:
+        raise HTTPException(400, f"schedule_id is required for {payload.payment_type} payments.")
+    if payload.transaction_reference and payload.transaction_reference.strip():
+        dup = db.query(RentalPayment.id).filter(
+            RentalPayment.tenant_id == tenant_id,
+            func.lower(RentalPayment.transaction_reference) == payload.transaction_reference.strip().lower(),
+            RentalPayment.status.in_(("Pending", "Under Verification", "Verified")),
+        ).first()
+        if dup:
+            raise HTTPException(409, "A rental payment with this transaction reference already exists.")
     schedule = None
     if payload.schedule_id:
-        schedule = db.query(RentalPaymentSchedule).filter(RentalPaymentSchedule.id == payload.schedule_id, RentalPaymentSchedule.tenant_id == tenant_id, RentalPaymentSchedule.agreement_id == row.id).first()
-        if not schedule: raise HTTPException(404, "Rental payment schedule item not found.")
-        if payload.payment_type != schedule.charge_type: raise HTTPException(400, f"This schedule item accepts {schedule.charge_type} payments only.")
+        schedule = db.query(RentalPaymentSchedule).filter(
+            RentalPaymentSchedule.id == payload.schedule_id,
+            RentalPaymentSchedule.tenant_id == tenant_id,
+            RentalPaymentSchedule.agreement_id == row.id,
+        ).with_for_update().first()
+        if not schedule:
+            raise HTTPException(404, "Rental payment schedule item not found for this agreement.")
+        if schedule.status == "Cancelled":
+            raise HTTPException(409, "Cannot attach a payment to a cancelled schedule item.")
+        if payload.payment_type != schedule.charge_type:
+            raise HTTPException(400, f"This schedule item accepts {schedule.charge_type} payments only.")
         sync_schedule(db, tenant_id, schedule)
-        reserved = money(db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(RentalPayment.tenant_id == tenant_id, RentalPayment.schedule_id == schedule.id, RentalPayment.status.in_(("Pending", "Under Verification", "Verified"))).scalar())
+        reserved = money(db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(
+            RentalPayment.tenant_id == tenant_id,
+            RentalPayment.schedule_id == schedule.id,
+            RentalPayment.status.in_(("Pending", "Under Verification", "Verified")),
+        ).scalar())
         total_due = money(schedule.amount) + money(schedule.late_fee_amount)
-        if money(payload.amount) + reserved > total_due: raise HTTPException(400, f"Payment exceeds the remaining scheduled amount including late fees ({max(ZERO, total_due - reserved)}).")
+        if money(payload.amount) + reserved > total_due:
+            raise HTTPException(400, f"Payment exceeds the remaining scheduled amount including late fees ({max(ZERO, total_due - reserved)}).")
     if payload.payment_type == "Deposit":
         reserved_deposit = money(db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(RentalPayment.tenant_id == tenant_id, RentalPayment.agreement_id == row.id, RentalPayment.payment_type == "Deposit", RentalPayment.status.in_(("Pending", "Under Verification", "Verified"))).scalar())
         if reserved_deposit + money(payload.amount) > money(row.deposit_amount): raise HTTPException(400, "Deposit payment exceeds the agreed security deposit.")
@@ -636,6 +1224,58 @@ def list_rental_inspections(agreement_id: UUID, db: Session = Depends(get_db), u
     ).order_by(RentalInspection.inspected_at.asc()).all()
 
 
+@router.post("/agreements/{agreement_id}/settlement/preview", dependencies=[Depends(require_permission("booking.view"))])
+def preview_rental_settlement(agreement_id: UUID, payload: RentalSettlementCalculate, db: Session = Depends(get_db), user=Depends(require_active_user)):
+    """Read-only settlement preview using the exact same late-fee-inclusive arrears math as final settlement."""
+    tenant_id, _ = identity(user)
+    agreement = get_agreement(db, tenant_id, agreement_id)
+    exit_row = db.query(RentalExitRequest).filter(
+        RentalExitRequest.id == payload.exit_request_id,
+        RentalExitRequest.tenant_id == tenant_id,
+        RentalExitRequest.agreement_id == agreement.id,
+    ).first()
+    if not exit_row:
+        raise HTTPException(404, "Exit request not found for this agreement.")
+    inspection = db.query(RentalInspection).filter(
+        RentalInspection.tenant_id == tenant_id,
+        RentalInspection.agreement_id == agreement.id,
+        RentalInspection.exit_request_id == exit_row.id,
+        RentalInspection.inspection_type == "Move Out",
+    ).order_by(RentalInspection.inspected_at.desc()).first()
+    balance = deposit_balance(db, tenant_id, agreement.id)
+    arrears_data = calculate_rental_arrears(
+        db, tenant_id, agreement, exit_row.requested_vacate_date, persist_late_fees=False
+    )
+    arrears = arrears_data["total_arrears"]
+    damage = money(inspection.damage_amount) if inspection else ZERO
+    early = money(exit_row.early_exit_charge)
+    notice_charge = money(exit_row.notice_shortfall_charge + payload.notice_shortfall_charge)
+    utilities = money(payload.utility_charges)
+    other = money(payload.other_charges)
+    calculation = calculate_deposit_settlement(
+        deposit_balance=balance, rent_arrears=arrears, utility_charges=utilities,
+        damage_charges=damage, early_exit_charge=early,
+        notice_shortfall_charge=notice_charge, other_charges=other,
+    )
+    return {
+        "agreement_id": str(agreement.id),
+        "exit_request_id": str(exit_row.id),
+        "deposit_balance": str(balance),
+        "rent_arrears": str(arrears),
+        "principal_arrears": str(arrears_data["principal_arrears"]),
+        "late_fee_arrears": str(arrears_data["late_fee_arrears"]),
+        "arrears_items": arrears_data["items"],
+        "utility_charges": str(utilities),
+        "damage_charges": str(damage),
+        "early_exit_charge": str(early),
+        "notice_shortfall_charge": str(notice_charge),
+        "other_charges": str(other),
+        "deductions_total": str(calculation["deductions_total"]),
+        "refund_amount": str(calculation["refund_amount"]),
+        "amount_due_from_tenant": str(calculation["amount_due_from_tenant"]),
+    }
+
+
 @router.post("/agreements/{agreement_id}/settlement/calculate", response_model=RentalSettlementResponse, dependencies=[Depends(require_permission("booking.update"))])
 def calculate_rental_settlement(agreement_id: UUID, payload: RentalSettlementCalculate, db: Session = Depends(get_db), user=Depends(require_active_user)):
     tenant_id, user_id = identity(user); agreement = get_agreement(db, tenant_id, agreement_id, lock=True)
@@ -644,9 +1284,10 @@ def calculate_rental_settlement(agreement_id: UUID, payload: RentalSettlementCal
     inspection = db.query(RentalInspection).filter(RentalInspection.tenant_id == tenant_id, RentalInspection.agreement_id == agreement.id, RentalInspection.exit_request_id == exit_row.id, RentalInspection.inspection_type == "Move Out").order_by(RentalInspection.inspected_at.desc()).first()
     if not inspection: raise HTTPException(409, "Move-out inspection is required before settlement.")
     balance = deposit_balance(db, tenant_id, agreement.id)
-    schedules = db.query(RentalPaymentSchedule).filter(RentalPaymentSchedule.tenant_id == tenant_id, RentalPaymentSchedule.agreement_id == agreement.id, RentalPaymentSchedule.due_date <= exit_row.requested_vacate_date, RentalPaymentSchedule.status != "Cancelled").all()
-    arrears = ZERO
-    for item in schedules: arrears += max(ZERO, money(item.amount) - schedule_paid(db, tenant_id, item.id))
+    arrears_data = calculate_rental_arrears(
+        db, tenant_id, agreement, exit_row.requested_vacate_date, persist_late_fees=True
+    )
+    arrears = arrears_data["total_arrears"]
     damage = money(inspection.damage_amount)
     early = money(exit_row.early_exit_charge)
     notice_charge = money(exit_row.notice_shortfall_charge + payload.notice_shortfall_charge)
@@ -659,7 +1300,24 @@ def calculate_rental_settlement(agreement_id: UUID, payload: RentalSettlementCal
     deductions = calculation["deductions_total"]
     refund = calculation["refund_amount"]
     due = calculation["amount_due_from_tenant"]
-    snapshot = {"calculated_at": datetime.utcnow().isoformat(), "exit_date": exit_row.requested_vacate_date.isoformat(), "deposit_ledger_balance": str(balance), "rent_arrears": str(arrears), "damage_charges": str(damage), "early_exit_charge": str(early), "notice_shortfall_charge": str(notice_charge), "utility_charges": str(utilities), "other_charges": str(other), "deductions_total": str(deductions), "refund_amount": str(refund), "amount_due_from_tenant": str(due), "move_out_inspection_id": str(inspection.id)}
+    snapshot = {
+        "calculated_at": utcnow().isoformat(),
+        "exit_date": exit_row.requested_vacate_date.isoformat(),
+        "deposit_ledger_balance": str(balance),
+        "rent_arrears": str(arrears),
+        "principal_arrears": str(arrears_data["principal_arrears"]),
+        "late_fee_arrears": str(arrears_data["late_fee_arrears"]),
+        "arrears_items": arrears_data["items"],
+        "damage_charges": str(damage),
+        "early_exit_charge": str(early),
+        "notice_shortfall_charge": str(notice_charge),
+        "utility_charges": str(utilities),
+        "other_charges": str(other),
+        "deductions_total": str(deductions),
+        "refund_amount": str(refund),
+        "amount_due_from_tenant": str(due),
+        "move_out_inspection_id": str(inspection.id),
+    }
     settlement = db.query(RentalSettlement).filter(RentalSettlement.tenant_id == tenant_id, RentalSettlement.agreement_id == agreement.id).with_for_update().first()
     if settlement and settlement.status not in ("Draft", "Under Review"):
         raise HTTPException(409, "An approved or completed settlement cannot be recalculated.")
@@ -668,7 +1326,7 @@ def calculate_rental_settlement(agreement_id: UUID, payload: RentalSettlementCal
         db.add(settlement)
         db.flush()
     settlement.deposit_balance = balance; settlement.rent_arrears = arrears; settlement.utility_charges = utilities; settlement.damage_charges = damage; settlement.early_exit_charge = early; settlement.notice_shortfall_charge = notice_charge; settlement.other_charges = other; settlement.deductions_total = deductions; settlement.refund_amount = refund; settlement.amount_due_from_tenant = due; settlement.status = "Under Review"; settlement.calculation_snapshot = snapshot; settlement.notes = payload.notes
-    log_audit(db, tenant_id, user_id, "UPDATE", "rental_settlements", settlement.id, "Calculated rental deposit settlement", after_data=snapshot)
+    log_audit(db, tenant_id, user_id, "UPDATE", "rental_settlements", settlement.id, "Calculated rental deposit settlement including late fees", after_data=snapshot)
     db.commit(); db.refresh(settlement); return settlement
 
 
@@ -721,21 +1379,110 @@ def collect_rental_settlement_amount(settlement_id: UUID, payload: RentalSettlem
 
 
 @router.post("/exit-requests/{exit_request_id}/complete-handover", dependencies=[Depends(require_permission("booking.update"))])
-def complete_rental_handover(exit_request_id: UUID, db: Session = Depends(get_db), user=Depends(require_active_user)):
+def complete_rental_handover(
+    exit_request_id: UUID,
+    payload: RentalHandoverComplete | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_active_user),
+):
     tenant_id, user_id = identity(user)
     exit_row = db.query(RentalExitRequest).filter(RentalExitRequest.id == exit_request_id, RentalExitRequest.tenant_id == tenant_id).with_for_update().first()
-    if not exit_row: raise HTTPException(404, "Rental exit request not found.")
-    if exit_row.status != "Settlement Pending": raise HTTPException(409, "Move-out inspection and settlement calculation are required before handover closure.")
+    if not exit_row:
+        raise HTTPException(404, "Rental exit request not found.")
+    if exit_row.status == "Closed":
+        raise HTTPException(409, "Move-out handover has already been completed for this exit request.")
+    if exit_row.status != "Settlement Pending":
+        raise HTTPException(409, "Move-out inspection and settlement calculation are required before handover closure.")
     agreement = get_agreement(db, tenant_id, exit_row.agreement_id, lock=True)
-    settlement = db.query(RentalSettlement).filter(RentalSettlement.tenant_id == tenant_id, RentalSettlement.agreement_id == agreement.id).first()
-    if not settlement or settlement.status not in ("Approved", "Partially Refunded", "Refunded", "Amount Due", "Partially Collected", "Collected"):
-        raise HTTPException(409, "Final settlement must be approved before closing the rental handover.")
+    if agreement.status in ("Terminated", "Completed", "Cancelled"):
+        raise HTTPException(409, "Agreement has already been closed.")
+    settlement = db.query(RentalSettlement).filter(
+        RentalSettlement.tenant_id == tenant_id, RentalSettlement.agreement_id == agreement.id
+    ).with_for_update().first()
+    if not settlement:
+        raise HTTPException(409, "Final settlement must be calculated and resolved before closing the rental handover.")
+
+    # Check unresolved payment verifications on this settlement
+    unverified_settlement_payments = db.query(RentalPayment.id).filter(
+        RentalPayment.tenant_id == tenant_id,
+        RentalPayment.settlement_id == settlement.id,
+        RentalPayment.status.in_(("Pending", "Under Verification")),
+    ).first()
+
+    # Defense-in-depth check on verified collections and posted refunds
+    verified_collected = money(db.query(func.coalesce(func.sum(RentalPayment.amount), 0)).filter(
+        RentalPayment.tenant_id == tenant_id,
+        RentalPayment.settlement_id == settlement.id,
+        RentalPayment.status == "Verified",
+    ).scalar())
+    posted_refunded = money(db.query(func.coalesce(func.sum(RentalDepositTransaction.amount), 0)).filter(
+        RentalDepositTransaction.tenant_id == tenant_id,
+        RentalDepositTransaction.settlement_id == settlement.id,
+        RentalDepositTransaction.direction == "Debit",
+        RentalDepositTransaction.transaction_type == "Refund",
+        RentalDepositTransaction.status == "Posted",
+    ).scalar())
+
+    fully_settled = (
+        settlement.status in ("Refunded", "Collected")
+        and not unverified_settlement_payments
+        and verified_collected >= money(settlement.amount_due_from_tenant)
+        and posted_refunded >= money(settlement.refund_amount)
+    )
+
+    exception_used = False
+    if not fully_settled:
+        if payload and payload.allow_exception:
+            role_names = {
+                name for (name,) in db.query(Role.name)
+                .join(UserRole, UserRole.role_id == Role.id)
+                .filter(UserRole.user_id == user_id)
+                .all()
+            }
+            if not (role_names & {"Platform Super Admin", "Tenant Owner", "Owner", "Tenant Admin", "Admin"}):
+                raise HTTPException(403, "Only a Tenant Owner or Admin can authorize a move-out handover exception with unresolved settlement balances.")
+            if not (payload.exception_reason or "").strip():
+                raise HTTPException(422, "An exception_reason is required when authorizing a handover exception.")
+            exception_used = True
+            exit_row.decision_notes = ((exit_row.decision_notes or "") + f"\nAuthorized handover exception: {payload.exception_reason.strip()}").strip()
+        else:
+            if unverified_settlement_payments:
+                raise HTTPException(409, "Cannot complete move-out handover while settlement payments are awaiting verification.")
+            if settlement.status in ("Amount Due", "Partially Collected") or verified_collected < money(settlement.amount_due_from_tenant):
+                outstanding = max(ZERO, money(settlement.amount_due_from_tenant - verified_collected))
+                raise HTTPException(409, f"Cannot complete move-out handover while outstanding tenant dues ({outstanding:.2f}) remain uncollected/unverified.")
+            if settlement.status in ("Approved", "Partially Refunded") or posted_refunded < money(settlement.refund_amount):
+                remaining_refund = max(ZERO, money(settlement.refund_amount - posted_refunded))
+                raise HTTPException(409, f"Cannot complete move-out handover while required security deposit refund ({remaining_refund:.2f}) is still pending.")
+            raise HTTPException(409, f"Settlement status '{settlement.status}' does not permit final handover completion. Only 'Refunded' or 'Collected' settlements may close.")
+
     prop = db.query(Property).filter(Property.id == agreement.property_id, Property.tenant_id == tenant_id).with_for_update().first()
-    agreement.status = "Terminated"; exit_row.status = "Closed"; exit_row.active_request_key = "CLOSED"
-    if prop: prop.status = "Available"
-    log_audit(db, tenant_id, user_id, "UPDATE", "rental_agreements", agreement.id, "Completed tenant move-out and released property", after_data={"agreement_status": agreement.status, "property_status": prop.status if prop else None, "settlement_status": settlement.status})
+    agreement.status = "Terminated"
+    exit_row.status = "Closed"
+    exit_row.active_request_key = "CLOSED"
+    if prop and prop.status in ("Rented", "Leased", "Reserved"):
+        prop.status = "Available"
+        prop.updated_at = utcnow()
+    log_audit(
+        db, tenant_id, user_id, "UPDATE", "rental_agreements", agreement.id,
+        "Completed tenant move-out with authorized exception and released property" if exception_used else "Completed tenant move-out and released property",
+        after_data={
+            "agreement_status": agreement.status,
+            "property_status": prop.status if prop else None,
+            "settlement_status": settlement.status,
+            "exception_used": exception_used,
+            "exception_reason": payload.exception_reason.strip() if (exception_used and payload and payload.exception_reason) else None,
+        },
+    )
     db.commit()
-    return {"agreement_id": str(agreement.id), "exit_request_id": str(exit_row.id), "agreement_status": agreement.status, "property_status": prop.status if prop else None, "settlement_status": settlement.status}
+    return {
+        "agreement_id": str(agreement.id),
+        "exit_request_id": str(exit_row.id),
+        "agreement_status": agreement.status,
+        "property_status": prop.status if prop else None,
+        "settlement_status": settlement.status,
+        "exception_used": exception_used,
+    }
 
 
 @router.post("/agreements/{agreement_id}/renewals", status_code=201, dependencies=[Depends(require_permission("booking.update"))])

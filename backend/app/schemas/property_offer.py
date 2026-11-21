@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+
 class PropertyOfferCreate(BaseModel):
     property_match_id: UUID
     offered_price: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
@@ -18,6 +19,7 @@ class PropertyOfferCreate(BaseModel):
             if self.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
                 raise ValueError("Offer expiry must be in the future.")
         return self
+
 
 class PropertyOfferResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -41,8 +43,23 @@ class PropertyOfferResponse(BaseModel):
     owner_approved_at: datetime | None = None
     hold_expires_at: datetime | None = None
 
+
 class PropertyOfferDecision(BaseModel):
     decision: Literal["Accepted", "Rejected", "Countered", "Withdrawn"]
     response_notes: str | None = Field(default=None, max_length=5000)
     counter_price: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
     counter_terms: str | None = Field(default=None, max_length=5000)
+
+
+class WalkInOfferResponseIn(BaseModel):
+    """Staff-recorded response from a walk-in customer to a Seller offer or counteroffer."""
+    decision: Literal["Accepted", "Rejected", "Countered"]
+    response_notes: str | None = Field(default=None, max_length=5000)
+    counter_price: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    counter_terms: str | None = Field(default=None, max_length=5000)
+
+    @model_validator(mode="after")
+    def require_counter_price(self):
+        if self.decision == "Countered" and self.counter_price is None:
+            raise ValueError("counter_price is required when recording a walk-in customer counteroffer.")
+        return self

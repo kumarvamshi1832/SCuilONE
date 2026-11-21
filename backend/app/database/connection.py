@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     OLLAMA_MAX_RETRIES: int = 2
     OLLAMA_TEMPERATURE: float = 0.1
 
+    # Configurable real estate booking hold and rolling schedule settings
+    WALKIN_SALE_BOOKING_HOLD_HOURS: int = 48
+    PORTAL_BOOKING_INITIAL_HOLD_HOURS: int = 24
+    PORTAL_BOOKING_APPROVED_HOLD_HOURS: int = 48
+    RENTAL_BOOKING_HOLD_HOURS: int = 48
+    OPEN_ENDED_RENTAL_INITIAL_MONTHS: int = 12
+    OPEN_ENDED_RENTAL_EXTENSION_THRESHOLD_MONTHS: int = 3
+    OPEN_ENDED_RENTAL_EXTENSION_HORIZON_MONTHS: int = 12
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"
@@ -43,14 +52,19 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_size=10,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_recycle=1800,
-    pool_pre_ping=True,
+_engine_kwargs = (
+    {"connect_args": {"check_same_thread": False}}
+    if settings.DATABASE_URL.startswith("sqlite")
+    else {
+        "pool_size": 10,
+        "max_overflow": 10,
+        "pool_timeout": 30,
+        "pool_recycle": 1800,
+        "pool_pre_ping": True,
+    }
 )
+
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(
     autocommit=False,

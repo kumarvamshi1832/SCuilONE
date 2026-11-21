@@ -132,7 +132,7 @@ def validate_unit_number(
         )
 
 
-BOOKING_MANAGED_STATUSES = ("Reserved", "Sold", "Rented")
+BOOKING_MANAGED_STATUSES = ("Reserved", "Sold", "Rented", "Leased")
 
 
 def ensure_status_not_booking_managed(
@@ -446,7 +446,7 @@ def update_property(
         if "listing_type" in changes and changes["listing_type"] != property_record.listing_type:
             active_bookings = db.query(Booking.id).filter(Booking.tenant_id == tenant_id, Booking.property_id == property_record.id, Booking.status.in_(("Pending", "Confirmed"))).first()
             active_rental = db.query(RentalAgreement.id).filter(RentalAgreement.tenant_id == tenant_id, RentalAgreement.property_id == property_record.id, RentalAgreement.status.in_(("Active", "Termination Requested"))).first()
-            if active_bookings or active_rental or property_record.status in ("Reserved", "Sold", "Rented"):
+            if active_bookings or active_rental or property_record.status in ("Reserved", "Sold", "Rented", "Leased"):
                 raise HTTPException(status_code=409, detail="Listing type cannot be changed while the property has an active or completed transaction history. Create a new listing instead.")
         if "listing_type" in changes and "price_frequency" not in changes:
             changes["price_frequency"] = "One-time" if changes["listing_type"] == "Sale" else "Monthly"
