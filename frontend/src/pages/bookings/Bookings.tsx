@@ -103,6 +103,7 @@ export default function Bookings() {
   // Payment Preference for Create Booking
   const [createPaymentPref, setCreatePaymentPref] = useState<PaymentPreference>("Full Payment");
   const [createInstallmentNotes, setCreateInstallmentNotes] = useState("");
+  const [createHoldHours, setCreateHoldHours] = useState<string>("");
 
   // Payments & Refunds inside view modal
   const [bookingPayments, setBookingPayments] = useState<Payment[]>([]);
@@ -553,6 +554,7 @@ export default function Bookings() {
     setFormError(null);
     setCreatePaymentPref("Full Payment");
     setCreateInstallmentNotes("");
+    setCreateHoldHours("");
   };
 
   // Create Booking Submit
@@ -570,6 +572,7 @@ export default function Bookings() {
     const agreed_price = formData.get("agreed_price")
       ? Number(formData.get("agreed_price"))
       : null;
+    const hold_hours = createHoldHours.trim() ? Number(createHoldHours) : null;
     const lead_id = selectedLeadId.trim() ? selectedLeadId.trim() : null;
 
     const payment_preference = createPaymentPref;
@@ -607,6 +610,7 @@ export default function Bookings() {
         payment_preference,
         installment_request_notes,
         agreed_price,
+        hold_hours,
       };
       const created = await createBooking(payload);
       setBookings((prev) => [created, ...prev]);
@@ -1394,6 +1398,21 @@ export default function Bookings() {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
                     <span className={`badge ${badgeClass}`}>{b.status}</span>
+                    {b.hold_expires_at && (
+                      <span
+                        style={{
+                          fontSize: "0.68rem",
+                          fontWeight: 600,
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          background: (new Date(b.hold_expires_at).getTime() < Date.now() || b.expired_at) ? "#fee2e2" : "#fef3c7",
+                          color: (new Date(b.hold_expires_at).getTime() < Date.now() || b.expired_at) ? "#991b1b" : "#92400e",
+                          border: `1px solid ${(new Date(b.hold_expires_at).getTime() < Date.now() || b.expired_at) ? "#fecaca" : "#fde68a"}`
+                        }}
+                      >
+                        {new Date(b.hold_expires_at).getTime() < Date.now() || b.expired_at ? "Hold Expired" : "Hold Active"}
+                      </span>
+                    )}
                     <span
                       className={`badge-payment-pref ${
                         b.payment_preference === "Installments" ? "installments" : "full"
@@ -1571,6 +1590,19 @@ export default function Bookings() {
                     </td>
                     <td>
                       <span className={`badge ${badgeClass}`}>{b.status}</span>
+                      {b.hold_expires_at && (
+                        <div style={{ marginTop: "4px" }}>
+                          {new Date(b.hold_expires_at).getTime() < Date.now() || b.expired_at ? (
+                            <span style={{ fontSize: "0.68rem", color: "#ef4444", fontWeight: 600 }}>
+                              Hold Expired
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: "0.68rem", color: "#d97706", fontWeight: 600 }}>
+                              Hold: {new Date(b.hold_expires_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontSize: "0.85rem" }}>
@@ -1823,6 +1855,33 @@ export default function Bookings() {
                     </div>
                   )}
                 </div>
+
+                {/* ─── Temporary Hold Window Section ─── */}
+                <div className="payment-preferences-section">
+                  <div className="section-title-header">
+                    <h4>Temporary Hold Window (Optional)</h4>
+                    <span className="section-subtitle">
+                      Configure a hold expiry window for this walk-in reservation.
+                    </span>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Hold Duration</label>
+                    <select
+                      value={createHoldHours}
+                      onChange={(e) => setCreateHoldHours(e.target.value)}
+                    >
+                      <option value="">No temporary hold (Standard reservation)</option>
+                      <option value="24">24 Hours (1 Day)</option>
+                      <option value="48">48 Hours (2 Days)</option>
+                      <option value="72">72 Hours (3 Days)</option>
+                      <option value="168">168 Hours (7 Days)</option>
+                    </select>
+                    <span className="field-hint">
+                      Sets an automatic hold expiration timestamp on this booking.
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="modal-footer">
@@ -1945,6 +2004,23 @@ export default function Bookings() {
                     </span>
                   </span>
                 </div>
+                {viewingBooking.hold_expires_at && (
+                  <div className="spec-overview-item">
+                    <span className="spec-label">Temporary Hold</span>
+                    <span className="spec-val">
+                      {new Date(viewingBooking.hold_expires_at).toLocaleString()}
+                      {new Date(viewingBooking.hold_expires_at).getTime() < Date.now() || viewingBooking.expired_at ? (
+                        <span style={{ color: "#ef4444", fontSize: "0.75rem", display: "block", fontWeight: 600 }}>
+                          Hold Expired
+                        </span>
+                      ) : (
+                        <span style={{ color: "#16a34a", fontSize: "0.75rem", display: "block", fontWeight: 600 }}>
+                          Hold Active
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <BookingBuyerSection

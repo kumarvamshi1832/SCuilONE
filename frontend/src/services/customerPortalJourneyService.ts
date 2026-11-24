@@ -193,3 +193,15 @@ export const getBookingFileDownload = async (
   );
   return response.data;
 };
+
+/** POST /api/v1/customer-portal/handovers/{id}/acknowledge - the customer confirms possession. */
+export const acknowledgeHandover = async (
+  handoverId: string,
+  data: { confirm_possession: boolean; notes?: string | null }
+): Promise<PortalHandover> => {
+  const response = await portalApiClient.post<PortalHandover>(
+    `/api/v1/customer-portal/handovers/${handoverId}/acknowledge`,
+    data
+  );
+  return response.data;
+};

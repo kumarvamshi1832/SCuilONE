@@ -406,12 +406,28 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.modal-dialog form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .modal-body {
   padding: 24px;
   overflow-y: auto;
-  color: var(--cp-text);
-  flex: 1;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  flex: 1 1 auto;
+  min-height: 0;
   box-sizing: border-box;
+}
+
+/* Text colour only inside the portal's own dialogs: an unscoped colour here turned the text of every other
+   modal body in the app (e.g. the staff Record Payment form in dark mode) dark. */
+.modal-dialog .modal-body {
+  color: var(--cp-text);
 }
 
 .modal-footer {
@@ -423,6 +439,7 @@
   border-top: 1px solid var(--cp-border);
   background: var(--cp-surface-2);
   flex-shrink: 0;
+  margin-top: auto;
 }
 
 .form-group {

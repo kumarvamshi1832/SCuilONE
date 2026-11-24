@@ -2071,3 +2071,58 @@ body.dark .table-location-text,
   border-color: #22d3ee;
 }
 
+
+/* Rental / offer settings boxes in the property form ---------------------- */
+.form-group small.text-muted,
+.prop-settings-box small.text-muted {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.prop-settings-box {
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px 12px;
+  margin: 0 0 14px;
+  min-width: 0;
+}
+
+.prop-settings-box > legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 6px;
+  color: #334155;
+}
+
+.dashboard-wrapper.dark .prop-settings-box > legend {
+  color: #cbd5e1;
+}
+
+.prop-settings-box .prop-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.prop-settings-box .prop-check-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px;
+  padding: 0 !important;
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.prop-settings-box .prop-check-row span {
+  text-transform: none;
+  letter-spacing: normal;
+}

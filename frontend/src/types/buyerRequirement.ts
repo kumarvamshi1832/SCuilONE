@@ -1,4 +1,4 @@
-export const REQUIREMENT_TYPES = ["Buy", "Rent"] as const;
+export const REQUIREMENT_TYPES = ["Buy", "Rent", "Lease"] as const;
 export type RequirementType = (typeof REQUIREMENT_TYPES)[number];
 
 export const BUYER_REQUIREMENT_STATUSES = [
@@ -29,6 +29,10 @@ export interface BuyerRequirement {
   area_unit: string;
   status: BuyerRequirementStatus | string;
   notes?: string | null;
+  /** Recurring budget period (One-time for a purchase) and the lease/rent duration the customer wants, in months. */
+  budget_frequency?: string | null;
+  min_duration_months?: number | null;
+  max_duration_months?: number | null;
   created_at: string;
   updated_at: string;
   // enriched fields
@@ -53,9 +57,14 @@ export interface BuyerRequirementCreate {
   area_unit?: string;
   status?: string;
   notes?: string | null;
+  budget_frequency?: "One-time" | "Monthly" | "Quarterly" | "Yearly" | null;
+  min_duration_months?: number | null;
+  max_duration_months?: number | null;
 }
 
 export interface BuyerRequirementUpdate {
+  /** Stored with the revision this change creates (shown in the Revision History tab). */
+  revision_reason?: string | null;
   lead_id?: string | null;
   contact_id?: string | null;
   assigned_to?: string | null;

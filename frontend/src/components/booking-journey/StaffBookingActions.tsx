@@ -6,6 +6,7 @@ import {
   prepareAgreement,
   setPaymentInstructions,
   verifyAgreement,
+  type StaffRequestContext,
 } from "../../services/customerBookingWorkflowService";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { formatBookingDateTime, formatBookingMoney } from "../../utils/bookingJourney";
@@ -25,7 +26,7 @@ interface BaseProps {
 }
 
 /** Shared dialog shell (fixed header/footer, scrolling body). */
-function ActionDialog({
+export function ActionDialog({
   title,
   titleId,
   error,
@@ -37,6 +38,7 @@ function ActionDialog({
   children,
   secondaryLabel,
   onSecondary,
+  submitDisabled = false,
 }: {
   title: string;
   titleId: string;
@@ -49,6 +51,8 @@ function ActionDialog({
   children: ReactNode;
   secondaryLabel?: string;
   onSecondary?: () => void;
+  /** Keeps the primary button disabled (e.g. while a precondition is unmet) without hiding the dialog. */
+  submitDisabled?: boolean;
 }) {
   return (
     <div className="ins-modal-overlay" role="presentation">
@@ -76,7 +80,7 @@ function ActionDialog({
               {secondaryLabel}
             </button>
           )}
-          <button type="submit" className={submitClass} disabled={busy}>
+          <button type="submit" className={submitClass} disabled={busy || submitDisabled}>
             {busy ? "Working…" : submitLabel}
           </button>
         </div>
@@ -85,7 +89,7 @@ function ActionDialog({
   );
 }
 
-const Field = ({
+export const Field = ({
   id,
   label,
   error,
@@ -112,18 +116,41 @@ const Field = ({
   </div>
 );
 
-const inputStyle = { width: "100%", boxSizing: "border-box" as const };
+export const inputStyle = { width: "100%", boxSizing: "border-box" as const };
 
 /* ─── Approve / reject ─── */
+
+/** Money inputs: positive, at most 2 decimals, and within the server's 14-digit column. */
+const parseMoneyInput = (raw: string): number | null => {
+  const text = raw.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
+  const n = Number(text);
+  return n > 0 && n < 1e12 ? n : null;
+};
+
+const varianceText = (amount: number, listed: number | null | undefined): string | null => {
+  if (!listed || listed <= 0) return null;
+  const pct = ((amount - listed) / listed) * 100;
+  if (Math.abs(pct) < 0.05) return "equal to the listed price";
+  return `${Math.abs(pct).toFixed(1)}% ${pct < 0 ? "below" : "above"} the listed price`;
+};
 
 export function DecisionModal({
   detail,
   onClose,
   onDone,
   suggestedPrice,
-}: BaseProps & { suggestedPrice: number | null }) {
+  context,
+  negotiatedPrice,
+}: BaseProps & {
+  /** Listed price of the property. */
+  suggestedPrice: number | null;
+  context?: StaffRequestContext | null;
+  /** Price from an accepted offer in the staff negotiation (property-offers API), when there is one. */
+  negotiatedPrice?: number | null;
+}) {
   const [decision, setDecision] = useState<"Approve" | "Reject">("Approve");
-  const [agreedPrice, setAgreedPrice] = useState(suggestedPrice ? String(suggestedPrice) : "");
+  const [agreedPrice, setAgreedPrice] = useState(negotiatedPrice ? String(negotiatedPrice) : suggestedPrice ? String(suggestedPrice) : "");
   const [bookingAmount, setBookingAmount] = useState("");
   const [preference, setPreference] = useState<PaymentPreference>(
     (PAYMENT_PREFERENCES as readonly string[]).includes(detail.payment_preference)
@@ -132,22 +159,28 @@ export function DecisionModal({
   );
   const [notes, setNotes] = useState("");
   const [customerMessage, setCustomerMessage] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  const price = parseMoneyInput(agreedPrice);
+  const amount = parseMoneyInput(bookingAmount);
+
   const validate = (): boolean => {
     const next: Record<string, string> = {};
     if (decision === "Approve") {
-      const price = Number(agreedPrice);
-      const amount = Number(bookingAmount);
-      if (!agreedPrice.trim() || !Number.isFinite(price) || price <= 0) next.agreedPrice = "Enter an agreed price greater than zero.";
-      if (!bookingAmount.trim() || !Number.isFinite(amount) || amount <= 0) next.bookingAmount = "Enter a booking amount greater than zero.";
-      else if (!next.agreedPrice && amount > price) next.bookingAmount = "Booking amount cannot exceed the agreed price.";
+      if (price === null) next.agreedPrice = "Enter the proposed price (greater than zero, up to 2 decimals).";
+      if (amount === null) next.bookingAmount = "Enter the booking amount (greater than zero, up to 2 decimals).";
+      else if (price !== null && amount > price) next.bookingAmount = "Booking amount cannot exceed the proposed price.";
+      if (customerMessage.length > 2000) next.customerMessage = "Remarks cannot exceed 2000 characters.";
+    } else if (rejectionReason.trim().length < 5) {
+      next.rejectionReason = "Enter the reason for rejecting this booking (at least 5 characters).";
+    } else if (rejectionReason.length > 2000) {
+      next.rejectionReason = "The reason cannot exceed 2000 characters.";
     }
     if (notes.length > 3000) next.notes = "Notes cannot exceed 3000 characters.";
-    if (customerMessage.length > 2000) next.customerMessage = "Message cannot exceed 2000 characters.";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -161,15 +194,21 @@ export function DecisionModal({
     setBusy(true);
     setApiError(null);
     try {
+      const reason = rejectionReason.trim();
       await decideBookingRequest(detail.id, {
         decision,
-        agreed_price: decision === "Approve" ? Number(agreedPrice) : null,
-        booking_amount: decision === "Approve" ? Number(bookingAmount) : null,
+        agreed_price: decision === "Approve" ? price : null,
+        booking_amount: decision === "Approve" ? amount : null,
         payment_preference: preference,
-        notes: notes.trim() || null,
-        customer_message: customerMessage.trim() || null,
+        // The rejection reason is the customer-visible message; keep it in the internal notes too.
+        notes: decision === "Reject" ? notes.trim() || `Rejection reason: ${reason}` : notes.trim() || null,
+        customer_message: decision === "Reject" ? reason : customerMessage.trim() || null,
       });
-      await onDone(decision === "Approve" ? "Booking request approved. The property is now on hold." : "Booking request rejected.");
+      await onDone(
+        decision === "Approve"
+          ? "Offer sent. The booking is approved and the customer has been notified; the property is on hold."
+          : "Booking request rejected. The customer has been notified."
+      );
     } catch (err) {
       setApiError(getApiErrorMessage(err, "The decision could not be saved."));
       setConfirming(false);
@@ -178,14 +217,17 @@ export function DecisionModal({
     }
   };
 
+  const approving = decision === "Approve";
+  const variance = price !== null ? varianceText(price, suggestedPrice) : null;
+
   return (
     <ActionDialog
-      title={confirming ? `Confirm: ${decision} request` : "Decide on booking request"}
+      title={confirming ? (approving ? "Confirm: approve & send offer" : "Confirm: reject booking") : "Approve or reject booking request"}
       titleId="decision-title"
       error={apiError}
       busy={busy}
-      submitLabel={confirming ? `Confirm ${decision.toLowerCase()}` : "Review decision"}
-      submitClass={confirming && decision === "Reject" ? "ins-btn-danger" : "btn-primary"}
+      submitLabel={confirming ? (approving ? "Approve & send offer" : "Reject booking") : approving ? "Review offer" : "Review rejection"}
+      submitClass={confirming && !approving ? "ins-btn-danger" : "btn-primary"}
       onClose={onClose}
       onSubmit={(e) => void submit(e)}
       secondaryLabel={confirming ? "Back" : undefined}
@@ -194,40 +236,88 @@ export function DecisionModal({
       {confirming ? (
         <>
           <p style={{ marginTop: 0 }}>
-            {decision === "Approve" ? (
+            {approving ? (
               <>
-                You are approving this request at an agreed price of <strong>{formatBookingMoney(agreedPrice)}</strong>{" "}
-                with a booking amount of <strong>{formatBookingMoney(bookingAmount)}</strong> ({preference}). The
-                property will be reserved and the customer gets a 48-hour hold.
+                You are approving this request and sending the customer a proposed price of <strong>{formatBookingMoney(agreedPrice)}</strong> with a
+                booking amount of <strong>{formatBookingMoney(bookingAmount)}</strong> ({preference}). The property is reserved and the customer gets a
+                48-hour hold. The booking is <strong>not</strong> confirmed yet: the customer still has to complete their details, the agreement must
+                be verified, and the booking amount must be paid and verified.
               </>
             ) : (
-              <>You are rejecting this request. The customer will be notified and can submit a new request.</>
+              <>
+                You are rejecting this booking request. The customer is notified with your reason and can submit a new request.
+              </>
             )}
           </p>
-          {customerMessage && (
+          {(approving ? customerMessage : rejectionReason) && (
             <p>
-              <strong>Message to customer:</strong> {customerMessage}
+              <strong>{approving ? "Remarks to customer" : "Reason shown to customer"}:</strong> {approving ? customerMessage : rejectionReason}
             </p>
           )}
         </>
       ) : (
         <>
+          <dl className="bj-facts" style={{ margin: "0 0 14px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "8px 16px" }}>
+            <div>
+              <dt className="text-muted" style={{ fontSize: "0.72rem", textTransform: "uppercase" }}>Customer</dt>
+              <dd style={{ margin: 0, fontWeight: 600 }}>{context?.customerName ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted" style={{ fontSize: "0.72rem", textTransform: "uppercase" }}>Property</dt>
+              <dd style={{ margin: 0, fontWeight: 600 }}>{context?.propertyName ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted" style={{ fontSize: "0.72rem", textTransform: "uppercase" }}>Property ID</dt>
+              <dd style={{ margin: 0, fontFamily: "monospace", fontSize: "0.8rem", wordBreak: "break-all" }}>{detail.property_id}</dd>
+            </div>
+            <div>
+              <dt className="text-muted" style={{ fontSize: "0.72rem", textTransform: "uppercase" }}>Original (listed) price</dt>
+              <dd style={{ margin: 0, fontWeight: 600 }}>{suggestedPrice ? formatBookingMoney(suggestedPrice) : "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted" style={{ fontSize: "0.72rem", textTransform: "uppercase" }}>Customer-requested amount</dt>
+              <dd style={{ margin: 0 }}>Not captured by the booking request</dd>
+            </div>
+            {negotiatedPrice ? (
+              <div>
+                <dt className="text-muted" style={{ fontSize: "0.72rem", textTransform: "uppercase" }}>Accepted in negotiation</dt>
+                <dd style={{ margin: 0, fontWeight: 600 }}>{formatBookingMoney(negotiatedPrice)}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {detail.customer_notes && (
+            <div className="bj-note" style={{ marginBottom: 14 }}>
+              <strong>Customer notes:</strong> {detail.customer_notes}
+            </div>
+          )}
+
           <Field id="decision" label="Decision *">
             <select id="decision" className="filter-select" style={inputStyle} value={decision} onChange={(e) => setDecision(e.target.value as "Approve" | "Reject")}>
-              <option value="Approve">Approve</option>
-              <option value="Reject">Reject</option>
+              <option value="Approve">Approve &amp; send offer to customer</option>
+              <option value="Reject">Reject booking</option>
             </select>
           </Field>
 
-          {decision === "Approve" && (
+          {approving ? (
             <>
-              <Field id="agreed" label="Agreed price (INR) *" error={errors.agreedPrice} hint={suggestedPrice ? `Listed price: ${formatBookingMoney(suggestedPrice)}` : undefined}>
-                <input id="agreed" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} type="number" min={0} step="0.01" value={agreedPrice} onChange={(e) => setAgreedPrice(e.target.value)} />
+              <Field
+                id="agreed"
+                label="Proposed price (INR) *"
+                error={errors.agreedPrice}
+                hint={[
+                  suggestedPrice ? `Listed price: ${formatBookingMoney(suggestedPrice)}` : null,
+                  negotiatedPrice ? `Accepted in negotiation: ${formatBookingMoney(negotiatedPrice)}` : null,
+                  variance ? `This is ${variance}.` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || undefined}
+              >
+                <input id="agreed" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} inputMode="decimal" value={agreedPrice} onChange={(e) => setAgreedPrice(e.target.value)} />
               </Field>
-              <Field id="amount" label="Booking amount (INR) *" error={errors.bookingAmount}>
-                <input id="amount" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} type="number" min={0} step="0.01" value={bookingAmount} onChange={(e) => setBookingAmount(e.target.value)} />
+              <Field id="amount" label="Proposed booking amount (INR) *" error={errors.bookingAmount} hint="Part of the price, paid first to confirm the booking.">
+                <input id="amount" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} inputMode="decimal" value={bookingAmount} onChange={(e) => setBookingAmount(e.target.value)} />
               </Field>
-              <Field id="pref" label="Payment preference *">
+              <Field id="pref" label="Payment terms *">
                 <select id="pref" className="filter-select" style={inputStyle} value={preference} onChange={(e) => setPreference(e.target.value as PaymentPreference)}>
                   {PAYMENT_PREFERENCES.map((p) => (
                     <option key={p} value={p}>
@@ -236,14 +326,18 @@ export function DecisionModal({
                   ))}
                 </select>
               </Field>
+              <Field id="msg" label="Remarks to customer" error={errors.customerMessage} hint="Shown to the customer with the offer and in their notification.">
+                <textarea id="msg" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} rows={2} maxLength={2000} value={customerMessage} onChange={(e) => setCustomerMessage(e.target.value)} />
+              </Field>
             </>
+          ) : (
+            <Field id="reject-reason" label="Reason for rejection *" error={errors.rejectionReason} hint="Shown to the customer.">
+              <textarea id="reject-reason" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} rows={3} maxLength={2000} value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} />
+            </Field>
           )}
 
-          <Field id="notes" label="Internal notes" error={errors.notes}>
+          <Field id="notes" label="Internal notes" error={errors.notes} hint="Never shown to the customer.">
             <textarea id="notes" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} rows={2} maxLength={3000} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </Field>
-          <Field id="msg" label="Message to customer" error={errors.customerMessage} hint="Shown to the customer with the decision.">
-            <textarea id="msg" className="ins-prob-input" style={{ ...inputStyle, textAlign: "left" }} rows={2} maxLength={2000} value={customerMessage} onChange={(e) => setCustomerMessage(e.target.value)} />
           </Field>
         </>
       )}

@@ -16,6 +16,9 @@ import {
   getPortalBuyerRequirements,
   getPortalRequirementMatches,
 } from "../../services/customerPortalBuyerRequirementService";
+import { getPortalOffers } from "../../services/customerPortalOfferService";
+import { loadPortalMatches } from "../../services/customerPortalBookingNegotiation";
+import { summarizeNegotiation } from "../../utils/offerDisplay";
 import { formatPortalMoney } from "../../components/portal/PortalPropertyMatchCard";
 import { getPortalErrorMessage } from "../../utils/portalApiError";
 import { PROPERTY_TYPES, AREA_UNITS } from "../../types/property";
@@ -42,6 +45,8 @@ interface RequirementFormState {
   min_area: string;
   max_area: string;
   area_unit: string;
+  min_duration_months: string;
+  max_duration_months: string;
   notes: string;
 }
 
@@ -56,6 +61,8 @@ const EMPTY_FORM: RequirementFormState = {
   min_area: "",
   max_area: "",
   area_unit: "sqft",
+  min_duration_months: "",
+  max_duration_months: "",
   notes: "",
 };
 
@@ -87,6 +94,22 @@ const validateForm = (form: RequirementFormState): Record<string, string> => {
   const minArea = checkNumber("min_area", "Minimum area");
   const maxArea = checkNumber("max_area", "Maximum area");
   checkNumber("bedrooms", "Bedrooms", true);
+
+  // Rent / lease duration in whole months (1 to 600), like the backend schema.
+  if (form.requirement_type !== "Buy") {
+    const months = (key: "min_duration_months" | "max_duration_months", label: string): number | null => {
+      const raw = form[key].trim();
+      if (raw === "") return null;
+      if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 600) {
+        errors[key] = `${label} must be a whole number of months from 1 to 600.`;
+        return null;
+      }
+      return Number(raw);
+    };
+    const minMonths = months("min_duration_months", "Minimum duration");
+    const maxMonths = months("max_duration_months", "Maximum duration");
+    if (minMonths !== null && maxMonths !== null && minMonths > maxMonths) errors.max_duration_months = "Minimum duration cannot exceed maximum duration.";
+  }
 
   if (!errors.min_budget && !errors.max_budget && minBudget !== null && maxBudget !== null && minBudget > maxBudget) {
     errors.max_budget = "Minimum budget cannot exceed maximum budget.";
@@ -128,6 +151,7 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
   const [statusFilter, setStatusFilter] = useState("");
   /** Matched-property count per requirement: number = loaded, null = lookup failed, missing = still loading. */
   const [matchCounts, setMatchCounts] = useState<Record<string, number | null>>({});
+  const [pendingOfferReqIds, setPendingOfferReqIds] = useState<Set<string>>(new Set());
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<RequirementFormState>(EMPTY_FORM);
@@ -152,11 +176,42 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
       onCountChange?.(list.length);
       // Property matching is exposed per requirement only, so counts are fetched one request per requirement.
       setMatchCounts({});
+      setPendingOfferReqIds(new Set());
       list.slice(0, 30).forEach((req) => {
         getPortalRequirementMatches(req.id)
-          .then((matches) => setMatchCounts((prev) => ({ ...prev, [req.id]: matches.length })))
+          .then((matches) => {
+            setMatchCounts((prev) => ({ ...prev, [req.id]: matches.length }));
+            matches.forEach((m) => {
+              getPortalOffers(m.match_id)
+                .then((offers) => {
+                  const summary = summarizeNegotiation(offers);
+                  if (summary.awaiting === "customer") {
+                    setPendingOfferReqIds((prev) => new Set([...prev, req.id]));
+                  }
+                })
+                .catch(() => undefined);
+            });
+          })
           .catch(() => setMatchCounts((prev) => ({ ...prev, [req.id]: null })));
       });
+
+      // Also check matches across portal matches (including rental/lease booking requests)
+      loadPortalMatches()
+        .then((allMatches) => {
+          allMatches.forEach((m) => {
+            if (m.requirement_id) {
+              getPortalOffers(m.match_id)
+                .then((offers) => {
+                  const summary = summarizeNegotiation(offers);
+                  if (summary.awaiting === "customer") {
+                    setPendingOfferReqIds((prev) => new Set([...prev, m.requirement_id!]));
+                  }
+                })
+                .catch(() => undefined);
+            }
+          });
+        })
+        .catch(() => undefined);
     } catch (err) {
       setError(getPortalErrorMessage(err, "Failed to load your buyer requirements."));
     } finally {
@@ -204,6 +259,9 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
       min_budget: toNumberOrNull(form.min_budget),
       max_budget: toNumberOrNull(form.max_budget),
       bedrooms: toNumberOrNull(form.bedrooms),
+      ...(form.requirement_type !== "Buy"
+        ? { min_duration_months: toNumberOrNull(form.min_duration_months), max_duration_months: toNumberOrNull(form.max_duration_months) }
+        : {}),
       min_area: toNumberOrNull(form.min_area),
       max_area: toNumberOrNull(form.max_area),
       area_unit: form.area_unit,
@@ -240,10 +298,11 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
   }, [requirements, search, statusFilter]);
 
   const budgetLabel = (req: PortalBuyerRequirement): string => {
+    const per = req.budget_frequency === "Monthly" ? " / month" : req.budget_frequency === "Quarterly" ? " / quarter" : req.budget_frequency === "Yearly" ? " / year" : "";
     if (req.min_budget && req.max_budget)
-      return `${formatPortalMoney(req.min_budget)} – ${formatPortalMoney(req.max_budget)}`;
-    if (req.max_budget) return `Up to ${formatPortalMoney(req.max_budget)}`;
-    if (req.min_budget) return `From ${formatPortalMoney(req.min_budget)}`;
+      return `${formatPortalMoney(req.min_budget)} – ${formatPortalMoney(req.max_budget)}${per}`;
+    if (req.max_budget) return `Up to ${formatPortalMoney(req.max_budget)}${per}`;
+    if (req.min_budget) return `From ${formatPortalMoney(req.min_budget)}${per}`;
     return "Flexible";
   };
 
@@ -385,14 +444,21 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
               <div className="cp-req-card-head">
                 <div>
                   <h3 className="cp-req-card-title">
-                    {req.requirement_type === "Rent" ? "Rent" : "Buy"} · {req.property_type}
+                    {req.requirement_type || "Buy"} · {req.property_type}
                   </h3>
                   <p className="cp-req-card-sub" style={{ fontWeight: 600 }}>Requirement #{req.id.slice(0, 8).toUpperCase()}</p>
                   <p className="cp-req-card-sub">
                     {[req.preferred_location, req.preferred_city].filter(Boolean).join(", ") || "Any location"}
                   </p>
                 </div>
-                <span className={`cp-req-status status-${req.status.toLowerCase()}`}>{req.status}</span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  {pendingOfferReqIds.has(req.id) && (
+                    <span className="cp-offer-received-badge" title="You have received an offer awaiting your response">
+                      ⚡ Offer Received
+                    </span>
+                  )}
+                  <span className={`cp-req-status status-${req.status.toLowerCase()}`}>{req.status}</span>
+                </div>
               </div>
               <dl className="cp-req-facts">
                 <div className="cp-req-fact">
@@ -441,7 +507,13 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
       )}
 
       {isCreateOpen && (
-        <div className="modal-backdrop" role="presentation">
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) closeCreate();
+          }}
+        >
           <div className="modal-dialog cp-modal-wide" role="dialog" aria-modal="true" aria-labelledby="req-modal-title">
             <div className="modal-header">
               <h2 id="req-modal-title">New Buyer Requirement</h2>
@@ -450,7 +522,7 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} noValidate>
+            <form className="cp-modal-form" onSubmit={handleSubmit} noValidate>
               <div className="modal-body">
                 {submitError && (
                   <div className="support-alert error cp-inline-error" role="alert">
@@ -464,11 +536,13 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
                     <label htmlFor="req-type">I want to *</label>
                     <select
                       id="req-type"
+                      className="cp-select"
                       value={form.requirement_type}
                       onChange={(e) => setField("requirement_type", e.target.value as PortalRequirementType)}
                     >
                       <option value="Buy">Buy</option>
                       <option value="Rent">Rent</option>
+                      <option value="Lease">Lease</option>
                     </select>
                   </div>
 
@@ -476,6 +550,7 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
                     <label htmlFor="req-property-type">Property type *</label>
                     <select
                       id="req-property-type"
+                      className="cp-select"
                       value={form.property_type}
                       onChange={(e) => setField("property_type", e.target.value)}
                       aria-invalid={Boolean(fieldErrors.property_type)}
@@ -544,6 +619,37 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
                     {fieldError("max_budget")}
                   </div>
 
+                  {form.requirement_type !== "Buy" && (
+                    <>
+                      <div className="form-group">
+                        <label htmlFor="req-min-duration">Minimum duration (months)</label>
+                        <input
+                          id="req-min-duration"
+                          type="number"
+                          min={1}
+                          max={600}
+                          value={form.min_duration_months}
+                          onChange={(e) => setField("min_duration_months", e.target.value)}
+                          aria-invalid={Boolean(fieldErrors.min_duration_months)}
+                        />
+                        {fieldError("min_duration_months")}
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="req-max-duration">Maximum duration (months)</label>
+                        <input
+                          id="req-max-duration"
+                          type="number"
+                          min={1}
+                          max={600}
+                          value={form.max_duration_months}
+                          onChange={(e) => setField("max_duration_months", e.target.value)}
+                          aria-invalid={Boolean(fieldErrors.max_duration_months)}
+                        />
+                        {fieldError("max_duration_months")}
+                      </div>
+                    </>
+                  )}
+
                   <div className="form-group">
                     <label htmlFor="req-bedrooms">Bedrooms</label>
                     <input
@@ -562,6 +668,7 @@ export default function CustomerPortalBuyerRequirements({ embedded = false, onCo
                     <label htmlFor="req-area-unit">Area unit</label>
                     <select
                       id="req-area-unit"
+                      className="cp-select"
                       value={form.area_unit}
                       onChange={(e) => setField("area_unit", e.target.value)}
                     >

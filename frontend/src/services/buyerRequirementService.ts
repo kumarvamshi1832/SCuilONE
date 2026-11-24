@@ -4,6 +4,7 @@ import type {
   BuyerRequirementCreate,
   BuyerRequirementUpdate,
 } from "../types/buyerRequirement";
+import type { BuyerRequirementRevision } from "../types/recordHistory";
 
 /**
  * Staff CRM buyer requirements (authenticated CRM client).
@@ -47,4 +48,10 @@ export const updateBuyerRequirement = async (
 
 export const deleteBuyerRequirement = async (id: string): Promise<void> => {
   await apiClient.delete(`/api/v1/buyer-requirements/${id}`);
+};
+
+/** GET /{id}/revisions - every saved version of the requirement, oldest first (revision 1 = the initial requirement). */
+export const getBuyerRequirementRevisions = async (id: string): Promise<BuyerRequirementRevision[]> => {
+  const response = await apiClient.get<BuyerRequirementRevision[]>(`/api/v1/buyer-requirements/${id}/revisions`);
+  return Array.isArray(response.data) ? response.data : [];
 };

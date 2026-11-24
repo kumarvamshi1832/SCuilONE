@@ -31,6 +31,7 @@ import {
   parseBackendDate,
 } from "../../utils/bookingJourney";
 import { getApiErrorMessage } from "../../utils/apiError";
+import { usePaymentAlerts } from "../../hooks/usePaymentAlerts";
 import {
   buildJourneyUploadTrace,
   describeJourneyUploadError,
@@ -45,6 +46,12 @@ import type {
   PortalHandover,
 } from "../../types/customerBookingJourney";
 import type { PortalBooking, PortalSiteVisit } from "../../types/customerPortal";
+import { PortalHandoverCard } from "../../components/booking-journey/HandoverWidgets";
+import PortalBookingOffer from "../../components/booking-journey/PortalBookingOffer";
+import { PortalBookingNegotiation } from "../../components/portal/PortalBookingNegotiation";
+import PortalBookingLifecycle from "../../components/portal/PortalBookingLifecycle";
+import { loadNegotiation, type BookingNegotiation } from "../../services/customerPortalBookingNegotiation";
+import { resolveRequestOfferDetails, summarizeNegotiation } from "../../utils/offerDisplay";
 import "./CustomerPortalTickets.css";
 import "./CustomerPortalBuyerRequirements.css";
 import "../../components/booking-journey/BookingJourney.css";
@@ -59,9 +66,11 @@ export default function CustomerPortalBookingRequestDetail() {
   const [booking, setBooking] = useState<PortalBooking | null>(null);
   /** Why the portal booking (schedule, balances) is missing, so the payment section can say so instead of guessing. */
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [negotiation, setNegotiation] = useState<BookingNegotiation | null | undefined>(undefined);
   const [contactName, setContactName] = useState("");
   /** undefined = not loaded / failed, null = none scheduled, object = the handover record. */
   const [handover, setHandover] = useState<PortalHandover | null | undefined>(undefined);
+  const [handoverFailed, setHandoverFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -82,6 +91,9 @@ export default function CustomerPortalBookingRequestDetail() {
       try {
         const data = await getBookingRequest(requestId);
         setDetail(data);
+        loadNegotiation(data.property_id, undefined, data.property_match_id)
+          .then(setNegotiation)
+          .catch(() => setNegotiation(null));
         // Optional context - failures never block the page.
         getPortalSiteVisits()
           .then((visits) => setVisit(visits.find((v) => v.id === data.site_visit_id) ?? null))
@@ -125,6 +137,9 @@ export default function CustomerPortalBookingRequestDetail() {
       try {
         const data = await getBookingRequest(requestId);
         setDetail(data);
+        loadNegotiation(data.property_id, undefined, data.property_match_id)
+          .then(setNegotiation)
+          .catch(() => undefined);
         if (data.booking_id) {
           try {
             setBooking(await getPortalBooking(data.booking_id));
@@ -133,6 +148,8 @@ export default function CustomerPortalBookingRequestDetail() {
             /* keep the last good booking */
           }
         }
+        // Handover changes made by staff do not touch the request, so refresh them explicitly.
+        await refreshHandoverRef.current();
       } catch {
         /* keep the last good state */
       } finally {
@@ -152,22 +169,31 @@ export default function CustomerPortalBookingRequestDetail() {
     };
   }, [requestId]);
 
-  // Handover exists only for a confirmed booking; a failed lookup leaves the stage out instead of guessing.
+  // Handover exists only for a confirmed booking. A failed lookup keeps the last good value (or hides the stage)
+  // instead of guessing.
   const handoverBookingId = detail?.booking_id ?? null;
   const handoverEligible = detail?.status === "Confirmed" || detail?.status === "Completed";
-  useEffect(() => {
+  const refreshHandover = useCallback(async () => {
     if (!handoverBookingId || !handoverEligible) {
       setHandover(undefined);
+      setHandoverFailed(false);
       return;
     }
-    let cancelled = false;
-    getBookingHandover(handoverBookingId)
-      .then((h) => !cancelled && setHandover(h))
-      .catch(() => !cancelled && setHandover(undefined));
-    return () => {
-      cancelled = true;
-    };
-  }, [handoverBookingId, handoverEligible, detail?.updated_at]);
+    try {
+      setHandover(await getBookingHandover(handoverBookingId));
+      setHandoverFailed(false);
+    } catch {
+      setHandoverFailed(true);
+    }
+  }, [handoverBookingId, handoverEligible]);
+  const refreshHandoverRef = useRef(refreshHandover);
+  refreshHandoverRef.current = refreshHandover;
+  useEffect(() => {
+    void refreshHandover();
+  }, [refreshHandover, detail?.updated_at]);
+
+  // In-page alerts when the backend verifies the agreement or verifies / rejects a payment.
+  usePaymentAlerts(detail, showToast);
 
   useEffect(() => {
     getPortalProfile()
@@ -228,6 +254,22 @@ export default function CustomerPortalBookingRequestDetail() {
     handover: handover === undefined ? undefined : handover,
   };
 
+  const isRental = useMemo(() => {
+    if (!detail) return false;
+    if ((detail as any).booking_type === "Rent" || (detail as any).booking_type === "Lease") return true;
+    if (booking?.property?.listing_type && ["Rent", "Lease"].includes(booking.property.listing_type)) return true;
+    if (detail.customer_notes?.includes("Payment Plan:")) return true;
+    if (propertyName?.toLowerCase().includes("rent") || propertyName?.toLowerCase().includes("lease")) return true;
+    return false;
+  }, [detail, booking, propertyName]);
+
+  const summary = useMemo(() => (negotiation ? summarizeNegotiation(negotiation.offers) : null), [negotiation]);
+  const currency = negotiation?.match.property.currency || "INR";
+  const offerInfo = useMemo(
+    () => (detail ? resolveRequestOfferDetails(detail, summary, currency, isRental) : null),
+    [detail, summary, currency, isRental]
+  );
+
   return (
     <div className="cp-tickets-page">
       {toast && (
@@ -239,19 +281,27 @@ export default function CustomerPortalBookingRequestDetail() {
         </div>
       )}
 
-      <Link to="/portal/booking-requests" className="cp-back-link">
-        <ArrowLeftIcon size={14} /> Back to booking requests
-      </Link>
-      {" "}
-      <Link to="/portal/bookings" className="cp-back-link">
-        All bookings
-      </Link>
+      {isRental ? (
+        <Link to="/portal/rentals" className="cp-back-link">
+          <ArrowLeftIcon size={14} /> Back to my rentals
+        </Link>
+      ) : (
+        <>
+          <Link to="/portal/booking-requests" className="cp-back-link">
+            <ArrowLeftIcon size={14} /> Back to booking requests
+          </Link>
+          {" "}
+          <Link to="/portal/bookings" className="cp-back-link">
+            All bookings
+          </Link>
+        </>
+      )}
 
       <div className="cp-tickets-header">
         <div>
-          <h1>{propertyName ?? `Booking request #${detail.id.slice(0, 8).toUpperCase()}`}</h1>
+          <h1>{propertyName ?? (isRental ? `Rental request #${detail.id.slice(0, 8).toUpperCase()}` : `Booking request #${detail.id.slice(0, 8).toUpperCase()}`)}</h1>
           <p>
-            Request #{detail.id.slice(0, 8).toUpperCase()}
+            {isRental ? "Rental request" : "Request"} #{detail.id.slice(0, 8).toUpperCase()}
             {propertyAddress ? ` · ${propertyAddress}` : ""}
           </p>
         </div>
@@ -265,52 +315,94 @@ export default function CustomerPortalBookingRequestDetail() {
       </div>
 
       {detail.status === "Requested" && (
-        <div className="bj-note">Your request is with our team for review. You will be notified when it is decided.</div>
+        <div className="bj-note">{isRental ? "Your rental request is with our team for review. You will be notified when it is decided." : "Your request is with our team for review. You will be notified when it is decided."}</div>
       )}
       {detail.status === "Rejected" && (
         <div className="support-alert error" role="alert">
           <AlertCircleIcon size={18} />
           <span>
-            Your booking request was declined.
+            {isRental ? "Your rental request was declined." : "Your booking request was declined."}
             {detail.customer_message ? ` Message from our team: ${detail.customer_message}` : ""} You can submit a new
-            request from the Booking Journey page.
+            request from the {isRental ? "Rental Journey" : "Booking Journey"} page.
           </span>
         </div>
       )}
       {detail.status === "Expired" && (
         <div className="bj-note bj-warn">
-          The booking hold expired and the property was released. You can request the booking again from the Booking
-          Journey page.
+          {isRental
+            ? "The rental hold expired and the property was released. You can request the rental again from the Rental Journey page."
+            : "The booking hold expired and the property was released. You can request the booking again from the Booking Journey page."}
         </div>
       )}
       {detail.status === "Expired - Payment Review" && (
         <div className="bj-note bj-warn">
-          The hold expired while verified payments remain on this booking. Our team is reviewing it — please contact us
+          The hold expired while verified payments remain on this {isRental ? "rental" : "booking"}. Our team is reviewing it — please contact us
           if you have questions.
         </div>
       )}
       {holdExpired && (
         <div className="bj-note bj-warn">
-          The booking hold has expired. Contact our team before submitting payment or uploading files.
+          The {isRental ? "rental" : "booking"} hold has expired. Contact our team before submitting payment or uploading files.
         </div>
       )}
 
       <div className="bj-layout">
         <div className="bj-stack">
-          <section className="cp-panel" aria-label="Booking overview">
-            <h2 className="cp-panel-title">Overview</h2>
+          <section className="cp-panel" aria-label={isRental ? "Rental overview" : "Booking overview"}>
+            <h2 className="cp-panel-title">{isRental ? "Rental overview" : "Overview"}</h2>
             <BookingFacts
               items={[
-                { label: "Booking ID", value: detail.booking_id ? `#${detail.booking_id.slice(0, 8).toUpperCase()}` : "Assigned on approval" },
+                { label: isRental ? "Rental Request ID" : "Booking ID", value: detail.booking_id ? `#${detail.booking_id.slice(0, 8).toUpperCase()}` : "Assigned on approval" },
                 { label: "Property", value: propertyName },
                 { label: "Unit", value: booking?.property?.unit_number ? `Unit ${booking.property.unit_number}` : "—" },
-                { label: "Booking date", value: booking?.booking_date ? formatBookingDateTime(booking.booking_date) : "—" },
+                { label: isRental ? "Start date" : "Booking date", value: booking?.booking_date ? formatBookingDateTime(booking.booking_date) : "—" },
                 { label: "Site visit", value: visit ? formatBookingDateTime(visit.scheduled_start) : "—" },
-                { label: "Agreed price", value: formatBookingMoney(detail.agreed_price) },
-                { label: "Booking amount", value: formatBookingMoney(detail.booking_amount) },
+                {
+                  label: isRental
+                    ? summary?.state.accepted
+                      ? "Agreed rent"
+                      : summary?.state.open?.offer_type === "Seller"
+                      ? "Proposed rent"
+                      : summary?.state.open?.offer_type === "Buyer"
+                      ? "Your proposed rent"
+                      : "Proposed rent"
+                    : summary?.state.accepted
+                    ? "Agreed price"
+                    : summary?.state.open?.offer_type === "Seller"
+                    ? "Proposed offer"
+                    : summary?.state.open?.offer_type === "Buyer"
+                    ? "Your counteroffer"
+                    : "Agreed price",
+                  value: offerInfo?.formattedPrice ? (
+                    <div>
+                      <span>{offerInfo.formattedPrice}</span>
+                      {offerInfo.statusLabel && (
+                        <span className="pbn-chip" style={{ marginLeft: 8 }}>
+                          {offerInfo.statusLabel}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    formatBookingMoney(detail.agreed_price)
+                  ),
+                },
+                {
+                  label: isRental ? "Security deposit" : "Booking amount",
+                  value: offerInfo?.formattedBookingAmount ?? formatBookingMoney(detail.booking_amount),
+                },
                 { label: "Total paid (verified)", value: booking?.verified_paid_amount !== undefined ? formatBookingMoney(booking.verified_paid_amount) : "—" },
                 { label: "Remaining balance", value: booking?.remaining_balance !== undefined ? formatBookingMoney(booking.remaining_balance) : "—" },
-                { label: "Payment preference", value: detail.payment_preference },
+                {
+                  label: isRental ? "Payment Plan" : "Payment preference",
+                  value: (() => {
+                    if (isRental) {
+                      const match = detail.customer_notes?.match(/Payment Plan:\s*([^\n\r]+)/);
+                      if (match && match[1]) return match[1].trim();
+                      return "Monthly Rent";
+                    }
+                    return detail.payment_preference;
+                  })(),
+                },
                 { label: "Requested on", value: formatBookingDateTime(detail.created_at) },
                 { label: "Last updated", value: formatBookingDateTime(detail.updated_at) },
                 {
@@ -329,14 +421,38 @@ export default function CustomerPortalBookingRequestDetail() {
                     <strong>Message from our team:</strong> {detail.customer_message}
                   </div>
                 )}
-                {detail.customer_notes && (
-                  <div className="bj-note" style={{ background: "transparent" }}>
-                    <strong>Your notes:</strong> {detail.customer_notes}
-                  </div>
-                )}
+                {(() => {
+                  if (!detail.customer_notes) return null;
+                  const cleanNotes = isRental
+                    ? detail.customer_notes.replace(/Payment Plan:\s*[^\n\r]+\n?/, "").trim()
+                    : detail.customer_notes;
+                  if (!cleanNotes) return null;
+                  return (
+                    <div className="bj-note" style={{ background: "transparent" }}>
+                      <strong>Your notes:</strong> {cleanNotes}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </section>
+
+          <PortalBookingOffer
+            detail={detail}
+            propertyName={propertyName}
+            holdExpired={holdExpired}
+            summary={summary}
+            negotiation={negotiation}
+            isRental={isRental}
+          />
+
+          <PortalBookingNegotiation
+            request={detail}
+            propertyName={propertyName}
+            notify={showToast}
+            negotiation={negotiation}
+            onNegotiationChange={setNegotiation}
+          />
 
           <section className="cp-panel" aria-label="Payment instructions">
             <h2 className="cp-panel-title">Payment instructions</h2>
@@ -359,6 +475,7 @@ export default function CustomerPortalBookingRequestDetail() {
             contactName={contactName}
             onChanged={refresh}
             notify={showToast}
+            isRental={isRental}
           />
 
           <PortalPaymentDashboard
@@ -370,12 +487,23 @@ export default function CustomerPortalBookingRequestDetail() {
             notify={showToast}
           />
 
+          <PortalHandoverCard
+            eligible={handoverEligible}
+            handover={handover}
+            loadFailed={handoverFailed}
+            onRetry={() => void refreshHandover()}
+            onChanged={refreshHandover}
+            notify={showToast}
+          />
+
           <DocumentsSection detail={detail} notify={showToast} />
+
+          <PortalBookingLifecycle detail={detail} notify={showToast} />
         </div>
 
-        <aside className="cp-panel" aria-label="Booking progress">
-          <h2 className="cp-panel-title">Booking progress</h2>
-          <BookingTimeline detail={detail} audience="customer" extras={timelineExtras} />
+        <aside className="cp-panel" aria-label={isRental ? "Rental progress" : "Booking progress"}>
+          <h2 className="cp-panel-title">{isRental ? "Rental progress" : "Booking progress"}</h2>
+          <BookingTimeline detail={detail} audience="customer" extras={timelineExtras} isRental={isRental} />
         </aside>
       </div>
     </div>
@@ -390,12 +518,14 @@ function AgreementSection({
   contactName,
   onChanged,
   notify,
+  isRental = false,
 }: {
   detail: BookingRequestDetail;
   canAct: boolean;
   contactName: string;
   onChanged: () => Promise<void>;
   notify: (message: string, type?: "success" | "error") => void;
+  isRental?: boolean;
 }) {
   const [fullName, setFullName] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -513,9 +643,9 @@ function AgreementSection({
   );
 
   return (
-    <section className="cp-panel" aria-label="Agreement">
+    <section className="cp-panel" aria-label={isRental ? "Rental agreement" : "Booking agreement"}>
       <h2 className="cp-panel-title">
-        Booking agreement <BookingStatusBadge status={status} />
+        {isRental ? "Rental agreement" : "Booking agreement"} <BookingStatusBadge status={status} />
       </h2>
 
       {!prepared ? (

@@ -1,0 +1,1313 @@
+/* ==========================================================================
+   SCuilONE Customer Portal - Rentals & Leases Styles
+   Layout, responsive grid, card alignment, and section panels for:
+   - My Rentals & Leases Page
+   - Rental Requests Section
+   - Rental Agreements Section
+   ========================================================================== */
+
+.cp-rentals-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Page Header */
+.cp-rentals-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cp-rentals-page-header-text h1 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cp-text, #17243A);
+  letter-spacing: -0.02em;
+}
+
+.cp-rentals-page-header-text p {
+  color: var(--cp-text-muted, #64748B);
+  font-size: 0.875rem;
+  margin: 6px 0 0 0;
+  line-height: 1.5;
+  max-width: 820px;
+}
+
+.cp-rentals-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Section Containers */
+.cp-rentals-section {
+  background: var(--cp-card-bg, #FFFFFF);
+  border: 1px solid var(--cp-border, #D7E1EF);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--cp-shadow-sm);
+  box-sizing: border-box;
+  width: 100%;
+  transition: border-color 0.15s ease;
+}
+
+.cp-rentals-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.cp-rentals-section-title-wrap {
+  flex: 1 1 auto;
+  min-width: 240px;
+}
+
+.cp-rentals-section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.cp-rentals-section-desc {
+  font-size: 0.875rem;
+  color: var(--cp-text-muted, #64748B);
+  margin: 4px 0 0 0;
+  line-height: 1.45;
+}
+
+.cp-rentals-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Responsive Grid System:
+   - Desktop: Multi-column responsive grid (3 columns per row)
+   - Tablet: 2 cards per row
+   - Mobile: 1 full-width card per row
+   - Prevents horizontal scroll
+*/
+.cp-rentals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Rental Cards - Standardized Height, Spacing, and Vertical Alignment */
+.cp-rental-card {
+  background: var(--cp-card-bg, #FFFFFF);
+  border: 1px solid var(--cp-border, #D7E1EF);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--cp-shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  height: 100%;
+  max-width: 620px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.cp-rental-card:hover {
+  box-shadow: var(--cp-card-hover-shadow);
+  border-color: var(--cp-accent, #3285F6);
+}
+
+.cp-rental-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cp-rental-card-title-group {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.cp-rental-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+  margin: 0;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+.cp-rental-card-sub {
+  color: var(--cp-text-muted, #64748B);
+  font-size: 0.8125rem;
+  margin: 4px 0 0;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.cp-rental-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+
+/* Structured facts box */
+.cp-rental-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--cp-surface-2, #F1F5FB);
+  border-radius: 10px;
+  border: 1px solid var(--cp-border-subtle, #E2E8F0);
+}
+
+.cp-rental-fact dt {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cp-text-muted, #64748B);
+  font-weight: 700;
+  margin: 0 0 3px;
+}
+
+.cp-rental-fact dd {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--cp-text, #17243A);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cp-rental-fact.full-width {
+  grid-column: 1 / -1;
+}
+
+.cp-rental-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.cp-rental-snippet {
+  font-size: 0.8125rem;
+  color: var(--cp-text-muted, #64748B);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Card Footer with Bottom-Aligned Action Button */
+.cp-rental-card-foot {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--cp-border-subtle, #E2E8F0);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.cp-rental-card-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-sizing: border-box;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+/* Empty State */
+.cp-rentals-empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--cp-text-muted, #64748B);
+  background: var(--cp-surface-2, #F1F5FB);
+  border: 1px dashed var(--cp-border, #D7E1EF);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.cp-rentals-empty-state h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 12px 0 6px 0;
+  color: var(--cp-text, #17243A);
+}
+
+.cp-rentals-empty-state p {
+  font-size: 0.875rem;
+  color: var(--cp-text-muted, #64748B);
+  margin: 0;
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+/* Skeletons */
+.cp-rental-skeleton {
+  min-height: 220px;
+  border-radius: 14px;
+}
+
+/* ==========================================================================
+   Shared Action Dialog & Form Modal Styling (.ins-modal) in Rentals Page
+   ========================================================================== */
+.cp-layout.cp-layout .ins-modal-overlay {
+  background: rgba(11, 18, 32, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.cp-layout.cp-layout .ins-modal {
+  background: var(--cp-card-bg);
+  color: var(--cp-text);
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.cp-layout.cp-layout .ins-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--cp-border);
+  background: var(--cp-surface-2);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.cp-layout.cp-layout .ins-modal-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--cp-text);
+  letter-spacing: -0.01em;
+}
+
+.cp-layout.cp-layout .ins-modal-close {
+  background: transparent;
+  border: 1px solid var(--cp-border);
+  color: var(--cp-text-muted);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.cp-layout.cp-layout .ins-modal-close:hover {
+  color: #EF4444;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.cp-layout.cp-layout .ins-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  box-sizing: border-box;
+  background: var(--cp-card-bg);
+  color: var(--cp-text);
+}
+
+.cp-layout.cp-layout .ins-modal-body .text-muted,
+.cp-layout.cp-layout .ins-modal-body p.text-muted,
+.cp-layout.cp-layout .ins-modal-body span.text-muted {
+  color: var(--cp-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.cp-layout.cp-layout .ins-modal .bj-field label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cp-text);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.cp-layout.cp-layout .ins-modal .ins-prob-input,
+.cp-layout.cp-layout .ins-modal select.filter-select,
+.cp-layout.cp-layout .ins-modal select,
+.cp-layout.cp-layout .ins-modal textarea,
+.cp-layout.cp-layout .ins-modal input:not([type="checkbox"]):not([type="radio"]) {
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--cp-text);
+  background-color: var(--cp-surface-2);
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.cp-layout.cp-layout .ins-modal input:not([type="checkbox"]):not([type="radio"]),
+.cp-layout.cp-layout .ins-modal select.filter-select,
+.cp-layout.cp-layout .ins-modal select {
+  height: 40px;
+}
+
+.cp-layout.cp-layout .ins-modal textarea {
+  height: auto;
+  min-height: 84px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.cp-layout.cp-layout .ins-modal .ins-prob-input:focus,
+.cp-layout.cp-layout .ins-modal select.filter-select:focus,
+.cp-layout.cp-layout .ins-modal select:focus,
+.cp-layout.cp-layout .ins-modal textarea:focus,
+.cp-layout.cp-layout .ins-modal input:focus {
+  outline: none;
+  border-color: var(--cp-accent);
+  background-color: var(--cp-card-bg);
+  box-shadow: 0 0 0 3px rgba(50, 133, 246, 0.2);
+}
+
+.cp-layout.cp-layout .ins-modal input::placeholder,
+.cp-layout.cp-layout .ins-modal textarea::placeholder {
+  color: var(--cp-text-muted);
+  opacity: 0.85;
+}
+
+.cp-layout.cp-layout .ins-modal select.filter-select,
+.cp-layout.cp-layout .ins-modal select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A9B8CC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+  cursor: pointer;
+}
+
+.cp-layout:not(.dark).cp-layout:not(.dark) .ins-modal select.filter-select,
+.cp-layout:not(.dark).cp-layout:not(.dark) .ins-modal select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.cp-layout.cp-layout .ins-modal select option,
+.cp-layout.cp-layout .ins-modal .filter-select option {
+  background-color: var(--cp-card-bg);
+  color: var(--cp-text);
+  padding: 8px;
+}
+
+.cp-layout.cp-layout .ins-modal input[type="checkbox"] {
+  accent-color: var(--cp-primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.cp-layout.cp-layout .ins-modal label span {
+  color: var(--cp-text);
+  font-size: 0.875rem;
+}
+
+.cp-layout.cp-layout .ins-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--cp-border);
+  background: var(--cp-surface-2);
+  flex-shrink: 0;
+}
+
+.cp-layout.cp-layout .ins-modal-footer .btn-secondary,
+.cp-layout.cp-layout .ins-modal-footer .btn-primary {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.cp-layout.cp-layout .ins-modal .bj-field-error,
+.cp-layout.cp-layout .ins-modal .ins-field-error {
+  color: #EF4444;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  display: block;
+}
+
+.cp-layout.cp-layout .ins-modal .ins-alert.error {
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #EF4444;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.cp-layout.dark .ins-modal .ins-alert.error {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #F87171;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints
+   - Tablet: 2 cards per row
+   - Mobile: 1 full-width card per row
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .cp-rentals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .cp-rental-card {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .cp-rentals-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .cp-rental-card {
+    max-width: 100%;
+  }
+
+  .cp-rentals-section {
+    padding: 16px;
+  }
+
+  .cp-rentals-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .cp-rentals-action-btn {
+    width: 100%;
+  }
+
+  .cp-rentals-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .cp-rentals-refresh-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   Customer Portal - Rent Schedule Accordion / Dropdown
+   ========================================================================== */
+.cp-rent-schedule-accordion {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.cp-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--cp-text, #17243A);
+  font-family: inherit;
+  user-select: none;
+  transition: opacity 0.15s ease;
+  outline: none;
+}
+
+.cp-layout.dark .cp-accordion-header {
+  color: #FFFFFF;
+}
+
+.cp-accordion-header:hover {
+  opacity: 0.9;
+}
+
+.cp-accordion-header:focus-visible {
+  outline: 2px solid var(--cp-primary, #3285F6);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+.cp-accordion-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cp-accordion-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--cp-surface-2, #F1F5F9);
+  color: var(--cp-text-muted, #64748B);
+  border: 1px solid var(--cp-border, #CBD5E1);
+}
+
+.cp-layout.dark .cp-accordion-badge {
+  background: #1C2C45;
+  color: #94A3B8;
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.cp-accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--cp-surface-2, #F8FAFC);
+  color: var(--cp-text-muted, #64748B);
+  border: 1px solid var(--cp-border, #CBD5E1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+
+.cp-accordion-header:hover .cp-accordion-chevron {
+  color: var(--cp-primary, #3285F6);
+  border-color: var(--cp-primary, #3285F6);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.cp-layout.dark .cp-accordion-chevron {
+  background: #1C2C45;
+  border-color: rgba(59, 130, 246, 0.28);
+  color: #A9BCD5;
+}
+
+.cp-layout.dark .cp-accordion-header:hover .cp-accordion-chevron {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #60A5FA;
+  color: #FFFFFF;
+}
+
+/* Accordion Smooth Expand/Collapse */
+.cp-accordion-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, margin 0.25s ease;
+  opacity: 0;
+}
+
+.cp-accordion-content.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 18px;
+}
+
+.cp-accordion-content.collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: 0;
+}
+
+.cp-accordion-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ==========================================================================
+   Customer Portal - Rent Payment Modal Breakdown
+   ========================================================================== */
+.cp-payment-breakdown {
+  background: var(--cp-surface-2, #F8FAFC);
+  border: 1px solid var(--cp-border, #E2E8F0);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.cp-payment-breakdown-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--cp-text, #17243A);
+}
+
+.cp-payment-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  color: var(--cp-text-muted, #64748B);
+}
+
+.cp-payment-breakdown-row.total {
+  margin-top: 6px;
+  margin-bottom: 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--cp-border, #CBD5E1);
+  font-weight: 700;
+  color: var(--cp-text, #0F172A);
+}
+
+.cp-payment-breakdown-val {
+  font-weight: 600;
+  color: var(--cp-text, #17243A);
+}
+
+.cp-payment-breakdown-val.highlight {
+  color: var(--cp-primary, #3285F6);
+  font-weight: 700;
+}
+
+.cp-layout.dark .cp-payment-breakdown {
+  background: #1C2C45;
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.cp-layout.dark .cp-payment-breakdown-title,
+.cp-layout.dark .cp-payment-breakdown-row.total,
+.cp-layout.dark .cp-payment-breakdown-val {
+  color: #FFFFFF;
+}
+
+.cp-layout.dark .cp-payment-breakdown-row {
+  color: #94A3B8;
+}
+
+.cp-layout.dark .cp-payment-breakdown-row.total {
+  border-top-color: rgba(59, 130, 246, 0.28);
+}
+
+.cp-layout.dark .cp-payment-breakdown-val.highlight {
+  color: #60A5FA;
+}
+
+/* ==========================================================================
+   Rental Offers Awaiting Your Response - Section & Card Styles
+   ========================================================================== */
+.cp-rental-offers-section {
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.08);
+}
+
+.cp-layout.dark .cp-rental-offers-section {
+  background: #162338;
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.cp-rental-offers-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2563EB;
+  color: #FFFFFF;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+
+.cp-layout.dark .cp-rental-offers-badge {
+  background: #3B82F6;
+  color: #FFFFFF;
+}
+
+.cp-rental-offers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cp-rental-offer-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--cp-surface-2, #F8FAFC);
+  border: 1px solid var(--cp-border, #E2E8F0);
+  border-radius: 14px;
+  padding: 20px;
+  box-sizing: border-box;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.cp-rental-offer-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  border-color: var(--cp-primary, #3B82F6);
+}
+
+.cp-layout.dark .cp-rental-offer-card {
+  background: #1C2C45;
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.cp-layout.dark .cp-rental-offer-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border-color: #60A5FA;
+}
+
+.cp-rental-offer-thumb-wrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--cp-surface-3, #E2E8F0);
+  border: 1px solid var(--cp-border, #CBD5E1);
+}
+
+.cp-layout.dark .cp-rental-offer-thumb-wrap {
+  background: #121E31;
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.cp-rental-offer-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cp-rental-offer-pricing-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 10px;
+  margin-bottom: 4px;
+}
+
+.cp-layout.dark .cp-rental-offer-pricing-banner {
+  background: rgba(30, 58, 138, 0.35);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.cp-rental-offer-price-col,
+.cp-rental-offer-deposit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cp-rental-offer-price-label,
+.cp-rental-offer-deposit-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cp-text-muted, #64748B);
+  font-weight: 700;
+}
+
+.cp-layout.dark .cp-rental-offer-price-label,
+.cp-layout.dark .cp-rental-offer-deposit-label {
+  color: #94A3B8;
+}
+
+.cp-rental-offer-price-val {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--cp-primary, #2563EB);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.cp-layout.dark .cp-rental-offer-price-val {
+  color: #60A5FA;
+}
+
+.cp-rental-offer-deposit-val {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+  line-height: 1.2;
+}
+
+.cp-layout.dark .cp-rental-offer-deposit-val {
+  color: #F1F5F9;
+}
+
+.cp-expiry-warning {
+  color: #EF4444 !important;
+  font-weight: 700 !important;
+}
+
+.cp-layout.dark .cp-expiry-warning {
+  color: #F87171 !important;
+}
+
+.cp-rental-offer-snippet {
+  padding: 10px 14px;
+  background: var(--cp-surface-2, #F1F5FB);
+  border-left: 3px solid var(--cp-primary, #3B82F6);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--cp-text, #17243A);
+  margin: 4px 0 0;
+}
+
+.cp-layout.dark .cp-rental-offer-snippet {
+  background: #121E31;
+  color: #E2E8F0;
+  border-left-color: #60A5FA;
+}
+
+.cp-rental-offer-card .cp-rental-card-foot {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+.cp-rental-offer-card .cp-rental-card-foot .cp-rental-card-btn {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .cp-rental-offers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cp-rental-offer-card .cp-rental-card-foot {
+    flex-direction: column;
+  }
+
+  .cp-rental-offer-card .cp-rental-card-foot .cp-rental-card-btn {
+    width: 100%;
+  }
+}
+
+/* Difference pills & badges */
+.cp-rental-offer-diff,
+.cp-rental-offer-diff-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  margin-top: 4px;
+}
+.diff-above {
+  background: rgba(239, 68, 68, 0.12);
+  color: #DC2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.diff-below {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.diff-equal {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748B;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+.cp-layout.dark .diff-above {
+  background: rgba(239, 68, 68, 0.2);
+  color: #F87171;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.cp-layout.dark .diff-below {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34D399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.cp-layout.dark .diff-equal {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94A3B8;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.cp-rental-offer-listed-val {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--cp-text-muted, #64748B);
+  text-decoration: line-through;
+}
+
+.cp-rental-offer-actions {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+.cp-btn-accept {
+  color: #059669 !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+.cp-btn-accept:hover {
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+.cp-btn-reject {
+  color: #DC2626 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+.cp-btn-reject:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Match card offer banner */
+.cp-match-card-offer-banner {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--cp-surface-2, rgba(50, 133, 246, 0.08));
+  border: 1px solid rgba(50, 133, 246, 0.25);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.cp-match-card-offer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cp-match-card-offer-pricing {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.cp-match-card-offer-price {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+}
+.cp-layout.dark .cp-match-card-offer-price {
+  color: #F1F5F9;
+}
+.cp-match-card-offer-orig {
+  font-size: 0.8125rem;
+  color: var(--cp-text-muted, #64748B);
+  text-decoration: line-through;
+}
+.cp-match-card-offer-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.cp-btn-xs {
+  font-size: 0.75rem !important;
+  padding: 4px 6px !important;
+  text-align: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+/* Badge for requirement list */
+.cp-offer-received-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(245, 158, 11, 0.15);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.cp-layout.dark .cp-offer-received-badge {
+  background: rgba(245, 158, 11, 0.25);
+  color: #FBBF24;
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+/* ==========================================================================
+   Header Actions & View Toggle (Grid / Table Pill)
+   Matches segmented control design from reference specifications
+   ========================================================================== */
+
+.cp-rentals-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cp-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  box-sizing: border-box;
+}
+
+.cp-layout:not(.dark) .cp-view-toggle {
+  background: rgba(241, 245, 249, 0.85);
+  border: 1px solid #E2E8F0;
+}
+
+.cp-view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #94A3B8;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.cp-layout:not(.dark) .cp-view-toggle-btn {
+  color: #64748B;
+}
+
+.cp-view-toggle-btn:hover:not(.active) {
+  color: #F1F5F9;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cp-layout:not(.dark) .cp-view-toggle-btn:hover:not(.active) {
+  color: #0F172A;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.cp-view-toggle-btn.active {
+  background: #1E293B;
+  color: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.cp-layout:not(.dark) .cp-view-toggle-btn.active {
+  background: #FFFFFF;
+  color: #0F172A;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.cp-view-toggle-btn svg {
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+/* ==========================================================================
+   Rentals & Leases Data Table View
+   ========================================================================== */
+
+.cp-rentals-table {
+  min-width: 820px;
+}
+
+.cp-rentals-table th {
+  padding: 13px 18px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cp-text-muted, #94A3B8);
+  border-bottom: 1px solid var(--cp-border, rgba(255, 255, 255, 0.08));
+  white-space: nowrap;
+}
+
+.cp-rentals-table td {
+  padding: 14px 18px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--cp-border-subtle, rgba(255, 255, 255, 0.05));
+  font-size: 0.875rem;
+  color: var(--cp-text, #17243A);
+}
+
+.cp-layout.dark .cp-rentals-table td {
+  color: #E2E8F0;
+}
+
+.cp-table-cell-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cp-table-cell-title strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--cp-text, #17243A);
+  letter-spacing: -0.01em;
+}
+
+.cp-layout.dark .cp-table-cell-title strong {
+  color: #F1F5F9;
+}
+
+.cp-table-cell-sub {
+  font-size: 0.75rem;
+  color: var(--cp-text-muted, #64748B);
+  font-weight: 500;
+}
+
+.cp-layout.dark .cp-table-cell-sub {
+  color: #94A3B8;
+}
+
+.cp-table-cell-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cp-table-cell-amount strong {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+}
+
+.cp-layout.dark .cp-table-cell-amount strong {
+  color: #F1F5F9;
+}
+
+.cp-table-cell-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8125rem;
+  color: var(--cp-text, #17243A);
+  white-space: nowrap;
+}
+
+.cp-layout.dark .cp-table-cell-dates {
+  color: #E2E8F0;
+}
+
+.cp-table-cell-note {
+  max-width: 260px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.cp-hold-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.12);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  white-space: nowrap;
+}
+
+.cp-layout.dark .cp-hold-pill {
+  background: rgba(245, 158, 11, 0.2);
+  color: #FBBF24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.cp-nextstep-text {
+  color: var(--cp-text-muted, #64748B);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  display: block;
+}
+
+.cp-layout.dark .cp-nextstep-text {
+  color: #94A3B8;
+}
+
+.cp-table-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 7px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}

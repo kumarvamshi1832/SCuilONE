@@ -92,7 +92,10 @@ export interface BookingRequest {
   status: BookingRequestStatus | string;
   property_id: string;
   site_visit_id: string;
+  /** NOT returned by the backend today (the request payload omits it); used for price negotiation when present. */
+  property_match_id?: string | null;
   booking_id: string | null;
+  hold_created_at?: string | null;
   hold_expires_at: string | null;
   extension_count: number;
   agreed_price: string | null;
@@ -217,15 +220,95 @@ export interface PaymentInstructionsResult {
   payment_instructions: string;
 }
 
-/** GET /api/v1/customer-portal/bookings/{id}/handover (handover_payload). */
+export const HANDOVER_STATUSES = [
+  "Scheduled",
+  "Rescheduled",
+  "In Progress",
+  "On Hold",
+  "Completed",
+  "Cancelled",
+] as const;
+
+export interface HandoverChecklistItem {
+  item: string;
+  completed: boolean;
+  completed_at: string | null;
+}
+
+/** GET /api/v1/customer-portal/bookings/{id}/handover (customer view: no internal staff notes). */
 export interface PortalHandover {
   id: string;
   booking_id: string;
-  status: "Pending" | "Scheduled" | "In Progress" | "Completed" | "On Hold" | string;
+  status: "Pending" | "Scheduled" | "Rescheduled" | "In Progress" | "On Hold" | "Completed" | "Cancelled" | string;
   scheduled_at: string | null;
+  location: string | null;
+  instructions: string | null;
+  assigned_to_name: string | null;
+  assigned_to_phone: string | null;
+  checklist: HandoverChecklistItem[];
+  completion_remarks: string | null;
+  cancellation_reason: string | null;
   completed_at: string | null;
   customer_acknowledged_at: string | null;
   customer_notes: string | null;
+  /** "Portal" (customer acknowledges in the portal) or "Walk-in" (staff record the acknowledgement). */
+  handover_mode?: "Portal" | "Walk-in" | string;
+  customer_name?: string | null;
+  /** The handover record (free text up to 50 / 2000 characters, plus lists of document names and evidence URLs). */
+  property_condition?: string | null;
+  keys_handed_over?: string | null;
+  documents_transferred?: string[];
+  evidence_urls?: string[];
+  handover_remarks?: string | null;
+}
+
+/** GET /api/v1/customer-booking-workflow/handovers?booking_id= (staff view). */
+export interface StaffHandover extends PortalHandover {
+  assigned_to: string | null;
+  staff_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  portal_user_id?: string | null;
+  contact_id?: string | null;
+  lead_id?: string | null;
+  staff_acknowledged_by?: string | null;
+  staff_acknowledged_at?: string | null;
+  staff_acknowledgement_notes?: string | null;
+  completed_by?: string | null;
+  created_by?: string | null;
+}
+
+export interface HandoverScheduleInput {
+  scheduled_at: string;
+  location: string;
+  assigned_to: string;
+  instructions?: string | null;
+  staff_notes?: string | null;
+}
+
+/** POST /customer-booking-workflow/handovers/{id}/walk-in-acknowledge - staff record a walk-in customer's possession (booking.update). */
+export interface WalkInHandoverAcknowledgeInput {
+  acknowledged_by_customer_name: string;
+  confirm_possession: boolean;
+  notes?: string | null;
+  evidence_urls?: string[] | null;
+}
+
+export interface HandoverUpdateInput {
+  status?: string;
+  scheduled_at?: string;
+  location?: string;
+  assigned_to?: string;
+  instructions?: string | null;
+  staff_notes?: string | null;
+  completion_remarks?: string | null;
+  cancellation_reason?: string | null;
+  checklist?: HandoverChecklistItem[];
+  property_condition?: string | null;
+  keys_handed_over?: string | null;
+  documents_transferred?: string[] | null;
+  evidence_urls?: string[] | null;
+  handover_remarks?: string | null;
 }
 
 export interface FinalConfirmResult {

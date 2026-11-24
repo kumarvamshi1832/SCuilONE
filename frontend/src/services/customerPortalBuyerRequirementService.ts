@@ -3,6 +3,7 @@ import type {
   PortalBuyerRequirement,
   PortalBuyerRequirementCreate,
   PortalPropertyMatch,
+  PortalRequirementRevision,
   PortalShortlistEntry,
   PortalShortlistedProperty,
   PortalSiteVisitRequestCreate,
@@ -96,4 +97,13 @@ export const requestPortalSiteVisit = async (
     data
   );
   return response.data;
+};
+
+/**
+ * Revision history of one of the customer's own requirements, newest first. Ownership is enforced by the backend
+ * from the portal token (another customer's requirement id returns 404).
+ */
+export const getPortalRequirementRevisions = async (id: string): Promise<PortalRequirementRevision[]> => {
+  const response = await portalApiClient.get<PortalRequirementRevision[]>(`${BASE}/${id}/revisions`);
+  return Array.isArray(response.data) ? response.data : [];
 };

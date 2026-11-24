@@ -57,6 +57,10 @@ import IndustrySettings from "../pages/settings/IndustrySettings";
 import Reports from "../pages/dashboard/Reports";
 import Trash from "../pages/trash/Trash";
 import CustomerBookingRequests from "../pages/booking-workflow/CustomerBookingRequests";
+import Rentals from "../pages/rentals/Rentals";
+import RentalAgreementDetail from "../pages/rentals/RentalAgreementDetail";
+import CustomerPortalRentals from "../pages/portal/CustomerPortalRentals";
+import CustomerPortalRentalDetail from "../pages/portal/CustomerPortalRentalDetail";
 import CustomerBookingRequestDetail from "../pages/booking-workflow/CustomerBookingRequestDetail";
 import InsightShortcuts from "../components/dashboard/InsightShortcuts";
 import SalesForecast from "../pages/forecast/SalesForecast";
@@ -405,6 +409,8 @@ export default function AppRoutes() {
             <Route path="bookings" element={<CustomerPortalRealEstate initialTab="bookings" />} />
             <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
+            <Route path="rentals" element={<CustomerPortalRentals />} />
+            <Route path="rentals/:agreementId" element={<CustomerPortalRentalDetail />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
             <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
             <Route path="buyer-requirements" element={<CustomerPortalBuyerRequirements />} />
@@ -433,6 +439,8 @@ export default function AppRoutes() {
             <Route path="bookings" element={<CustomerPortalRealEstate initialTab="bookings" />} />
             <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
+            <Route path="rentals" element={<CustomerPortalRentals />} />
+            <Route path="rentals/:agreementId" element={<CustomerPortalRentalDetail />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
             <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
             <Route path="buyer-requirements" element={<CustomerPortalBuyerRequirements />} />
@@ -459,6 +467,8 @@ export default function AppRoutes() {
             <Route path="bookings" element={<CustomerPortalRealEstate initialTab="bookings" />} />
             <Route path="site-visits" element={<CustomerPortalRealEstate initialTab="visits" />} />
             <Route path="real-estate" element={<CustomerPortalRealEstate />} />
+            <Route path="rentals" element={<CustomerPortalRentals />} />
+            <Route path="rentals/:agreementId" element={<CustomerPortalRentalDetail />} />
             <Route path="profile" element={<CustomerPortalProfile />} />
             <Route path="notifications" element={<CustomerPortalNotificationsPage />} />
             <Route path="buyer-requirements" element={<CustomerPortalBuyerRequirements />} />
@@ -650,6 +660,28 @@ export default function AppRoutes() {
               <IndustryModuleGate module="lead-scoring">
                 <DashboardLayout>
                   <LeadScoring />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/rentals"
+            element={
+              <IndustryModuleGate module="rentals">
+                <DashboardLayout>
+                  <Rentals />
+                </DashboardLayout>
+              </IndustryModuleGate>
+            }
+          />
+
+          <Route
+            path="/:industry/rentals/:agreementId"
+            element={
+              <IndustryModuleGate module="rentals">
+                <DashboardLayout>
+                  <RentalAgreementDetail />
                 </DashboardLayout>
               </IndustryModuleGate>
             }
@@ -1074,6 +1106,7 @@ export default function AppRoutes() {
           <Route path="/emails" element={<ModuleRedirect target="emails" />} />
           <Route path="/custom-fields" element={<ModuleRedirect target="custom-fields" />} />
           <Route path="/customer-booking-requests" element={<ModuleRedirect target="customer-booking-requests" />} />
+          <Route path="/rentals" element={<ModuleRedirect target="rentals" />} />
           <Route path="/pipelines" element={<ModuleRedirect target="pipelines" />} />
           <Route path="/workflows" element={<ModuleRedirect target="workflows" />} />
           <Route path="/form-builder" element={<ModuleRedirect target="form-builder" />} />

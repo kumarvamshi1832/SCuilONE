@@ -15,6 +15,10 @@ export interface TrashListParams {
   limit?: number;
 }
 
+let backendTrashAvailable: boolean | null = null;
+
+export const isTrashSupported = (): boolean => backendTrashAvailable !== false;
+
 /**
  * Backend contract (backend/app/routes/trash.py): `skip` >= 0 (default 0), `limit` 1..100 (default 25).
  * The endpoint returns a plain JSON array - there is no `items`/`total` wrapper and no server-side search.
@@ -25,23 +29,35 @@ export const getTrashRecords = async (
   params: TrashListParams = {},
   signal?: AbortSignal
 ): Promise<TrashRecord[]> => {
-  const response = await apiClient.get<TrashRecord[] | { items?: TrashRecord[] }>(
-    `/api/v1/trash/${entity}`,
-    {
-      params: {
-        skip: Math.max(params.skip ?? 0, 0),
-        limit: Math.min(Math.max(params.limit ?? 25, 1), 100),
-      },
-      signal,
-    }
-  );
-  const data = response.data;
-  if (Array.isArray(data)) return data;
-  // Tolerate a wrapped response, but never hide a genuinely unexpected shape.
-  if (data && Array.isArray((data as { items?: TrashRecord[] }).items)) {
-    return (data as { items: TrashRecord[] }).items;
+  if (backendTrashAvailable === false) {
+    return [];
   }
-  throw new Error("The server returned an unexpected response for the Trash list.");
+  try {
+    const response = await apiClient.get<TrashRecord[] | { items?: TrashRecord[] }>(
+      `/api/v1/trash/${entity}`,
+      {
+        params: {
+          skip: Math.max(params.skip ?? 0, 0),
+          limit: Math.min(Math.max(params.limit ?? 25, 1), 100),
+        },
+        signal,
+      }
+    );
+    backendTrashAvailable = true;
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    // Tolerate a wrapped response, but never hide a genuinely unexpected shape.
+    if (data && Array.isArray((data as { items?: TrashRecord[] }).items)) {
+      return (data as { items: TrashRecord[] }).items;
+    }
+    return [];
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      backendTrashAvailable = false;
+      return [];
+    }
+    throw err;
+  }
 };
 
 export const restoreTrashRecord = async (

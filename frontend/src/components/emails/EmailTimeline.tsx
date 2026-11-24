@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalPortal from "../common/ModalPortal";
-import { getEmails } from "../../services/emailLogService";
+import { getEmails, isEmailsSupported } from "../../services/emailLogService";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { formatMessageDateTime } from "../../utils/messageTime";
 import { hasFeaturePermission } from "../../utils/modulePermissions";
@@ -53,16 +53,25 @@ export default function EmailTimeline({ entity, recordId, recipient }: EmailTime
     setLoading(true);
     setError(null);
     try {
+      if (!isEmailsSupported()) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
       const params: EmailListParams = { limit: limit + 1, skip: 0 };
       params[LINK_KEY[entity]] = recordId;
       const data = await getEmails(params);
       if (mine !== seq.current) return;
       setHasMore(data.length > limit);
       setRows(data.slice(0, limit));
-    } catch (err) {
+    } catch (err: any) {
       if (mine !== seq.current) return;
       setRows([]);
-      setError(getApiErrorMessage(err, "Could not load the email history."));
+      if (err?.response?.status === 404 || !isEmailsSupported()) {
+        setError(null);
+      } else {
+        setError(getApiErrorMessage(err, "Could not load the email history."));
+      }
     } finally {
       if (mine === seq.current) setLoading(false);
     }
@@ -115,8 +124,10 @@ export default function EmailTimeline({ entity, recordId, recipient }: EmailTime
           </button>
         </div>
       ) : rows.length === 0 ? (
-        <p className="em-muted" style={{ margin: 0 }}>
-          No emails are linked to this record yet.
+        <p className="em-muted" style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
+          {!isEmailsSupported()
+            ? "Email history integration is currently not enabled on this server."
+            : "No emails are linked to this record yet."}
         </p>
       ) : (
         <>

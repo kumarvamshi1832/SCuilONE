@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircleIcon,
@@ -10,15 +10,18 @@ import {
   getAllPortalShortlistedProperties,
   removePortalShortlistProperty,
 } from "../../services/customerPortalBuyerRequirementService";
+import { getPortalSiteVisits } from "../../services/customerPortalCommercialService";
 import { PortalPropertyMatchCard } from "../../components/portal/PortalPropertyMatchCard";
 import { PortalSiteVisitRequestModal } from "../../components/portal/PortalSiteVisitRequestModal";
 import { getPortalErrorMessage } from "../../utils/portalApiError";
 import type { PortalShortlistedProperty } from "../../types/customerPortalBuyerRequirement";
+import type { PortalSiteVisit } from "../../types/customerPortal";
 import "./CustomerPortalTickets.css";
 import "./CustomerPortalBuyerRequirements.css";
 
 export default function CustomerPortalShortlist() {
   const [items, setItems] = useState<PortalShortlistedProperty[]>([]);
+  const [siteVisits, setSiteVisits] = useState<PortalSiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [partialWarning, setPartialWarning] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export default function CustomerPortalShortlist() {
     try {
       const { items: loaded, failedRequirementIds } = await getAllPortalShortlistedProperties();
       setItems(loaded);
+      getPortalSiteVisits().then(setSiteVisits).catch(() => undefined);
       if (failedRequirementIds.length > 0) {
         setPartialWarning(
           `Some shortlisted properties could not be loaded (${failedRequirementIds.length} requirement${
@@ -59,6 +63,37 @@ export default function CustomerPortalShortlist() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const completedPropertyIds = useMemo(() => {
+    const ids = new Set<string>();
+    siteVisits.forEach((v) => {
+      if (v.status?.toLowerCase() === "completed") {
+        const pid = v.property?.id || v.property_id;
+        if (pid) ids.add(pid);
+      }
+    });
+    return ids;
+  }, [siteVisits]);
+
+  const completedPropertyNames = useMemo(() => {
+    const names = new Set<string>();
+    siteVisits.forEach((v) => {
+      if (v.status?.toLowerCase() === "completed") {
+        const name = (v.property?.name || v.property_title || "").trim().toLowerCase();
+        if (name) names.add(name);
+      }
+    });
+    return names;
+  }, [siteVisits]);
+
+  const hasCompletedVisit = useCallback(
+    (prop: { id: string; name?: string | null }) => {
+      if (completedPropertyIds.has(prop.id)) return true;
+      if (prop.name && completedPropertyNames.has(prop.name.trim().toLowerCase())) return true;
+      return false;
+    },
+    [completedPropertyIds, completedPropertyNames]
+  );
 
   const handleRemove = async (item: PortalShortlistedProperty) => {
     const key = `${item.requirement.id}:${item.match_id}`;
@@ -145,9 +180,22 @@ export default function CustomerPortalShortlist() {
                   </Link>
                 }
               >
-                <button className="btn-primary" onClick={() => setVisitTarget(item)} disabled={busy}>
-                  Request site visit
-                </button>
+                {hasCompletedVisit(item.property) ? (
+                  <button
+                    type="button"
+                    className="btn-primary cp-btn-visit-completed"
+                    disabled
+                    aria-disabled="true"
+                    title="A site visit has already been completed for this property"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    Site Visit Completed
+                  </button>
+                ) : (
+                  <button className="btn-primary" onClick={() => setVisitTarget(item)} disabled={busy}>
+                    Request site visit
+                  </button>
+                )}
                 <button className="btn-secondary" onClick={() => handleRemove(item)} disabled={busy}>
                   {busy ? "Removing…" : "Remove"}
                 </button>
@@ -165,6 +213,7 @@ export default function CustomerPortalShortlist() {
           onSubmitted={(result) => {
             setVisitTarget(null);
             showToast(result.message || "Site visit requested. Our team will confirm the appointment.");
+            getPortalSiteVisits().then(setSiteVisits).catch(() => undefined);
           }}
         />
       )}

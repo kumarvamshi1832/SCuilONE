@@ -377,3 +377,66 @@ export const confirmationChecks = (args: {
     hint: "Verify the booking-amount payment first. Pending payments do not count until verified.",
   },
 ];
+
+/* ───────────────────────── agreement gate ───────────────────────── */
+
+export type AgreementGateTone = "ok" | "info" | "warn" | "error";
+
+export interface AgreementPaymentGate {
+  /** True only when the BACKEND reports the signed agreement as verified. Never derived from a button click. */
+  signed: boolean;
+  /** Short badge text. */
+  label: string;
+  tone: AgreementGateTone;
+  /** Why payment is available / unavailable, in plain language. */
+  message: string;
+}
+
+/**
+ * Payment opens once the signed agreement is verified. `agreement_status` comes from the booking-request endpoint:
+ * Not Prepared -> Prepared -> Customer Acknowledged -> Verified (or Rejected). Only "Verified" counts as signed:
+ * "Customer Acknowledged" means the customer has signed but staff have not yet confirmed the signed copy.
+ */
+export const agreementPaymentGate = (agreementStatus: string | null | undefined): AgreementPaymentGate => {
+  switch (agreementStatus) {
+    case "Verified":
+      return {
+        signed: true,
+        label: "Agreement signed",
+        tone: "ok",
+        message: "Your signed agreement has been verified.",
+      };
+    case "Customer Acknowledged":
+      return {
+        signed: false,
+        label: "Awaiting verification",
+        tone: "info",
+        message:
+          "Payment is unavailable until our team verifies your signed agreement. Make sure the signed copy has been uploaded in the Agreement section; you will be notified here as soon as it is verified.",
+      };
+    case "Prepared":
+      return {
+        signed: false,
+        label: "Signature pending",
+        tone: "warn",
+        message:
+          "Payment is unavailable until the agreement is signed. Review the agreement above, acknowledge it and upload your signed copy for verification.",
+      };
+    case "Rejected":
+      return {
+        signed: false,
+        label: "Needs changes",
+        tone: "error",
+        message:
+          "Payment is unavailable because the signed agreement was not accepted. Please contact our team about the required changes.",
+      };
+    default:
+      return {
+        signed: false,
+        label: "Not prepared",
+        tone: "warn",
+        message:
+          "Payment is unavailable until your agreement has been prepared, signed and verified. Our team will notify you when it is ready.",
+      };
+  }
+};

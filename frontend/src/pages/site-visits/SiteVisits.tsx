@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   getSiteVisits,
   createSiteVisit,
-  updateSiteVisit,
 } from "../../services/siteVisitService";
 import { getBuyerRequirements } from "../../services/buyerRequirementService";
 import { fetchApiMatchesForRequirement } from "../../services/propertyMatchService";
@@ -16,19 +15,19 @@ import { classifyCrmRole } from "../../utils/authRouting";
 import type {
   SiteVisit,
   SiteVisitCreate,
-  SiteVisitUpdate,
 } from "../../types/siteVisit";
-import {
-  SITE_VISIT_STATUSES,
-  SITE_VISIT_OUTCOMES,
-  INTEREST_LEVELS,
-} from "../../types/siteVisit";
+import { SITE_VISIT_STATUSES } from "../../types/siteVisit";
 import type { PropertyMatch } from "../../types/propertyMatch";
 import type { Property } from "../../types/property";
 import type { User } from "../../types/user";
 import type { BuyerRequirement } from "../../types/buyerRequirement";
 import type { Lead } from "../../types/lead";
 import type { Contact } from "../../types/contact";
+import UpdateSiteVisitModal from "../../components/site-visits/UpdateSiteVisitModal";
+import SiteVisitJourney from "../../components/site-visits/SiteVisitJourney";
+import SiteVisitHistory from "../../components/history/SiteVisitHistory";
+import { FollowUpBadge, SiteVisitStatusBadge } from "../../components/site-visits/SiteVisitWidgets";
+import { followUpState } from "../../utils/siteVisitHelpers";
 import "./SiteVisits.css";
 
 /** Values of the Schedule Site Visit form. Date and times are the raw <input> strings. */
@@ -227,6 +226,37 @@ export default function SiteVisits() {
     return map;
   }, [allMatches]);
 
+  /** Customer name and phone for a property match (buyer requirement -> lead or contact). */
+  const customerInfoForMatch = useCallback(
+    (matchId: string): { name: string; phone: string } => {
+      const match = matchMap.get(matchId);
+      const requirement = match ? requirements.find((r) => r.id === match.buyer_requirement_id) : undefined;
+      const lead = requirement?.lead_id ? leads.find((l) => l.id === requirement.lead_id) : undefined;
+      const contact = requirement?.contact_id ? contacts.find((c) => c.id === requirement.contact_id) : undefined;
+      return {
+        name: lead?.full_name || contact?.full_name || requirement?.lead_name || requirement?.contact_name || "",
+        phone: lead?.phone || contact?.phone || "",
+      };
+    },
+    [matchMap, requirements, leads, contacts]
+  );
+
+  /** Every visit of the viewed visit's customer + property (for the visit history), read from the API. */
+  const [matchVisits, setMatchVisits] = useState<SiteVisit[] | null>(null);
+  useEffect(() => {
+    if (!viewingVisit) {
+      setMatchVisits(null);
+      return;
+    }
+    let cancelled = false;
+    getSiteVisits({ property_match_id: viewingVisit.property_match_id, limit: 100 })
+      .then((rows) => !cancelled && setMatchVisits(rows))
+      .catch(() => !cancelled && setMatchVisits(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [viewingVisit]);
+
   // Fetch Site Visits
   const fetchVisitsList = useCallback(async () => {
     setLoading(true);
@@ -258,7 +288,11 @@ export default function SiteVisits() {
     const cancelled = siteVisits.filter(
       (v) => v.status === "Cancelled" || v.status === "No-show"
     ).length;
-    return { total, scheduled, completed, cancelled };
+    const requested = siteVisits.filter((v) => v.status === "Requested").length;
+    const followUps = siteVisits.map((v) => followUpState(v));
+    const followOverdue = followUps.filter((f) => f === "overdue").length;
+    const followPending = followUps.filter((f) => f === "pending").length + followOverdue;
+    return { total, scheduled, completed, cancelled, requested, followPending, followOverdue };
   }, [siteVisits]);
 
   // Filtered visits
@@ -443,65 +477,6 @@ export default function SiteVisits() {
     }
   };
 
-  // Update / Complete / Reschedule / Cancel Visit
-  const handleUpdateVisit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!editingVisit) return;
-    setFormError(null);
-    setSubmitting(true);
-
-    const formData = new FormData(e.currentTarget);
-    const status = String(formData.get("status") || editingVisit.status);
-    const startDate = String(formData.get("scheduled_start") || "");
-    const endDate = String(formData.get("scheduled_end") || "");
-    const outcome = String(formData.get("outcome") || "").trim() || null;
-    const buyer_feedback = String(formData.get("buyer_feedback") || "").trim() || null;
-    const interest_level = String(formData.get("interest_level") || "").trim() || null;
-    const follow_up_required = formData.get("follow_up_required") === "on";
-    const followUpDateStr = String(formData.get("follow_up_date") || "");
-    const cancellation_reason = String(formData.get("cancellation_reason") || "").trim() || null;
-
-    if (status === "Cancelled" && !cancellation_reason) {
-      setFormError("Provide a cancellation reason when cancelling a site visit.");
-      setSubmitting(false);
-      return;
-    }
-
-    const payload: SiteVisitUpdate = {
-      status,
-      outcome: outcome as any,
-      buyer_feedback,
-      interest_level: interest_level as any,
-      follow_up_required,
-      follow_up_date: followUpDateStr ? new Date(followUpDateStr).toISOString() : null,
-      cancellation_reason,
-    };
-
-    if (startDate && endDate) {
-      if (new Date(endDate) <= new Date(startDate)) {
-        setFormError("Scheduled end time must be after start time.");
-        setSubmitting(false);
-        return;
-      }
-      payload.scheduled_start = new Date(startDate).toISOString();
-      payload.scheduled_end = new Date(endDate).toISOString();
-    }
-
-    try {
-      const updated = await updateSiteVisit(editingVisit.id, payload);
-      setSiteVisits((prev) =>
-        prev.map((v) => (v.id === updated.id ? updated : v))
-      );
-      showToast("Site visit updated!");
-      setEditingVisit(null);
-    } catch (err: any) {
-      console.error("Update visit error:", err);
-      setFormError(err?.response?.data?.detail || "Failed to update site visit.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "Scheduled":
@@ -512,6 +487,8 @@ export default function SiteVisits() {
         return "badge-cancelled";
       case "Rescheduled":
         return "badge-rescheduled";
+      case "Requested":
+        return "badge-requested";
       default:
         return "badge-noshow";
     }
@@ -600,6 +577,22 @@ export default function SiteVisits() {
           )}
         </div>
       </div>
+
+      {(stats.requested > 0 || stats.followPending > 0) && (
+        <div className="sv-form-notice" role="status" style={{ margin: "0 0 16px" }}>
+          {stats.requested > 0 && (
+            <span>
+              <strong>{stats.requested}</strong> customer visit request{stats.requested === 1 ? "" : "s"} awaiting confirmation.{" "}
+            </span>
+          )}
+          {stats.followPending > 0 && (
+            <span>
+              <strong>{stats.followPending}</strong> follow-up{stats.followPending === 1 ? "" : "s"} pending
+              {stats.followOverdue > 0 ? ` (${stats.followOverdue} overdue)` : ""}.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* KPI Summary Cards */}
       <div className="site-visits-summary-grid">
@@ -810,6 +803,12 @@ export default function SiteVisits() {
                     <div className="visit-detail-row">
                       <span style={{ color: "#64748b" }}>Interest:</span>
                       <span>{visit.interest_level}</span>
+                    </div>
+                  )}
+                  {visit.follow_up_required && (
+                    <div className="visit-detail-row">
+                      <span style={{ color: "#64748b" }}>Follow-up:</span>
+                      <FollowUpBadge visit={visit} />
                     </div>
                   )}
                   {visit.cancellation_reason && (
@@ -1056,6 +1055,19 @@ export default function SiteVisits() {
                   {fieldErrors.matchId && <span className="sv-field-error">{fieldErrors.matchId}</span>}
                 </div>
 
+                {selectedMatch && (
+                  <div className="sv-form-notice" style={{ marginBottom: 14 }} aria-live="polite">
+                    <div><strong>Customer:</strong> {customerInfoForMatch(selectedMatch.id).name || "—"}</div>
+                    <div><strong>Phone:</strong> {customerInfoForMatch(selectedMatch.id).phone || "No phone on file"}</div>
+                    <div>
+                      <strong>Property:</strong> {propertyMap.get(selectedMatch.property_id)?.name ?? "—"}
+                    </div>
+                    <div style={{ fontFamily: "monospace", fontSize: "0.78rem", wordBreak: "break-all" }}>
+                      <strong style={{ fontFamily: "inherit" }}>Property ID:</strong> {selectedMatch.property_id}
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label htmlFor="sv-agent">Assigned Sales Agent</label>
                   <select
@@ -1148,197 +1160,146 @@ export default function SiteVisits() {
         </div>
       )}
 
-      {/* ─── Edit / Complete / Reschedule Visit Modal ─── */}
+      {/* ─── Update / Reschedule / Complete / Cancel Visit Modal ─── */}
       {editingVisit && (
-        <div className="modal-overlay" onClick={() => setEditingVisit(null)}>
-          <div className="modal-card" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Update Site Visit Appointment</h2>
-              <button className="modal-close-btn" onClick={() => setEditingVisit(null)}>
-                &times;
-              </button>
-            </div>
+        <UpdateSiteVisitModal
+          visit={editingVisit}
+          onClose={() => setEditingVisit(null)}
+          onSaved={(updated) => {
+            setSiteVisits((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+            showToast(updated.status === "Rescheduled" ? "Site visit rescheduled. The customer has been notified." : "Site visit updated.");
+            setEditingVisit(null);
+          }}
+        />
+      )}
 
-            <form onSubmit={handleUpdateVisit} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      {/* ─── View Visit Modal: details, follow-up and the visit history of this customer and property ─── */}
+      {viewingVisit && (() => {
+        const viewMatch = matchMap.get(viewingVisit.property_match_id);
+        const viewProp = viewMatch ? propertyMap.get(viewMatch.property_id) : undefined;
+        const viewCustomer = customerInfoForMatch(viewingVisit.property_match_id);
+        const propertyLabel = viewProp?.name ?? "Property";
+        // All visits of this customer + property; always includes the one being viewed.
+        const journeyVisits = (matchVisits && matchVisits.length > 0 ? matchVisits : siteVisits.filter((v) => v.property_match_id === viewingVisit.property_match_id)).some((v) => v.id === viewingVisit.id)
+          ? (matchVisits && matchVisits.length > 0 ? matchVisits : siteVisits.filter((v) => v.property_match_id === viewingVisit.property_match_id))
+          : [...(matchVisits ?? []), viewingVisit];
+        const followState = followUpState(viewingVisit);
+        const label: React.CSSProperties = { fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" };
+        const tile: React.CSSProperties = { background: "rgba(100,116,139,0.08)", padding: "10px 14px", borderRadius: "8px" };
+        return (
+          <div className="modal-overlay" onClick={() => setViewingVisit(null)}>
+            <div className="modal-card" style={{ maxWidth: "760px" }} role="dialog" aria-modal="true" aria-labelledby="sv-view-title" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <h2 id="sv-view-title">Site Visit Details</h2>
+                  <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                    {propertyLabel}
+                    {viewCustomer.name ? ` · ${viewCustomer.name}` : ""}
+                  </div>
+                </div>
+                <button className="modal-close-btn" aria-label="Close" onClick={() => setViewingVisit(null)}>
+                  &times;
+                </button>
+              </div>
               <div className="modal-body">
-                {formError && (
-                  <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 14px", borderRadius: "8px", marginBottom: "16px", fontSize: "0.85rem" }}>
-                    {formError}
+                <div className="details-spec-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "18px" }}>
+                  <div style={tile}>
+                    <div style={label}>Status</div>
+                    <div style={{ marginTop: "4px" }}><SiteVisitStatusBadge status={viewingVisit.status} /></div>
+                  </div>
+                  <div style={tile}>
+                    <div style={label}>Outcome</div>
+                    <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.outcome || "Not recorded"}</div>
+                  </div>
+                  <div style={tile}>
+                    <div style={label}>Interest Level</div>
+                    <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.interest_level || "Not specified"}</div>
+                  </div>
+                  <div style={tile}>
+                    <div style={label}>Assigned Agent</div>
+                    <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.assigned_to ? userMap.get(viewingVisit.assigned_to) || "Assigned" : "Unassigned"}</div>
+                  </div>
+                  <div style={tile}>
+                    <div style={label}>Customer</div>
+                    <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewCustomer.name || "—"}</div>
+                    <div style={{ fontSize: "0.8rem", color: "#64748b" }}>{viewCustomer.phone || "No phone on file"}</div>
+                  </div>
+                  <div style={tile}>
+                    <div style={label}>Property ID</div>
+                    <div style={{ fontFamily: "monospace", fontSize: "0.78rem", marginTop: "2px", wordBreak: "break-all" }}>{viewMatch?.property_id ?? "—"}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={label}>Time Window</div>
+                  <div style={{ fontWeight: 600, marginTop: "2px" }}>
+                    {formatDateTimeRange(viewingVisit.scheduled_start, viewingVisit.scheduled_end)}
+                  </div>
+                </div>
+
+                {viewingVisit.buyer_feedback && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <div style={label}>Buyer Feedback</div>
+                    <p style={{ margin: "4px 0 0", background: "rgba(100,116,139,0.06)", padding: "10px 12px", borderRadius: "6px", whiteSpace: "pre-wrap" }}>
+                      {viewingVisit.buyer_feedback}
+                    </p>
                   </div>
                 )}
 
-                <div className="form-grid-2">
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select
-                      name="status"
-                      defaultValue={editingVisit.status}
-                    >
-                      {SITE_VISIT_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={label}>Follow-up</div>
+                  {viewingVisit.follow_up_required ? (
+                    <div style={{ marginTop: "4px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+                      <FollowUpBadge visit={viewingVisit} />
+                      <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                        {followState === "overdue" ? "The follow-up date has passed." : "A follow-up with this buyer is still to be done."}
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ fontWeight: 600, marginTop: "2px" }}>Not required</div>
+                  )}
+                </div>
+
+                {viewingVisit.cancellation_reason && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <div style={{ ...label, color: "#ef4444" }}>Cancellation Reason</div>
+                    <p style={{ margin: "4px 0 0", color: "#991b1b", background: "#fee2e2", padding: "10px 12px", borderRadius: "6px" }}>
+                      {viewingVisit.cancellation_reason}
+                    </p>
                   </div>
+                )}
 
-                  <div className="form-group">
-                    <label>Outcome</label>
-                    <select
-                      name="outcome"
-                      defaultValue={editingVisit.outcome || ""}
-                    >
-                      <option value="">Select Outcome</option>
-                      {SITE_VISIT_OUTCOMES.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Interest Level</label>
-                  <select
-                    name="interest_level"
-                    defaultValue={editingVisit.interest_level || ""}
-                  >
-                    <option value="">Select Interest Level</option>
-                    {INTEREST_LEVELS.map((il) => (
-                      <option key={il} value={il}>
-                        {il}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Buyer Feedback / Observations</label>
-                  <textarea
-                    name="buyer_feedback"
-                    defaultValue={editingVisit.buyer_feedback || ""}
-                    placeholder="Enter what the buyer liked, objections, pricing questions..."
-                    rows={3}
+                <div style={{ display: "grid", gap: "22px", marginTop: "8px" }}>
+                  <SiteVisitJourney
+                    visits={journeyVisits}
+                    currentId={viewingVisit.id}
+                    propertyName={propertyLabel}
+                    resolveUser={(id) => (id ? userMap.get(id) ?? null : null)}
                   />
-                </div>
-
-                <div className="form-group">
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      name="follow_up_required"
-                      defaultChecked={editingVisit.follow_up_required}
-                    />
-                    Follow-up Required
-                  </label>
-                </div>
-
-                <div className="form-group">
-                  <label>Follow-up Date</label>
-                  <input
-                    type="date"
-                    name="follow_up_date"
-                    defaultValue={
-                      editingVisit.follow_up_date
-                        ? new Date(editingVisit.follow_up_date).toISOString().split("T")[0]
-                        : ""
-                    }
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Cancellation Reason (if cancelling)</label>
-                  <input
-                    type="text"
-                    name="cancellation_reason"
-                    defaultValue={editingVisit.cancellation_reason || ""}
-                    placeholder="e.g. Buyer postponed travel plans"
-                  />
+                  <SiteVisitHistory visitId={viewingVisit.id} resolveUser={(id) => (id ? userMap.get(id) ?? null : null)} />
                 </div>
               </div>
-
               <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setEditingVisit(null)}
-                  disabled={submitting}
-                >
-                  Cancel
+                <button className="btn-secondary" onClick={() => setViewingVisit(null)}>
+                  Close
                 </button>
-                <button type="submit" className="btn-primary" disabled={submitting}>
-                  {submitting ? "Saving..." : "Save Updates"}
-                </button>
+                {userPermissions.canUpdate && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      const visit = viewingVisit;
+                      setViewingVisit(null);
+                      setEditingVisit(visit);
+                    }}
+                  >
+                    Update appointment
+                  </button>
+                )}
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─── View Visit Modal ─── */}
-      {viewingVisit && (
-        <div className="modal-overlay" onClick={() => setViewingVisit(null)}>
-          <div className="modal-card" style={{ maxWidth: "580px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Site Visit Details</h2>
-              <button className="modal-close-btn" onClick={() => setViewingVisit(null)}>
-                &times;
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="details-spec-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px", marginBottom: "18px" }}>
-                <div style={{ background: "rgba(100,116,139,0.08)", padding: "10px 14px", borderRadius: "8px" }}>
-                  <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" }}>Status</div>
-                  <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.status}</div>
-                </div>
-                <div style={{ background: "rgba(100,116,139,0.08)", padding: "10px 14px", borderRadius: "8px" }}>
-                  <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" }}>Outcome</div>
-                  <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.outcome || "Not recorded"}</div>
-                </div>
-                <div style={{ background: "rgba(100,116,139,0.08)", padding: "10px 14px", borderRadius: "8px" }}>
-                  <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" }}>Interest Level</div>
-                  <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.interest_level || "Not specified"}</div>
-                </div>
-                <div style={{ background: "rgba(100,116,139,0.08)", padding: "10px 14px", borderRadius: "8px" }}>
-                  <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" }}>Follow-up Required</div>
-                  <div style={{ fontWeight: 600, marginTop: "2px" }}>{viewingVisit.follow_up_required ? "Yes" : "No"}</div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" }}>Time Window</div>
-                <div style={{ fontWeight: 600, marginTop: "2px" }}>
-                  {formatDateTimeRange(viewingVisit.scheduled_start, viewingVisit.scheduled_end)}
-                </div>
-              </div>
-
-              {viewingVisit.buyer_feedback && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#64748b" }}>Buyer Feedback</div>
-                  <p style={{ margin: "4px 0 0", color: "#334155", background: "rgba(100,116,139,0.06)", padding: "10px 12px", borderRadius: "6px" }}>
-                    {viewingVisit.buyer_feedback}
-                  </p>
-                </div>
-              )}
-
-              {viewingVisit.cancellation_reason && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#ef4444" }}>Cancellation Reason</div>
-                  <p style={{ margin: "4px 0 0", color: "#991b1b", background: "#fee2e2", padding: "10px 12px", borderRadius: "6px" }}>
-                    {viewingVisit.cancellation_reason}
-                  </p>
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setViewingVisit(null)}>
-                Close
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

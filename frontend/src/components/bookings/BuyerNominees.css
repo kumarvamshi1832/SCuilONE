@@ -59,6 +59,7 @@
 .nm-field label { font-size: 0.78rem; font-weight: 600; }
 .nm-req { color: #e53e3e; }
 .nm-field input,
+.nm-field select,
 .nm-field textarea {
   font: inherit;
   font-size: 0.88rem;
@@ -72,8 +73,10 @@
 }
 .nm-field textarea { resize: vertical; }
 .nm-field.has-error input,
+.nm-field.has-error select,
 .nm-field.has-error textarea { border-color: #e53e3e; }
 .nm-field input:disabled,
+.nm-field select:disabled,
 .nm-field textarea:disabled { opacity: 0.6; cursor: not-allowed; }
 .nm-error { color: #c53030; font-size: 0.74rem; font-weight: 600; }
 .dashboard-wrapper.dark .nm-error { color: #fc8181; }

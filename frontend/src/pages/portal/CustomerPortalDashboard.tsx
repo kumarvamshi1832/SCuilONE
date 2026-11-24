@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   LifeBuoyIcon,
@@ -24,15 +24,18 @@ import {
   getPortalSiteVisits,
   isEstimatePendingApproval,
 } from "../../services/customerPortalCommercialService";
+import { getBookingRequests } from "../../services/customerPortalJourneyService";
 import type {
   PortalDashboardResponse,
   PortalProfileResponse,
   PortalBooking,
   PortalSiteVisit,
 } from "../../types/customerPortal";
+import type { BookingRequest } from "../../types/customerBookingJourney";
 import { normalizeIndustry } from "../../utils/industryUtils";
 import PortalBookingSummary from "../../components/bookings/PortalBookingSummary";
-import { formatBookingMoney } from "../../utils/bookingJourney";
+import PortalTalkWithUsWidget from "../../components/portal/PortalTalkWithUsWidget";
+import { describeHold, formatBookingMoney, parseBackendDate } from "../../utils/bookingJourney";
 import { sumCents, centsToNumber } from "../../utils/money";
 import "./CustomerPortalDashboard.css";
 
@@ -56,6 +59,7 @@ export default function CustomerPortalDashboard() {
   const [profile, setProfile] = useState<PortalProfileResponse | null>(null);
   const [bookings, setBookings] = useState<PortalBooking[]>([]);
   const [siteVisits, setSiteVisits] = useState<PortalSiteVisit[]>([]);
+  const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,13 +82,16 @@ export default function CustomerPortalDashboard() {
           profileRes?.tenant?.industry?.toLowerCase().replace(/[^a-z]/g, "").includes("realestate")
         );
 
-      const [dashRes, secondaryRes, visitsRes] = await Promise.all([
+      const [dashRes, secondaryRes, visitsRes, requestsRes] = await Promise.all([
         getPortalDashboard().catch(() => DEFAULT_PORTAL_DASHBOARD),
         isRE
           ? getPortalBookings().catch(() => [])
           : getPortalEstimates().catch(() => []),
         isRE
           ? getPortalSiteVisits().catch(() => [])
+          : Promise.resolve([]),
+        isRE
+          ? getBookingRequests().catch(() => [])
           : Promise.resolve([]),
       ]);
 
@@ -95,9 +102,11 @@ export default function CustomerPortalDashboard() {
       if (isRE) {
         setBookings(Array.isArray(secondaryRes) ? secondaryRes : []);
         setSiteVisits(Array.isArray(visitsRes) ? visitsRes : []);
+        setBookingRequests(Array.isArray(requestsRes) ? requestsRes : []);
       } else {
         setBookings([]);
         setSiteVisits([]);
+        setBookingRequests([]);
         if (Array.isArray(secondaryRes)) {
           const totalEstimates = secondaryRes.length;
           const pendingApprovalCount = secondaryRes.filter((e) =>
@@ -129,6 +138,7 @@ export default function CustomerPortalDashboard() {
       setDashboard(null);
       setBookings([]);
       setSiteVisits([]);
+      setBookingRequests([]);
       loadData();
     };
     window.addEventListener("portal:workspace-switched", handleWorkspaceSwitch);
@@ -179,6 +189,22 @@ export default function CustomerPortalDashboard() {
     }
   });
   const totalPropertiesCount = uniquePropertyIds.size || totalBookingsCount;
+
+  const activeHoldRequest = useMemo(() => {
+    if (!isRealEstate || !bookingRequests.length) return null;
+    const now = Date.now();
+    return (
+      bookingRequests.find((r) => {
+        if (!["Requested", "Approved"].includes(r.status) || !r.hold_expires_at) return false;
+        const exp = parseBackendDate(r.hold_expires_at);
+        return exp && exp.getTime() > now;
+      }) || null
+    );
+  }, [isRealEstate, bookingRequests]);
+
+  const pendingRequestsCount = useMemo(() => {
+    return bookingRequests.filter((r) => ["Requested", "Approved"].includes(r.status)).length;
+  }, [bookingRequests]);
 
   // Calculate real estate payment totals if bookings present, fallback to billing metrics
   // Cancelled bookings no longer carry an obligation, so they are left out of the money totals.
@@ -233,6 +259,68 @@ export default function CustomerPortalDashboard() {
         </div>
       )}
 
+      {activeHoldRequest && (
+        <div
+          className="cp-hold-banner"
+          style={{
+            background: "linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.08) 100%)",
+            border: "1px solid rgba(245, 158, 11, 0.35)",
+            borderRadius: "10px",
+            padding: "16px 20px",
+            marginBottom: "24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div
+              style={{
+                background: "#f59e0b",
+                color: "#ffffff",
+                borderRadius: "50%",
+                width: "36px",
+                height: "36px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <ClockIcon size={20} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: "15px", color: "var(--cp-text-main)" }}>
+                Active Property Reservation Hold
+              </div>
+              <div style={{ fontSize: "13px", color: "var(--cp-text-muted)", marginTop: "2px" }}>
+                You have an active temporary hold on a property reservation (
+                <strong style={{ color: "#d97706" }}>
+                  {describeHold(activeHoldRequest.hold_expires_at, activeHoldRequest.status)}
+                </strong>
+                ). Complete your buyer details and payment to secure your booking before the hold expires.
+              </div>
+            </div>
+          </div>
+          <Link
+            to={`/portal/booking-requests/${activeHoldRequest.id}`}
+            className="btn-primary"
+            style={{
+              textDecoration: "none",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              fontSize: "13px",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Review Hold &amp; Details &rarr;
+          </Link>
+        </div>
+      )}
+
       {loading && !dashboard ? (
         <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--cp-text-muted)" }}>
           <RefreshIcon size={28} className="animate-spin" style={{ margin: "0 auto 12px" }} />
@@ -261,6 +349,7 @@ export default function CustomerPortalDashboard() {
                     <div className="cp-kpi-value">{totalBookingsCount}</div>
                     <div className="cp-kpi-sub">
                       {activeBookingsCount} active reservations
+                      {pendingRequestsCount > 0 ? ` • ${pendingRequestsCount} pending requests` : ""}
                     </div>
                   </div>
                 </div>
@@ -660,6 +749,7 @@ export default function CustomerPortalDashboard() {
           </div>
         </>
       )}
+      <PortalTalkWithUsWidget />
     </div>
   );
 }

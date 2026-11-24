@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   LifeBuoyIcon,
   PlusIcon,
@@ -22,7 +22,9 @@ import {
   updateSupportTicket,
   deleteSupportTicket,
   addSupportTicketComment,
+  isTicketsBackendAvailable,
 } from "../../services/supportTicketService";
+import { getApiErrorMessage } from "../../utils/apiError";
 import { getAccounts } from "../../services/accountService";
 import { getContacts } from "../../services/contactService";
 import { getUsers } from "../../services/userService";
@@ -73,7 +75,11 @@ const STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
 export default function SupportTickets() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<{
+    title: string;
+    message: string;
+    status?: number;
+  } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
   // Reference data
@@ -84,10 +90,21 @@ export default function SupportTickets() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [assignedFilter, setAssignedFilter] = useState<string>("");
+
+  const isFetchingRef = useRef(false);
+
+  // Debounce search input to avoid repeated rapid network requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -166,28 +183,63 @@ export default function SupportTickets() {
   }, []);
 
   // Fetch Tickets
-  const fetchTickets = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await getSupportTickets({
-        status: statusFilter || undefined,
-        priority: priorityFilter || undefined,
-        assigned_to: assignedFilter || undefined,
-        search: searchTerm || undefined,
-        limit: 100,
-      });
-      setTickets(response.items);
-    } catch (err: any) {
-      console.error("Failed to fetch tickets:", err);
-      setError(err?.response?.data?.detail || err?.message || "Failed to load support tickets.");
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, priorityFilter, assignedFilter, searchTerm]);
+  const fetchTickets = useCallback(
+    async (force = false, signal?: AbortSignal) => {
+      if (isFetchingRef.current && !force) return;
+      isFetchingRef.current = true;
+      setLoading(true);
+      setErrorDetail(null);
+      try {
+        const response = await getSupportTickets(
+          {
+            status: statusFilter || undefined,
+            priority: priorityFilter || undefined,
+            assigned_to: assignedFilter || undefined,
+            search: debouncedSearch.trim() || undefined,
+            limit: 100,
+          },
+          signal
+        );
+        setTickets(response.items);
+      } catch (err: any) {
+        if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
+          return;
+        }
+        console.error("Failed to fetch tickets:", err);
+        const statusCode = err?.response?.status;
+        let title = "Failed to load support tickets";
+        let message = getApiErrorMessage(err, "An error occurred while loading support tickets.");
+
+        if (statusCode === 401) {
+          title = "Authentication Required (401)";
+          message = "Your session may have expired. Please sign in again to access support tickets.";
+        } else if (statusCode === 403) {
+          title = "Access Denied (403)";
+          message = "You do not have the required permission (support_ticket.view) to view support tickets.";
+        } else if (statusCode === 404) {
+          title = "Backend Service Not Found (404)";
+          message = "The support tickets API endpoint is currently not registered on this server.";
+        } else if (statusCode >= 500) {
+          title = `Server Error (${statusCode})`;
+          message = "The server encountered an internal error while fetching tickets. Please try again.";
+        } else if (!err?.response) {
+          title = "Network Connection Error";
+          message = "Unable to reach the server. Please check your network connection and server status.";
+        }
+
+        setErrorDetail({ title, message, status: statusCode });
+      } finally {
+        isFetchingRef.current = false;
+        setLoading(false);
+      }
+    },
+    [statusFilter, priorityFilter, assignedFilter, debouncedSearch]
+  );
 
   useEffect(() => {
-    fetchTickets();
+    const controller = new AbortController();
+    fetchTickets(false, controller.signal);
+    return () => controller.abort();
   }, [fetchTickets]);
 
   // Lookup maps
@@ -294,7 +346,7 @@ export default function SupportTickets() {
         software_project_id: "",
         assigned_to: "",
       });
-      fetchTickets();
+      fetchTickets(true);
     } catch (err: any) {
       showToast(err?.response?.data?.detail || "Failed to create support ticket", "error");
     } finally {
@@ -327,7 +379,7 @@ export default function SupportTickets() {
       await updateSupportTicket(selectedTicket.id, payload);
       showToast("Ticket updated successfully!", "success");
       setIsEditOpen(false);
-      fetchTickets();
+      fetchTickets(true);
       if (ticketDetails && ticketDetails.id === selectedTicket.id) {
         const updated = await getSupportTicket(selectedTicket.id);
         setTicketDetails(updated);
@@ -377,7 +429,7 @@ export default function SupportTickets() {
       setIsDeleteOpen(false);
       setSelectedTicket(null);
       if (isDetailsOpen) setIsDetailsOpen(false);
-      fetchTickets();
+      fetchTickets(true);
     } catch (err: any) {
       showToast(err?.response?.data?.detail || "Failed to delete ticket", "error");
     } finally {
@@ -428,7 +480,7 @@ export default function SupportTickets() {
           </div>
         </div>
         <div className="support-header-actions">
-          <button className="btn-secondary" onClick={fetchTickets} disabled={loading}>
+          <button className="btn-secondary" onClick={() => fetchTickets(true)} disabled={loading}>
             <RefreshIcon size={16} className={loading ? "animate-spin" : ""} />
             <span>Refresh</span>
           </button>
@@ -546,6 +598,16 @@ export default function SupportTickets() {
         )}
       </div>
 
+      {/* Notice if native tickets router is not active */}
+      {!isTicketsBackendAvailable() && !errorDetail && !loading && (
+        <div className="support-alert info" style={{ marginBottom: 16 }}>
+          <AlertTriangleIcon size={18} />
+          <span>
+            The backend support ticket router is currently inactive. Showing live service requests.
+          </span>
+        </div>
+      )}
+
       {/* Tickets Table */}
       <div className="support-table-container">
         {loading ? (
@@ -553,14 +615,28 @@ export default function SupportTickets() {
             <RefreshIcon size={24} className="animate-spin" style={{ margin: "0 auto 12px" }} />
             <div>Loading support tickets...</div>
           </div>
-        ) : error ? (
+        ) : errorDetail ? (
           <div style={{ padding: "32px", textAlign: "center" }}>
-            <div className="support-alert error" style={{ maxWidth: 500, margin: "0 auto 16px" }}>
-              <AlertCircleIcon size={18} />
-              <span>{error}</span>
+            <div
+              className="support-alert error"
+              style={{
+                maxWidth: 540,
+                margin: "0 auto 16px",
+                textAlign: "left",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+              }}
+            >
+              <AlertCircleIcon size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{errorDetail.title}</div>
+                <div style={{ fontSize: "0.875rem", lineHeight: 1.4 }}>{errorDetail.message}</div>
+              </div>
             </div>
-            <button className="btn-secondary" onClick={fetchTickets}>
-              Retry Loading
+            <button className="btn-secondary" onClick={() => fetchTickets(true)} disabled={loading}>
+              <RefreshIcon size={16} className={loading ? "animate-spin" : ""} />
+              <span>Retry Loading</span>
             </button>
           </div>
         ) : displayedTickets.length === 0 ? (

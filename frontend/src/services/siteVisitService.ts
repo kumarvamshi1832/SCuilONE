@@ -1,5 +1,6 @@
 import { apiClient } from "./authService";
 import type { SiteVisit, SiteVisitCreate, SiteVisitUpdate } from "../types/siteVisit";
+import type { SiteVisitHistoryEntry } from "../types/recordHistory";
 
 export interface SiteVisitFilterParams {
   status?: string;
@@ -173,4 +174,10 @@ export const updateSiteVisit = async (
   items[index] = updated;
   saveLocalVisits(items);
   return updated;
+};
+
+/** GET /api/v1/site-visits/{id}/history - the audit trail of a visit (scheduled, rescheduled, status changes), oldest first. */
+export const getSiteVisitHistory = async (id: string): Promise<SiteVisitHistoryEntry[]> => {
+  const response = await apiClient.get<SiteVisitHistoryEntry[]>(`/api/v1/site-visits/${id}/history`);
+  return Array.isArray(response.data) ? response.data : [];
 };

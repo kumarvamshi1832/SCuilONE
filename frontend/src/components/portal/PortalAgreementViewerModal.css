@@ -1,0 +1,781 @@
+/* ==========================================================================
+   SCuilONE Customer Portal - Rental Agreement PDF Viewer Modal & Document Card
+   Responsive layout, zoom toolbar, multi-page scroll view, and dark mode tokens
+   ========================================================================== */
+
+/* Modal Backdrop */
+.cp-pdf-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(3, 8, 18, 0.78);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  animation: cpFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cpFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal Card Dialog */
+.cp-pdf-modal-card {
+  width: 100%;
+  max-width: 1060px;
+  height: 92vh;
+  height: 92dvh;
+  background: var(--cp-card-bg, #FFFFFF);
+  border: 1px solid var(--cp-border, #D7E1EF);
+  border-radius: 16px;
+  box-shadow: 0 24px 56px -10px rgba(3, 8, 18, 0.6), 0 0 0 1px var(--cp-border, rgba(59, 130, 246, 0.2));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+  animation: cpModalSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cpModalSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Dark Mode Theme Tokens for PDF Modal */
+.cp-layout.dark .cp-pdf-modal-card,
+body.dark .cp-pdf-modal-card,
+.dark .cp-pdf-modal-card {
+  background: #152238;
+  border-color: rgba(59, 130, 246, 0.32);
+  color: #FFFFFF;
+}
+
+/* Header */
+.cp-pdf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--cp-surface-2, #F8FAFC);
+  border-bottom: 1px solid var(--cp-border, #E2E8F0);
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.cp-layout.dark .cp-pdf-modal-header,
+body.dark .cp-pdf-modal-header,
+.dark .cp-pdf-modal-header {
+  background: #1C2C45;
+  border-bottom-color: rgba(59, 130, 246, 0.28);
+}
+
+.cp-pdf-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.cp-pdf-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.cp-layout.dark .cp-pdf-icon-badge,
+body.dark .cp-pdf-icon-badge,
+.dark .cp-pdf-icon-badge {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #F87171;
+}
+
+.cp-pdf-header-meta {
+  min-width: 0;
+}
+
+.cp-pdf-header-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-layout.dark .cp-pdf-header-title,
+body.dark .cp-pdf-header-title,
+.dark .cp-pdf-header-title {
+  color: #FFFFFF;
+}
+
+.cp-pdf-header-sub {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--cp-text-muted, #64748B);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cp-layout.dark .cp-pdf-header-sub,
+body.dark .cp-pdf-header-sub,
+.dark .cp-pdf-header-sub {
+  color: #94A3B8;
+}
+
+/* Toolbar Controls */
+.cp-pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cp-pdf-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--cp-card-bg, #FFFFFF);
+  border: 1px solid var(--cp-border, #CBD5E1);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.cp-layout.dark .cp-pdf-zoom-group,
+body.dark .cp-pdf-zoom-group,
+.dark .cp-pdf-zoom-group {
+  background: #152238;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.cp-pdf-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--cp-text, #334155);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.12s ease;
+}
+
+.cp-pdf-zoom-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563EB;
+}
+
+.cp-pdf-zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cp-layout.dark .cp-pdf-zoom-btn,
+body.dark .cp-pdf-zoom-btn,
+.dark .cp-pdf-zoom-btn {
+  color: #E2E8F0;
+}
+
+.cp-layout.dark .cp-pdf-zoom-btn:hover:not(:disabled),
+body.dark .cp-pdf-zoom-btn:hover:not(:disabled),
+.dark .cp-pdf-zoom-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.22);
+  color: #60A5FA;
+}
+
+.cp-pdf-zoom-indicator {
+  min-width: 52px;
+  text-align: center;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: var(--cp-text, #17243A);
+  user-select: none;
+}
+
+.cp-layout.dark .cp-pdf-zoom-indicator,
+body.dark .cp-pdf-zoom-indicator,
+.dark .cp-pdf-zoom-indicator {
+  color: #E2E8F0;
+}
+
+.cp-pdf-fit-btn {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--cp-border, #CBD5E1);
+  background: var(--cp-card-bg, #FFFFFF);
+  color: var(--cp-text, #334155);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.12s ease;
+}
+
+.cp-pdf-fit-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3B82F6;
+  color: #2563EB;
+}
+
+.cp-pdf-fit-btn.active {
+  background: #3B82F6;
+  border-color: #3B82F6;
+  color: #FFFFFF;
+}
+
+.cp-layout.dark .cp-pdf-fit-btn,
+body.dark .cp-pdf-fit-btn,
+.dark .cp-pdf-fit-btn {
+  background: #152238;
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #E2E8F0;
+}
+
+.cp-layout.dark .cp-pdf-fit-btn:hover,
+body.dark .cp-pdf-fit-btn:hover,
+.dark .cp-pdf-fit-btn:hover {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: #60A5FA;
+  color: #FFFFFF;
+}
+
+.cp-pdf-fit-btn.active,
+.cp-layout.dark .cp-pdf-fit-btn.active {
+  background: #3285F6;
+  border-color: #3285F6;
+  color: #FFFFFF;
+}
+
+.cp-pdf-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cp-pdf-action-btn.download-btn {
+  background: #2563EB;
+  color: #FFFFFF;
+  border: 1px solid #1D4ED8;
+}
+
+.cp-pdf-action-btn.download-btn:hover:not(:disabled) {
+  background: #1D4ED8;
+}
+
+.cp-layout.dark .cp-pdf-action-btn.download-btn,
+body.dark .cp-pdf-action-btn.download-btn,
+.dark .cp-pdf-action-btn.download-btn {
+  background: #3285F6;
+  border-color: #2563EB;
+}
+
+.cp-layout.dark .cp-pdf-action-btn.download-btn:hover:not(:disabled),
+body.dark .cp-pdf-action-btn.download-btn:hover:not(:disabled),
+.dark .cp-pdf-action-btn.download-btn:hover:not(:disabled) {
+  background: #4895FB;
+}
+
+.cp-pdf-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cp-pdf-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--cp-text-muted, #64748B);
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: all 0.12s ease;
+}
+
+.cp-pdf-close-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+}
+
+/* Modal Body / PDF View Container */
+.cp-pdf-viewer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  background: #334155;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.cp-layout.dark .cp-pdf-viewer-body,
+body.dark .cp-pdf-viewer-body,
+.dark .cp-pdf-viewer-body {
+  background: #0B1220;
+}
+
+.cp-pdf-stage-wrapper {
+  transition: width 0.15s ease-out;
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+}
+
+.cp-pdf-iframe {
+  width: 100%;
+  height: 100%;
+  min-height: calc(92vh - 130px);
+  min-height: calc(92dvh - 130px);
+  border: none;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  display: block;
+}
+
+/* Loading Spinner Overlay */
+.cp-pdf-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(3px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #FFFFFF;
+  font-size: 0.9rem;
+  font-weight: 500;
+  z-index: 10;
+}
+
+.cp-pdf-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #38BDF8;
+  border-radius: 50%;
+  animation: cpSpin 0.75s linear infinite;
+}
+
+@keyframes cpSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Fallback & Error State */
+.cp-pdf-error-state {
+  margin: auto;
+  max-width: 480px;
+  padding: 32px 24px;
+  background: var(--cp-card-bg, #FFFFFF);
+  border: 1px solid var(--cp-border, #E2E8F0);
+  border-radius: 14px;
+  text-align: center;
+  box-shadow: var(--cp-shadow-md);
+  color: var(--cp-text, #17243A);
+}
+
+.cp-layout.dark .cp-pdf-error-state,
+body.dark .cp-pdf-error-state,
+.dark .cp-pdf-error-state {
+  background: #152238;
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #FFFFFF;
+}
+
+.cp-pdf-error-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cp-pdf-error-state h3 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.cp-pdf-error-state p {
+  margin: 0 0 20px;
+  font-size: 0.85rem;
+  color: var(--cp-text-muted, #64748B);
+  line-height: 1.5;
+}
+
+.cp-layout.dark .cp-pdf-error-state p,
+body.dark .cp-pdf-error-state p,
+.dark .cp-pdf-error-state p {
+  color: #94A3B8;
+}
+
+.cp-pdf-error-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Modal Footer */
+.cp-pdf-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--cp-surface-2, #F8FAFC);
+  border-top: 1px solid var(--cp-border, #E2E8F0);
+  flex-shrink: 0;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--cp-text-muted, #64748B);
+}
+
+.cp-layout.dark .cp-pdf-modal-footer,
+body.dark .cp-pdf-modal-footer,
+.dark .cp-pdf-modal-footer {
+  background: #1C2C45;
+  border-top-color: rgba(59, 130, 246, 0.28);
+  color: #94A3B8;
+}
+
+.cp-pdf-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   Customer Portal - Agreement Document Card in Rental Detail
+   ========================================================================== */
+.cp-agreement-doc-card {
+  background: var(--cp-surface-2, #F8FAFC);
+  border: 1px solid var(--cp-border, #D7E1EF);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.cp-layout.dark .cp-agreement-doc-card,
+body.dark .cp-agreement-doc-card,
+.dark .cp-agreement-doc-card {
+  background: #1C2C45;
+  border-color: rgba(59, 130, 246, 0.32);
+}
+
+.cp-agreement-doc-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.cp-agreement-doc-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #EF4444;
+  flex-shrink: 0;
+}
+
+.cp-layout.dark .cp-agreement-doc-icon-wrap,
+body.dark .cp-agreement-doc-icon-wrap,
+.dark .cp-agreement-doc-icon-wrap {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #F87171;
+}
+
+.cp-agreement-doc-info {
+  min-width: 0;
+}
+
+.cp-agreement-doc-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cp-text, #17243A);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cp-layout.dark .cp-agreement-doc-title,
+body.dark .cp-agreement-doc-title,
+.dark .cp-agreement-doc-title {
+  color: #FFFFFF;
+}
+
+.cp-agreement-doc-filename {
+  margin: 3px 0 0;
+  font-size: 0.8rem;
+  color: var(--cp-text-muted, #64748B);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+.cp-layout.dark .cp-agreement-doc-filename,
+body.dark .cp-agreement-doc-filename,
+.dark .cp-agreement-doc-filename {
+  color: #94A3B8;
+}
+
+.cp-agreement-doc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.725rem;
+  font-weight: 600;
+}
+
+.cp-agreement-doc-badge.ready {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.cp-layout.dark .cp-agreement-doc-badge.ready,
+body.dark .cp-agreement-doc-badge.ready,
+.dark .cp-agreement-doc-badge.ready {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34D399;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.cp-agreement-doc-badge.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.cp-layout.dark .cp-agreement-doc-badge.pending,
+body.dark .cp-agreement-doc-badge.pending,
+.dark .cp-agreement-doc-badge.pending {
+  background: rgba(245, 158, 11, 0.2);
+  color: #FBBF24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.cp-agreement-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Primary View Button */
+.cp-btn-view-doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #2563EB;
+  color: #FFFFFF;
+  border: 1px solid #1D4ED8;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+}
+
+.cp-btn-view-doc:hover:not(:disabled) {
+  background: #1D4ED8;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.3);
+}
+
+.cp-layout.dark .cp-btn-view-doc,
+body.dark .cp-btn-view-doc,
+.dark .cp-btn-view-doc {
+  background: #3285F6;
+  border-color: #2563EB;
+}
+
+.cp-layout.dark .cp-btn-view-doc:hover:not(:disabled),
+body.dark .cp-btn-view-doc:hover:not(:disabled),
+.dark .cp-btn-view-doc:hover:not(:disabled) {
+  background: #4895FB;
+}
+
+.cp-btn-view-doc:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Secondary Download Button */
+.cp-btn-download-doc {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--cp-card-bg, #FFFFFF);
+  color: var(--cp-text, #17243A);
+  border: 1px solid var(--cp-border, #CBD5E1);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cp-btn-download-doc:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: #3B82F6;
+  color: #2563EB;
+}
+
+.cp-layout.dark .cp-btn-download-doc,
+body.dark .cp-btn-download-doc,
+.dark .cp-btn-download-doc {
+  background: #152238;
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #FFFFFF;
+}
+
+.cp-layout.dark .cp-btn-download-doc:hover:not(:disabled),
+body.dark .cp-btn-download-doc:hover:not(:disabled),
+.dark .cp-btn-download-doc:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #60A5FA;
+  color: #FFFFFF;
+}
+
+.cp-btn-download-doc:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Responsive Rules for PDF Viewer & Document Card */
+@media (max-width: 768px) {
+  .cp-pdf-modal-card {
+    height: 98vh;
+    height: 98dvh;
+    border-radius: 12px;
+  }
+
+  .cp-pdf-modal-header {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .cp-pdf-header-title {
+    font-size: 0.95rem;
+  }
+
+  .cp-pdf-toolbar {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cp-agreement-doc-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px;
+  }
+
+  .cp-agreement-doc-actions {
+    width: 100%;
+  }
+
+  .cp-btn-view-doc,
+  .cp-btn-download-doc {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .cp-pdf-modal-overlay {
+    padding: 4px;
+  }
+
+  .cp-pdf-modal-card {
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .cp-pdf-zoom-group {
+    display: none;
+  }
+
+  .cp-pdf-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+}

@@ -38,15 +38,6 @@ let isNotificationsEndpointAvailable = true;
 
 export const isNotificationsSupported = (): boolean => isNotificationsEndpointAvailable;
 
-const getHeaders = () => {
-  const token = sessionStorage.getItem("access_token");
-  return {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  };
-};
-
 export async function getNotifications(
   limit = 20,
   offset = 0
@@ -58,7 +49,6 @@ export async function getNotifications(
     const response = await apiClient.get<NotificationListResponse>(
       "/api/v1/notifications/",
       {
-        ...getHeaders(),
         params: { limit, offset },
       }
     );
@@ -78,8 +68,7 @@ export async function getUnreadNotificationCount(): Promise<number> {
   }
   try {
     const response = await apiClient.get<UnreadCountResponse>(
-      "/api/v1/notifications/unread-count",
-      getHeaders()
+      "/api/v1/notifications/unread-count"
     );
     return response.data.unread_count;
   } catch (error: any) {
@@ -104,8 +93,7 @@ export async function markNotificationAsRead(
   try {
     const response = await apiClient.patch<NotificationReadResponse>(
       `/api/v1/notifications/${notificationId}/read`,
-      {},
-      getHeaders()
+      {}
     );
     return response.data;
   } catch (error: any) {
@@ -132,8 +120,7 @@ export async function markAllNotificationsAsRead(): Promise<NotificationReadResp
   try {
     const response = await apiClient.patch<NotificationReadResponse>(
       "/api/v1/notifications/read-all",
-      {},
-      getHeaders()
+      {}
     );
     return response.data;
   } catch (error: any) {

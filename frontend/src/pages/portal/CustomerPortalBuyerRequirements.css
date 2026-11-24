@@ -122,8 +122,159 @@
   grid-column: 1 / -1;
 }
 
+/* Modal Dialog Layout & Pinned Action Footer */
 .cp-modal-wide {
-  max-width: 640px;
+  max-width: 680px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  max-height: min(90vh, calc(100dvh - 32px));
+  overflow: hidden;
+}
+
+.cp-modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cp-modal-form .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cp-border, #475569) transparent;
+}
+
+.cp-modal-form .modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cp-modal-form .modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cp-modal-form .modal-body::-webkit-scrollbar-thumb {
+  background: var(--cp-border, #475569);
+  border-radius: 6px;
+}
+
+.cp-modal-form .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--cp-border);
+  background: var(--cp-surface-2);
+  flex-shrink: 0;
+  margin-top: auto;
+  z-index: 1;
+}
+
+/* Select dropdown chevrons & styling in modal */
+.cp-modal-form select,
+.cp-modal-form select.cp-select,
+.modal-dialog select.cp-select,
+.cp-layout.cp-layout .cp-modal-form select,
+.cp-layout.cp-layout .modal-dialog .form-group select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  display: block;
+  width: 100%;
+  height: 42px;
+  padding: 0 40px 0 14px !important;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 40px;
+  color: var(--cp-text, #f1f5f9) !important;
+  background-color: var(--cp-surface-2, #162238) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 14px center !important;
+  background-size: 16px 16px !important;
+  border: 1px solid var(--cp-border, #2D3D54) !important;
+  border-radius: 8px !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.cp-modal-form select:hover,
+.cp-modal-form select.cp-select:hover,
+.modal-dialog select.cp-select:hover {
+  border-color: var(--cp-accent, #3285F6) !important;
+}
+
+.cp-modal-form select:focus,
+.cp-modal-form select.cp-select:focus,
+.modal-dialog select.cp-select:focus {
+  outline: none !important;
+  border-color: var(--cp-accent, #3285F6) !important;
+  box-shadow: 0 0 0 3px rgba(50, 133, 246, 0.25) !important;
+  background-color: var(--cp-card-bg, #0f172a) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233285F6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 14px center !important;
+  background-size: 16px 16px !important;
+}
+
+/* Light mode support */
+.cp-layout:not(.dark) .cp-modal-form select,
+.cp-layout:not(.dark) .modal-dialog select.cp-select {
+  color: #0f172a !important;
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+.cp-layout:not(.dark) .cp-modal-form select:focus,
+.cp-layout:not(.dark) .modal-dialog select.cp-select:focus {
+  background-color: #ffffff !important;
+  border-color: #3285f6 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233285F6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+/* Dropdown option menu styling */
+.cp-modal-form select option,
+.modal-dialog select.cp-select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  padding: 10px 14px !important;
+  font-size: 0.875rem !important;
+}
+
+.cp-layout:not(.dark) .cp-modal-form select option,
+.cp-layout:not(.dark) .modal-dialog select.cp-select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+@media (max-width: 600px) {
+  .cp-form-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .cp-modal-wide {
+    max-height: min(94vh, calc(100dvh - 16px));
+    margin: 8px;
+    border-radius: 12px;
+  }
+  .cp-modal-form .modal-body {
+    padding: 16px;
+  }
+  .cp-modal-form .modal-footer {
+    padding: 12px 16px;
+    gap: 10px;
+  }
 }
 
 .cp-field-error {
@@ -176,6 +327,17 @@
   overflow-x: auto;
 }
 
+.cp-tab-bar.cp-sticky-tab-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--cp-bg);
+  padding: 8px 0;
+  margin-bottom: 24px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .cp-tab {
   background: none;
   border: none;
@@ -189,7 +351,40 @@
   font-family: inherit;
 }
 .cp-tab:hover { color: var(--cp-text); }
-.cp-tab.active { color: var(--cp-primary); border-bottom-color: var(--cp-primary); }
+.cp-tab.active { color: var(--cp-primary); border-bottom-color: var(--cp-primary); font-weight: 700; }
+
+/* Detail Sections with scroll-margin for sticky navigation */
+.cp-detail-section {
+  scroll-margin-top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.cp-detail-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--cp-border-subtle);
+}
+
+.cp-detail-section-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--cp-text);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.cp-detail-section-subtitle {
+  font-size: 0.85rem;
+  color: var(--cp-text-muted);
+  margin: 4px 0 0;
+}
 
 /* Property cards --------------------------------------------------------- */
 .cp-prop-grid {
@@ -391,3 +586,38 @@
 .cp-req-track-step.done .cp-req-track-dot { background: #10b981; }
 .cp-req-track-step.current { color: var(--cp-text-main); font-weight: 700; }
 .cp-req-track-step.current .cp-req-track-dot { background: var(--cp-primary, #3285f6); }
+
+/* Completed site visit button state */
+.cp-btn-visit-completed,
+.cp-layout .cp-btn-visit-completed,
+.cp-layout button.btn-primary.cp-btn-visit-completed:disabled {
+  background-color: var(--cp-accent, #3285F6) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--cp-accent, #3285F6) !important;
+  opacity: 0.82 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+  user-select: none !important;
+}
+
+/* Offer received badge for buyer requirement card */
+.cp-offer-received-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(245, 158, 11, 0.15);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  white-space: nowrap;
+}
+.cp-layout.dark .cp-offer-received-badge {
+  background: rgba(245, 158, 11, 0.25);
+  color: #FBBF24;
+  border-color: rgba(245, 158, 11, 0.45);
+}

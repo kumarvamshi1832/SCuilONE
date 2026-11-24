@@ -12,7 +12,11 @@ export const PROPERTY_TYPES = [
 
 export type PropertyType = (typeof PROPERTY_TYPES)[number];
 
-export const LISTING_TYPES = ["Sale", "Rent"] as const;
+/** Same values as the backend ListingType. Rent and Lease listings are priced per Monthly / Quarterly / Yearly period. */
+export const LISTING_TYPES = ["Sale", "Rent", "Lease"] as const;
+
+export const PRICE_FREQUENCIES = ["One-time", "Monthly", "Quarterly", "Yearly"] as const;
+export type PriceFrequency = (typeof PRICE_FREQUENCIES)[number];
 export type ListingType = (typeof LISTING_TYPES)[number];
 
 export const PROPERTY_STATUSES = [
@@ -69,6 +73,17 @@ export interface Property {
   owner_name?: string | null;
   developer_name?: string | null;
   assigned_to?: string | null;
+  /** Recurring price period of a Rent / Lease listing ("One-time" for a sale). */
+  price_frequency?: PriceFrequency | string;
+  security_deposit?: number | string | null;
+  minimum_term_months?: number | null;
+  maximum_term_months?: number | null;
+  /** Offer rules: offers below the minimum cannot be accepted; accepted offers may need owner approval and hold the property. */
+  minimum_acceptable_price?: number | string | null;
+  require_owner_approval?: boolean;
+  hold_on_offer_acceptance?: boolean;
+  offer_hold_hours?: number;
+  offer_hold_expires_at?: string | null;
   created_at: string;
   updated_at: string;
   // enriched fields
@@ -101,6 +116,14 @@ export interface PropertyCreate {
   owner_name?: string | null;
   developer_name?: string | null;
   assigned_to?: string | null;
+  price_frequency?: "One-time" | "Monthly" | "Quarterly" | "Yearly";
+  security_deposit?: number | null;
+  minimum_term_months?: number | null;
+  maximum_term_months?: number | null;
+  minimum_acceptable_price?: number | null;
+  require_owner_approval?: boolean;
+  hold_on_offer_acceptance?: boolean;
+  offer_hold_hours?: number;
 }
 
 export interface PropertyUpdate {
@@ -126,6 +149,14 @@ export interface PropertyUpdate {
   owner_name?: string | null;
   developer_name?: string | null;
   assigned_to?: string | null;
+  price_frequency?: "One-time" | "Monthly" | "Quarterly" | "Yearly";
+  security_deposit?: number | null;
+  minimum_term_months?: number | null;
+  maximum_term_months?: number | null;
+  minimum_acceptable_price?: number | null;
+  require_owner_approval?: boolean;
+  hold_on_offer_acceptance?: boolean;
+  offer_hold_hours?: number;
 }
 
 export interface PropertyImage {

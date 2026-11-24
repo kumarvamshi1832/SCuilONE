@@ -1062,6 +1062,326 @@ body:has(.cp-layout) {
   opacity: 0.85;
 }
 
+/* ==========================================================================
+   Portal forms must follow the PORTAL theme only.
+   The CRM keeps its own theme class on <body> (ThemeContext) and several CRM stylesheets (documents, payments,
+   bookings...) define unscoped `.form-group` rules, including `body.dark .form-group input` and uppercase labels.
+   Without this block a light portal opened while the CRM theme is dark shows dark inputs with pale labels inside a
+   light card (and the reverse). The doubled `.cp-layout` raises specificity above those leaked rules.
+   ========================================================================== */
+.cp-layout.cp-layout .form-group label {
+  color: var(--cp-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  margin-bottom: 0;
+}
+
+.cp-layout.cp-layout .form-group input:not([type="checkbox"]):not([type="radio"]),
+.cp-layout.cp-layout .form-group select,
+.cp-layout.cp-layout .form-group textarea {
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--cp-text);
+  background-color: var(--cp-surface-2);
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.cp-layout.cp-layout .form-group input:not([type="checkbox"]):not([type="radio"]):focus,
+.cp-layout.cp-layout .form-group select:focus,
+.cp-layout.cp-layout .form-group textarea:focus {
+  outline: none;
+  border-color: var(--cp-accent);
+  background-color: var(--cp-card-bg);
+  box-shadow: 0 0 0 3px rgba(50, 133, 246, 0.2);
+}
+
+.cp-layout.cp-layout .form-group input::placeholder,
+.cp-layout.cp-layout .form-group textarea::placeholder {
+  color: var(--cp-text-muted);
+  opacity: 0.85;
+}
+
+/* Same leak for the dialog chrome: CRM `.modal-header` / `.modal-footer` backgrounds must not override portal tokens. */
+.cp-layout.cp-layout .modal-dialog {
+  background: var(--cp-card-bg);
+  color: var(--cp-text);
+  border-color: var(--cp-border);
+}
+
+.cp-layout.cp-layout .modal-dialog .modal-header,
+.cp-layout.cp-layout .modal-dialog .modal-footer {
+  background: var(--cp-surface-2);
+  border-color: var(--cp-border);
+}
+
+.cp-layout.cp-layout .modal-dialog .modal-header h2,
+.cp-layout.cp-layout .modal-dialog .modal-header h3 {
+  color: var(--cp-text);
+}
+
+.cp-layout.cp-layout .modal-dialog .modal-body {
+  background: var(--cp-card-bg);
+  color: var(--cp-text);
+}
+
+/* ==========================================================================
+   Customer Portal - Shared Action Dialog & Form Modal Styling (.ins-modal)
+   Used by RentalFormModal (Pay security deposit, Request to end tenancy,
+   payment submission, renewals, inspections, receipts) and ActionDialog components.
+   Theme-compatible: adapts to both Light and Dark themes via --cp-* design tokens.
+   ========================================================================== */
+
+.cp-layout.cp-layout .ins-modal-overlay {
+  background: rgba(11, 18, 32, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.cp-layout.cp-layout .ins-modal {
+  background: var(--cp-card-bg);
+  color: var(--cp-text);
+  border: 1px solid var(--cp-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.cp-layout.cp-layout .ins-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--cp-border);
+  background: var(--cp-surface-2);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.cp-layout.cp-layout .ins-modal-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--cp-text);
+  letter-spacing: -0.01em;
+}
+
+.cp-layout.cp-layout .ins-modal-close {
+  background: transparent;
+  border: 1px solid var(--cp-border);
+  color: var(--cp-text-muted);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.cp-layout.cp-layout .ins-modal-close:hover {
+  color: #EF4444;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.cp-layout.cp-layout .ins-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  box-sizing: border-box;
+  background: var(--cp-card-bg);
+  color: var(--cp-text);
+}
+
+.cp-layout.cp-layout .ins-modal-body .text-muted,
+.cp-layout.cp-layout .ins-modal-body p.text-muted,
+.cp-layout.cp-layout .ins-modal-body span.text-muted {
+  color: var(--cp-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.cp-layout.cp-layout .ins-modal .bj-field label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cp-text);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.cp-layout.cp-layout .ins-modal .ins-prob-input,
+.cp-layout.cp-layout .ins-modal select.filter-select,
+.cp-layout.cp-layout .ins-modal select,
+.cp-layout.cp-layout .ins-modal textarea,
+.cp-layout.cp-layout .ins-modal input:not([type="checkbox"]):not([type="radio"]) {
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--cp-text);
+  background-color: var(--cp-surface-2);
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.cp-layout.cp-layout .ins-modal input:not([type="checkbox"]):not([type="radio"]),
+.cp-layout.cp-layout .ins-modal select.filter-select,
+.cp-layout.cp-layout .ins-modal select {
+  height: 40px;
+}
+
+.cp-layout.cp-layout .ins-modal textarea {
+  height: auto;
+  min-height: 84px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.cp-layout.cp-layout .ins-modal .ins-prob-input:focus,
+.cp-layout.cp-layout .ins-modal select.filter-select:focus,
+.cp-layout.cp-layout .ins-modal select:focus,
+.cp-layout.cp-layout .ins-modal textarea:focus,
+.cp-layout.cp-layout .ins-modal input:focus {
+  outline: none;
+  border-color: var(--cp-accent);
+  background-color: var(--cp-card-bg);
+  box-shadow: 0 0 0 3px rgba(50, 133, 246, 0.2);
+}
+
+.cp-layout.cp-layout .ins-modal input::placeholder,
+.cp-layout.cp-layout .ins-modal textarea::placeholder {
+  color: var(--cp-text-muted);
+  opacity: 0.85;
+}
+
+.cp-layout.cp-layout .ins-modal select.filter-select,
+.cp-layout.cp-layout .ins-modal select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A9B8CC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+  cursor: pointer;
+}
+
+.cp-layout:not(.dark).cp-layout:not(.dark) .ins-modal select.filter-select,
+.cp-layout:not(.dark).cp-layout:not(.dark) .ins-modal select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.cp-layout.cp-layout .ins-modal select option,
+.cp-layout.cp-layout .ins-modal .filter-select option {
+  background-color: var(--cp-card-bg);
+  color: var(--cp-text);
+  padding: 8px;
+}
+
+.cp-layout.cp-layout .ins-modal input[type="checkbox"] {
+  accent-color: var(--cp-primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.cp-layout.cp-layout .ins-modal label span {
+  color: var(--cp-text);
+  font-size: 0.875rem;
+}
+
+.cp-layout.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.9);
+  cursor: pointer;
+}
+
+.cp-layout.cp-layout .ins-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--cp-border);
+  background: var(--cp-surface-2);
+  flex-shrink: 0;
+}
+
+.cp-layout.cp-layout .ins-modal-footer .btn-secondary,
+.cp-layout.cp-layout .ins-modal-footer .btn-primary {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.cp-layout.cp-layout .ins-modal .bj-field-error,
+.cp-layout.cp-layout .ins-modal .ins-field-error {
+  color: #EF4444;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  display: block;
+}
+
+.cp-layout.cp-layout .ins-modal .ins-alert.error {
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #EF4444;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.cp-layout.dark .ins-modal .ins-alert.error {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #F87171;
+}
+
+@media (max-width: 600px) {
+  .cp-layout.cp-layout .ins-modal {
+    max-height: 96vh;
+    border-radius: 12px;
+  }
+  .cp-layout.cp-layout .ins-modal-body {
+    padding: 16px;
+  }
+  .cp-layout.cp-layout .ins-modal-header,
+  .cp-layout.cp-layout .ins-modal-footer {
+    padding: 14px 16px;
+  }
+}
+
 .cp-layout input:focus,
 .cp-layout select:focus,
 .cp-layout textarea:focus,

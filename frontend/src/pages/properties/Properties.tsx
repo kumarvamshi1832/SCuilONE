@@ -76,6 +76,8 @@ export default function Properties() {
 
   // Selected building in form (to dynamically check if unit_number is required)
   const [formBuildingId, setFormBuildingId] = useState<string>("");
+  /** Follows the Listing Type select so the rental fields only show for Rent / Lease. */
+  const [formListingType, setFormListingType] = useState<string>("Sale");
 
   // Staged and existing images for Add & Edit Property form
   const [stagedImages, setStagedImages] = useState<StagedPropertyImage[]>([]);
@@ -243,6 +245,13 @@ export default function Properties() {
     const sold = source.filter((p) => p.status === "Sold").length;
     return { total, available, reserved, sold };
   }, [allProperties, properties, error]);
+
+  // Available first, then Reserved, then the rest; Sold goes last. Array.sort is stable, so within one status the
+  // API's order (newest first) is kept.
+  const displayProperties = useMemo(() => {
+    const rank: Record<string, number> = { Available: 0, Reserved: 1, Rented: 2, Inactive: 3, Sold: 4 };
+    return [...properties].sort((x, y) => (rank[x.status] ?? 3) - (rank[y.status] ?? 3));
+  }, [properties]);
 
   // Load property images & matches when view modal opens
   const loadImages = useCallback(async (propId: string) => {
@@ -484,6 +493,7 @@ export default function Properties() {
   const handleOpenAddProperty = () => {
     setEditingProperty(null);
     setFormBuildingId("");
+    setFormListingType("Sale");
     setFormError(null);
     clearStagedImages();
     setExistingFormImages([]);
@@ -493,6 +503,7 @@ export default function Properties() {
   const handleOpenEditProperty = (p: Property) => {
     setEditingProperty(p);
     setFormBuildingId(p.building_id || "");
+    setFormListingType(p.listing_type || "Sale");
     setFormError(null);
     clearStagedImages();
     setIsFormOpen(true);
@@ -538,6 +549,32 @@ export default function Properties() {
     const bathrooms = bathVal !== "" && bathVal !== null ? Number(bathVal) : null;
     const furnishing = String(formData.get("furnishing") || "Unfurnished");
     const status = String(formData.get("status") || "Available");
+    // Rental & offer settings. Blank means "not set", so the server's defaults apply (price period follows the listing type).
+    const optionalNumber = (key: string): number | null => {
+      const raw = String(formData.get(key) || "").trim();
+      return raw === "" ? null : Number(raw);
+    };
+    const isRentalListing = ["Rent", "Lease"].includes(String(formData.get("listing_type") || ""));
+    const frequencyRaw = String(formData.get("price_frequency") || "");
+    const minTerm = optionalNumber("minimum_term_months");
+    const maxTerm = optionalNumber("maximum_term_months");
+    if (isRentalListing && minTerm !== null && maxTerm !== null && minTerm > maxTerm) {
+      setFormError("The minimum term cannot be longer than the maximum term.");
+      setSubmitting(false);
+      return;
+    }
+    // The rental fields only exist for Rent / Lease. For any other listing they are cleared, and the price period is
+    // One-time (the only period a sale can have), so switching a listing to Sale cannot leave a rental setting behind.
+    const rentalSettings: Partial<PropertyCreate> = {
+      price_frequency: isRentalListing ? (frequencyRaw ? (frequencyRaw as PropertyCreate["price_frequency"]) : undefined) : "One-time",
+      security_deposit: isRentalListing ? optionalNumber("security_deposit") : null,
+      minimum_term_months: isRentalListing ? minTerm : null,
+      maximum_term_months: isRentalListing ? maxTerm : null,
+      minimum_acceptable_price: optionalNumber("minimum_acceptable_price"),
+      require_owner_approval: formData.get("require_owner_approval") === "on",
+      hold_on_offer_acceptance: formData.get("hold_on_offer_acceptance") === "on",
+      offer_hold_hours: optionalNumber("offer_hold_hours") ?? 48,
+    };
     const owner_name = String(formData.get("owner_name") || "").trim() || null;
     const developer_name = String(formData.get("developer_name") || "").trim() || null;
     const assigned_to = String(formData.get("assigned_to") || "") || null;
@@ -584,6 +621,7 @@ export default function Properties() {
           developer_name,
           assigned_to,
           description,
+          ...rentalSettings,
         };
         const updated = await updateProperty(editingProperty.id, payload);
         setProperties((prev) =>
@@ -613,6 +651,7 @@ export default function Properties() {
           developer_name,
           assigned_to,
           description,
+          ...rentalSettings,
         };
         const created = await createProperty(payload);
         targetPropertyId = created.id;
@@ -1180,7 +1219,7 @@ export default function Properties() {
       ) : viewMode === "grid" ? (
         /* ─── Grid View ─── */
         <div className="properties-grid">
-          {properties.map((p) => {
+          {displayProperties.map((p) => {
             const cardImages = propertyImagesMap[p.id] || (p.images as PropertyImage[]) || [];
             const thumbUrl = propertyThumbnails[p.id];
             const buildingName = p.building_id ? buildingMap.get(p.building_id) : null;
@@ -1228,7 +1267,7 @@ export default function Properties() {
               </tr>
             </thead>
             <tbody>
-              {properties.map((p) => {
+              {displayProperties.map((p) => {
                 const thumbUrl = propertyThumbnails[p.id];
                 const buildingName = p.building_id ? buildingMap.get(p.building_id) : null;
                 const statusClass =
@@ -1441,7 +1480,8 @@ export default function Properties() {
                     <label>Listing Type *</label>
                     <select
                       name="listing_type"
-                      defaultValue={editingProperty?.listing_type || "Sale"}
+                      value={formListingType}
+                      onChange={(e) => setFormListingType(e.target.value)}
                       required
                     >
                       {LISTING_TYPES.map((l) => (
@@ -1475,6 +1515,61 @@ export default function Properties() {
                     />
                   </div>
                 </div>
+
+                {["Rent", "Lease"].includes(formListingType) && (
+                  <fieldset className="prop-settings-box">
+                    <legend>Rental settings</legend>
+                    <div className="form-grid-2">
+                      <div className="form-group">
+                        <label>Price period</label>
+                        <select name="price_frequency" defaultValue={editingProperty?.price_frequency && editingProperty.price_frequency !== "One-time" ? editingProperty.price_frequency : ""}>
+                          <option value="">Default for the listing type</option>
+                          <option value="Monthly">Monthly</option>
+                          <option value="Quarterly">Quarterly</option>
+                          <option value="Yearly">Yearly</option>
+                        </select>
+                        <small className="text-muted">Rent and Lease listings use a recurring period.</small>
+                      </div>
+                      <div className="form-group">
+                        <label>Security deposit</label>
+                        <input type="number" name="security_deposit" min="0" step="any" defaultValue={editingProperty?.security_deposit ?? ""} />
+                      </div>
+                    </div>
+                    <div className="form-grid-2">
+                      <div className="form-group">
+                        <label>Minimum term (months)</label>
+                        <input type="number" name="minimum_term_months" min="1" max="600" defaultValue={editingProperty?.minimum_term_months ?? ""} />
+                      </div>
+                      <div className="form-group">
+                        <label>Maximum term (months)</label>
+                        <input type="number" name="maximum_term_months" min="1" max="600" defaultValue={editingProperty?.maximum_term_months ?? ""} />
+                      </div>
+                    </div>
+                  </fieldset>
+                )}
+
+                <fieldset className="prop-settings-box">
+                  <legend>Offer settings (optional)</legend>
+                  <div className="form-grid-2">
+                    <div className="form-group">
+                      <label>Minimum acceptable price</label>
+                      <input type="number" name="minimum_acceptable_price" min="0" step="any" defaultValue={editingProperty?.minimum_acceptable_price ?? ""} />
+                      <small className="text-muted">Offers below this cannot be accepted.</small>
+                    </div>
+                    <div className="form-group">
+                      <label>Hold after an accepted offer (hours)</label>
+                      <input type="number" name="offer_hold_hours" min="1" max="720" defaultValue={editingProperty?.offer_hold_hours ?? 48} />
+                    </div>
+                  </div>
+                  <label className="prop-check-row">
+                    <input type="checkbox" name="require_owner_approval" defaultChecked={editingProperty?.require_owner_approval ?? false} />
+                    <span>Accepted offers need the owner&rsquo;s approval</span>
+                  </label>
+                  <label className="prop-check-row">
+                    <input type="checkbox" name="hold_on_offer_acceptance" defaultChecked={editingProperty?.hold_on_offer_acceptance ?? false} />
+                    <span>Hold the property for the buyer once an offer is accepted</span>
+                  </label>
+                </fieldset>
 
                 <div className="form-grid-2">
                   <div className="form-group">

@@ -172,8 +172,8 @@ export default function LeadViewModal({ lead, users, onClose, onEdit }: LeadView
             </div>
           )}
 
-          <CustomFieldsPanel entity="lead" recordId={lead.id} canEdit={permissions.canEdit} />
-          <EmailTimeline entity="lead" recordId={lead.id} recipient={lead.email} />
+          <CustomFieldsPanel key={`cf-${lead.id}`} entity="lead" recordId={lead.id} canEdit={permissions.canEdit} />
+          <EmailTimeline key={`em-${lead.id}`} entity="lead" recordId={lead.id} recipient={lead.email} />
         </div>
 
         <div className="modal-footer">

@@ -1,4 +1,4 @@
-import { NOMINEE_LIMITS } from "../../types/bookingNominee";
+import { NOMINEE_LIMITS, NOMINEE_RELATIONSHIPS } from "../../types/bookingNominee";
 import type { BookingNominee, NomineeDraft, NomineeErrors, NomineeField } from "../../types/bookingNominee";
 import { formatAllocation, newNomineeDraft, totalAllocationText } from "../../utils/bookingNominees";
 import { formatBookingDate } from "../../utils/bookingJourney";
@@ -66,7 +66,35 @@ export function NomineesEditor({ value, onChange, errors, disabled }: NomineesEd
             </button>
             <div className="nm-grid">
               {field("nominee_name", "Full name", { required: true, max: NOMINEE_LIMITS.nameMax })}
-              {field("relationship", "Relationship", { required: true, max: NOMINEE_LIMITS.relationshipMax, placeholder: "e.g. Spouse" })}
+              <div className={`nm-field ${e.relationship ? "has-error" : ""}`}>
+                <label htmlFor={id("relationship")}>
+                  Relationship<span className="nm-req"> *</span>
+                </label>
+                <select
+                  id={id("relationship")}
+                  value={row.relationship}
+                  disabled={disabled}
+                  aria-invalid={Boolean(e.relationship)}
+                  aria-describedby={e.relationship ? `${id("relationship")}-err` : undefined}
+                  onChange={(ev) => update(row.key, "relationship", ev.target.value)}
+                >
+                  <option value="">Select relationship</option>
+                  {/* A value saved earlier as free text (e.g. "Spouse") stays selectable instead of silently disappearing. */}
+                  {row.relationship && !(NOMINEE_RELATIONSHIPS as readonly string[]).includes(row.relationship) && (
+                    <option value={row.relationship}>{row.relationship}</option>
+                  )}
+                  {NOMINEE_RELATIONSHIPS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+                {e.relationship && (
+                  <small id={`${id("relationship")}-err`} className="nm-error" role="alert">
+                    {e.relationship}
+                  </small>
+                )}
+              </div>
               {field("phone", "Phone", { type: "tel", max: NOMINEE_LIMITS.phoneMax })}
               {field("email", "Email", { type: "email" })}
               {field("date_of_birth", "Date of birth", { type: "date" })}

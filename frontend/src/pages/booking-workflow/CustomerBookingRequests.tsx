@@ -14,6 +14,7 @@ import {
   parseBackendDate,
 } from "../../utils/bookingJourney";
 import { BookingStatusBadge } from "../../components/booking-journey/BookingJourneyWidgets";
+import { StaffCancellationQueue, StaffServiceRequestQueue } from "../../components/booking-journey/StaffLifecycleQueues";
 import type { BookingRequest } from "../../types/customerBookingJourney";
 import "../users/Users.css";
 import "../leads/Leads.css";
@@ -24,7 +25,7 @@ const PAGE_SIZE = 15;
 type HoldFilter = "" | "active" | "expired" | "none";
 
 const holdKind = (r: BookingRequest): Exclude<HoldFilter, ""> => {
-  if (r.status === "Approved" && r.hold_expires_at) {
+  if (["Requested", "Approved"].includes(r.status) && r.hold_expires_at) {
     const expiry = parseBackendDate(r.hold_expires_at);
     return expiry && expiry.getTime() > Date.now() ? "active" : "expired";
   }
@@ -35,6 +36,12 @@ const holdKind = (r: BookingRequest): Exclude<HoldFilter, ""> => {
 export default function CustomerBookingRequests() {
   const { industry } = useParams();
   const canView = useMemo(() => hasFeaturePermission("booking.view"), []);
+  const canDecide = useMemo(() => hasFeaturePermission("booking.update"), []);
+  const canViewService = useMemo(() => hasFeaturePermission("support_ticket.view"), []);
+  const canUpdateService = useMemo(() => hasFeaturePermission("support_ticket.update"), []);
+  /** Booking requests, cancellation requests and after-sales requests are separate queues of the same customer journey. */
+  const [tab, setTab] = useState<"requests" | "cancellations" | "service">("requests");
+  const [toast, setToast] = useState<string | null>(null);
 
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [properties, setProperties] = useState<Record<string, string>>({});
@@ -112,6 +119,21 @@ export default function CustomerBookingRequests() {
     [requests]
   );
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  /** booking id -> the booking request it belongs to (cancellation and service payloads only carry the booking id). */
+  const bookingLinks = useMemo(() => {
+    const map: Record<string, { requestId: string; propertyName: string }> = {};
+    requests.forEach((r) => {
+      if (r.booking_id) map[r.booking_id] = { requestId: r.id, propertyName: properties[r.property_id] || "" };
+    });
+    return map;
+  }, [requests, properties]);
+
   if (!canView) {
     return (
       <div className="ins-page">
@@ -149,6 +171,31 @@ export default function CustomerBookingRequests() {
         </div>
       </div>
 
+      {toast && (
+        <div className="ins-alert" role="status" style={{ position: "fixed", right: 24, bottom: 24, zIndex: 2000 }}>
+          <span>{toast}</span>
+        </div>
+      )}
+
+      <div role="tablist" aria-label="Customer booking queues" style={{ display: "flex", gap: 8, margin: "0 0 14px", flexWrap: "wrap" }}>
+        <button role="tab" aria-selected={tab === "requests"} className={tab === "requests" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("requests")}>
+          Booking requests
+        </button>
+        <button role="tab" aria-selected={tab === "cancellations"} className={tab === "cancellations" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("cancellations")}>
+          Cancellations
+        </button>
+        {canViewService && (
+          <button role="tab" aria-selected={tab === "service"} className={tab === "service" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("service")}>
+            After-sales
+          </button>
+        )}
+      </div>
+
+      {tab === "cancellations" && <StaffCancellationQueue canDecide={canDecide} bookingLinks={bookingLinks} basePath={`/${industry ?? "real-estate"}`} onNotify={setToast} />}
+      {tab === "service" && canViewService && <StaffServiceRequestQueue canUpdate={canUpdateService} bookingLinks={bookingLinks} basePath={`/${industry ?? "real-estate"}`} onNotify={setToast} />}
+
+      {tab === "requests" && (
+        <>
       <div className="ins-kpi-grid">
         <div className="ins-kpi amber">
           <span className="ins-kpi-label">Awaiting decision</span>
@@ -314,6 +361,8 @@ export default function CustomerBookingRequests() {
           )
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

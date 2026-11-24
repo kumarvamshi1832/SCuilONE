@@ -1,0 +1,125 @@
+.badge-requested { background: #fef9c3; color: #854d0e; }
+
+.dashboard-wrapper.dark .badge-requested { background: rgba(250, 204, 21, 0.18); color: #fde047; }
+
+.svj-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.svj-item {
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-left: 4px solid #3b82f6;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.svj-item.is-current {
+  border-left-color: #6366f1;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.svj-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.svj-title {
+  font-weight: 700;
+}
+
+.svj-grid {
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px 16px;
+}
+
+.svj-grid dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.svj-grid dd {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.svj-wide {
+  grid-column: 1 / -1;
+}
+
+.svj-prev {
+  text-decoration: line-through;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.svj-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(100, 116, 139, 0.08);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+/* Customer portal sections */
+.svp-section {
+  margin-top: 22px;
+}
+
+.svp-section > h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.svp-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.18);
+}
+
+.svp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+}
+
+.svp-card {
+  border: 1px solid var(--cp-border, rgba(100, 116, 139, 0.3));
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--cp-bg-surface, transparent);
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.svp-card h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.svp-muted {
+  color: var(--cp-text-muted, #64748b);
+  font-size: 0.82rem;
+}
+
+.svp-when {
+  font-weight: 600;
+}

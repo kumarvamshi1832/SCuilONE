@@ -23,6 +23,10 @@ import type {
 
 const BASE = "/api/v1/emails";
 
+let backendEmailsAvailable: boolean | null = null;
+
+export const isEmailsSupported = (): boolean => backendEmailsAvailable !== false;
+
 /** Drops empty values so optional filters/links are not sent as empty strings (the API expects UUIDs). */
 const compactLinks = (links: EmailLinks): Record<string, string> => {
   const out: Record<string, string> = {};
@@ -34,31 +38,60 @@ const compactLinks = (links: EmailLinks): Record<string, string> => {
 };
 
 export const getEmails = async (params: EmailListParams = {}, signal?: AbortSignal): Promise<EmailSummary[]> => {
-  const response = await apiClient.get<EmailSummary[]>(BASE, {
-    params: {
-      ...compactLinks(params),
-      direction: params.direction || undefined,
-      unlinked: params.unlinked ? true : undefined,
-      q: params.q?.trim() || undefined,
-      skip: Math.max(params.skip ?? 0, 0),
-      limit: Math.min(Math.max(params.limit ?? 25, 1), 100),
-    },
-    signal,
-  });
-  return Array.isArray(response.data) ? response.data : [];
+  if (backendEmailsAvailable === false) {
+    return [];
+  }
+  try {
+    const response = await apiClient.get<EmailSummary[]>(BASE, {
+      params: {
+        ...compactLinks(params),
+        direction: params.direction || undefined,
+        unlinked: params.unlinked ? true : undefined,
+        q: params.q?.trim() || undefined,
+        skip: Math.max(params.skip ?? 0, 0),
+        limit: Math.min(Math.max(params.limit ?? 25, 1), 100),
+      },
+      signal,
+    });
+    backendEmailsAvailable = true;
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      backendEmailsAvailable = false;
+      return [];
+    }
+    throw err;
+  }
 };
 
 export const getEmail = async (emailId: string, signal?: AbortSignal): Promise<EmailDetail> => {
+  if (backendEmailsAvailable === false) {
+    throw new Error("Email service is currently not registered on the backend.");
+  }
   const response = await apiClient.get<EmailDetail>(`${BASE}/${emailId}`, { signal });
   return response.data;
 };
 
 export const getEmailThread = async (threadId: string, signal?: AbortSignal): Promise<EmailDetail[]> => {
-  const response = await apiClient.get<EmailDetail[]>(`${BASE}/threads/${encodeURIComponent(threadId)}`, { signal });
-  return Array.isArray(response.data) ? response.data : [];
+  if (backendEmailsAvailable === false) {
+    return [];
+  }
+  try {
+    const response = await apiClient.get<EmailDetail[]>(`${BASE}/threads/${encodeURIComponent(threadId)}`, { signal });
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      backendEmailsAvailable = false;
+      return [];
+    }
+    throw err;
+  }
 };
 
 export const sendEmail = async (input: EmailSendInput): Promise<EmailDetail> => {
+  if (backendEmailsAvailable === false) {
+    throw new Error("Email integration is currently not enabled on this server.");
+  }
   const response = await apiClient.post<EmailDetail>(`${BASE}/send`, {
     to: input.to,
     cc: input.cc,
@@ -71,6 +104,9 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailDetail> => 
 };
 
 export const logEmail = async (input: EmailLogInput): Promise<EmailDetail> => {
+  if (backendEmailsAvailable === false) {
+    throw new Error("Email integration is currently not enabled on this server.");
+  }
   const response = await apiClient.post<EmailDetail>(`${BASE}/log`, {
     direction: input.direction,
     subject: input.subject,

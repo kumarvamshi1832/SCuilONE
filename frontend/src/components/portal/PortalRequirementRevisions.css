@@ -1,0 +1,117 @@
+.cp-rev-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  margin-right: 6px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--cp-primary, #4f46e5);
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.cp-rev-facts {
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px 16px;
+}
+
+.cp-rev-facts dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cp-text-muted, #64748b);
+}
+
+.cp-rev-facts dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.cp-rev-changed {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.cp-rev-table-wrap {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.cp-rev-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.cp-rev-table th,
+.cp-rev-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--cp-border, rgba(100, 116, 139, 0.25));
+  vertical-align: top;
+}
+
+.cp-rev-table thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cp-text-muted, #64748b);
+}
+
+.cp-rev-prev {
+  color: var(--cp-text-muted, #64748b);
+  text-decoration: line-through;
+}
+
+.cp-rev-new {
+  font-weight: 700;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.cp-rev-details {
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+
+.cp-rev-details summary {
+  cursor: pointer;
+  color: var(--cp-primary, #4f46e5);
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  /* Stack each changed field as a small card instead of a wide table. */
+  .cp-rev-table thead {
+    display: none;
+  }
+  .cp-rev-table,
+  .cp-rev-table tbody,
+  .cp-rev-table tr,
+  .cp-rev-table th[scope="row"],
+  .cp-rev-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .cp-rev-table tr {
+    margin-bottom: 8px;
+    border: 1px solid var(--cp-border, rgba(100, 116, 139, 0.25));
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .cp-rev-table td::before {
+    content: attr(data-label) ": ";
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    color: var(--cp-text-muted, #64748b);
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .cp-rev-prev {
+    text-decoration: none;
+  }
+}

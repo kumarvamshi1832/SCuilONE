@@ -1239,3 +1239,28 @@
 @media (max-height: 560px) {
   .site-visits-page .modal-card > .modal-header { padding-top: 12px; padding-bottom: 12px; }
 }
+
+/* Checkbox + text on one line inside the visit forms (the generic .form-group input rules made checkboxes huge). */
+.form-group .sv-check-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 0;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.form-group .sv-check-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px;
+  padding: 0 !important;
+  margin: 0;
+  accent-color: #2563eb;
+}

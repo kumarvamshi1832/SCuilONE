@@ -1,5 +1,7 @@
 import { portalApiClient } from './customerPortalAuthService';
-import { getBookingRequests } from './customerPortalJourneyService';
+import { getBookingRequest, getBookingRequests } from './customerPortalJourneyService';
+import { getPortalRentalAgreement, getPortalRentalAgreements } from './customerPortalRentalService';
+import { resolveOfferTarget } from './customerPortalBookingNegotiation';
 import { parseBackendDate } from '../utils/bookingJourney';
 import type {
   NotificationCategory,
@@ -34,6 +36,14 @@ const MODULE_CATEGORY: Record<string, Exclude<NotificationCategory, 'all'>> = {
   customer_booking_requests: 'bookings',
   bookings: 'bookings',
   payment_plans: 'bookings',
+  payments: 'bookings',
+  property_offers: 'bookings',
+  rental_agreements: 'bookings',
+  rental_payments: 'bookings',
+  rental_inspections: 'bookings',
+  rental_agreement_revisions: 'bookings',
+  rental_payment_schedules: 'bookings',
+  payment_plan_installments: 'bookings',
   payment_refunds: 'bookings',
   cancellation_requests: 'bookings',
   property_handovers: 'bookings',
@@ -65,6 +75,18 @@ function getNotificationActionText(item: Pick<PortalNotificationApiItem, 'relate
     case 'customer_booking_requests':
     case 'bookings':
       return 'View booking request';
+    case 'payments':
+      return 'View payment';
+    case 'property_offers':
+      return 'View offer';
+    case 'rental_agreements':
+    case 'rental_payments':
+    case 'rental_inspections':
+    case 'rental_agreement_revisions':
+    case 'rental_payment_schedules':
+      return 'View rental';
+    case 'payment_plan_installments':
+      return 'View payment schedule';
     case 'site_visits':
       return 'View site visits';
     case 'customer_chat':
@@ -119,7 +141,7 @@ export const CustomerPortalNotificationService = {
    *  - customer_booking_requests -> related_record_id is the booking request id.
    *  - bookings                  -> related_record_id is the booking id; the matching request is
    *                                  looked up from the customer's own booking requests.
-   *  - site_visits               -> booking journey (lists the customer's visits).
+   *  - site_visits               -> the customer's Site Visits page.
    */
   async resolveLink(notification: PortalNotification): Promise<string | null> {
     const { related_module: module, related_record_id: recordId } = notification;
@@ -135,8 +157,75 @@ export const CustomerPortalNotificationService = {
         return '/portal/booking-requests';
       }
     }
+    if (module === 'payments' && recordId) {
+      // related_record_id is the payment id: find the customer's own request that contains it.
+      try {
+        const requests = await getBookingRequests();
+        for (const request of requests.filter((r) => r.booking_id)) {
+          const detail = await getBookingRequest(request.id);
+          if (detail.payments.some((p) => p.id === recordId)) return `/portal/booking-requests/${request.id}`;
+        }
+      } catch {
+        /* fall through to the list */
+      }
+      return '/portal/booking-requests';
+    }
+    if (module === 'payment_plan_installments') {
+      return '/portal/booking-requests';
+    }
+    if (module === 'property_offers') {
+      // related_record_id is an offer id. Check property/transaction type (Rental vs Sale):
+      // Rental property offers navigate to Rentals & Leases (/portal/rentals?respond=true&offer=...)
+      // Sale property offers navigate to Booking Requests (/portal/booking-requests/:id?respond=true&offer=...)
+      if (recordId) {
+        try {
+          const target = await resolveOfferTarget(recordId);
+          if (target?.link) return target.link;
+        } catch {
+          /* fall through to text heuristic or default */
+        }
+      }
+      // Secondary fallback if offer record lookup was not found:
+      const isRentalType =
+        notification.notification_type === 'rental_offer' ||
+        notification.notification_type === 'lease_offer';
+      const text = `${notification.title} ${notification.message || ''}`.toLowerCase();
+      const isRentalText =
+        isRentalType ||
+        text.includes('rent') ||
+        text.includes('lease') ||
+        text.includes('monthly') ||
+        text.includes('quarterly') ||
+        text.includes('yearly') ||
+        text.includes('/ month') ||
+        text.includes('/month') ||
+        text.includes('/mo');
+      const offerParam = recordId ? `?respond=true&offer=${encodeURIComponent(recordId)}` : '';
+      if (isRentalText) {
+        return `/portal/rentals${offerParam}`;
+      }
+      return `/portal/booking-requests${offerParam}`;
+    }
+    if (module && module.startsWith('rental_')) {
+      // Most rental notifications carry the agreement id, but a payment decision carries the payment id.
+      if (!recordId) return '/portal/rentals';
+      try {
+        const agreements = await getPortalRentalAgreements();
+        if (agreements.some((a) => a.id === recordId)) return `/portal/rentals/${recordId}`;
+        for (const agreement of agreements) {
+          const detail = await getPortalRentalAgreement(agreement.id);
+          if (detail.payments.some((p) => p.id === recordId) || detail.inspections.some((i) => i.id === recordId)) {
+            return `/portal/rentals/${agreement.id}`;
+          }
+        }
+      } catch {
+        /* fall through to the list */
+      }
+      return '/portal/rentals';
+    }
     if (module === 'site_visits') {
-      return '/portal/booking-journey';
+      // The Site Visits page shows the appointment, its new time and status.
+      return '/portal/site-visits';
     }
     if (module === 'customer_chat') {
       return '/portal/chat';

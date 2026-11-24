@@ -290,7 +290,11 @@ export default function StaffPaymentForm({
           <div className={`pw-field ${errors.reference ? "has-error" : ""}`}>
             <label htmlFor="sp-ref">Transaction / reference ID{PAYMENT_METHODS_REQUIRING_REFERENCE.includes(method) ? " *" : ""}</label>
             <input id="sp-ref" type="text" maxLength={255} value={reference} disabled={submitting} onChange={(e) => { setReference(e.target.value); setErrors((p) => ({ ...p, reference: "" })); }} placeholder="UTR / NEFT / cheque no." />
-            <small>Each reference can be used for one payment only.</small>
+            <small>
+              {method === "Cash"
+                ? "Cash needs no reference or proof document. It is saved as pending and still goes through the normal payment verification."
+                : "Each reference can be used for one payment only."}
+            </small>
             {err("reference")}
           </div>
 

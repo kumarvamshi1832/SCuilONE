@@ -17,6 +17,9 @@ export const NOMINEE_LIMITS = {
   buyerPhoneMin: 7,
 } as const;
 
+/** Choices for a nominee's relationship to the buyer (the API stores it as free text, 2-80 characters). */
+export const NOMINEE_RELATIONSHIPS = ["Father", "Mother", "Sister", "Brother", "Cousin", "Son", "Daughter"] as const;
+
 /** A nominee as returned by the API. `allocation_percentage` is a Decimal - serialised as a string or a number. */
 export interface BookingNominee {
   id: string;

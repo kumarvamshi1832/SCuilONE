@@ -120,6 +120,13 @@ const FEATURE_ROLE_DEFAULTS: Record<string, CrmRoleCategory[]> = {
   "booking.view": ALL_ROLES,
   "booking.create": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
   "booking.update": ["TENANT_ADMIN", "MANAGER", "SALES_USER", "OPERATIONS_USER"],
+  // Booking payments and buyer-requirement offers (seed_role_permissions.py): used by the rentals screens and the
+  // price negotiation panel. Owner is classified as TENANT_ADMIN.
+  "booking.payment.view": ALL_ROLES,
+  "booking.payment.create": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
+  "booking.payment.verify": ["TENANT_ADMIN", "MANAGER", "OPERATIONS_USER"],
+  "buyer_requirement.view": ALL_ROLES,
+  "buyer_requirement.update": ["TENANT_ADMIN", "MANAGER", "SALES_USER"],
 };
 
 const NO_ACCESS: ModulePermissions = { view: false, create: false, update: false, delete: false };

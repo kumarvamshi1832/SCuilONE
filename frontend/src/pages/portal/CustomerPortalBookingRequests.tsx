@@ -8,12 +8,14 @@ import {
 } from "../../components/common/SupportPortalIcons";
 import { getPortalSiteVisits } from "../../services/customerPortalCommercialService";
 import { getBookingRequests } from "../../services/customerPortalJourneyService";
+import { getPortalRentalProperties } from "../../services/customerPortalRentalService";
 import { BookingStatusBadge } from "../../components/booking-journey/BookingJourneyWidgets";
+import { PortalOfferAlerts, useRequestNegotiations } from "../../components/portal/PortalBookingNegotiation";
+import { resolveRequestOfferDetails } from "../../utils/offerDisplay";
 import {
   describeHold,
   formatBookingDate,
   formatBookingDateTime,
-  formatBookingMoney,
 } from "../../utils/bookingJourney";
 import { getApiErrorMessage } from "../../utils/apiError";
 import type { BookingRequest } from "../../types/customerBookingJourney";
@@ -34,6 +36,7 @@ export default function CustomerPortalBookingRequests() {
 
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [visits, setVisits] = useState<PortalSiteVisit[]>([]);
+  const [rentalPropertyIds, setRentalPropertyIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -54,7 +57,28 @@ export default function CustomerPortalBookingRequests() {
     getPortalSiteVisits()
       .then(setVisits)
       .catch(() => undefined);
+    getPortalRentalProperties()
+      .then((props) => setRentalPropertyIds(new Set(props.map((p) => p.id))))
+      .catch(() => undefined);
   }, []);
+
+  const isRentalRequest = useCallback(
+    (r: BookingRequest): boolean => {
+      const v = visits.find((item) => item.id === r.site_visit_id);
+      const pid = v?.property?.id || v?.property_id;
+      if (pid && rentalPropertyIds.has(pid)) return true;
+      const pt = (v?.property?.property_type || "").toLowerCase();
+      if (pt.includes("rent") || pt.includes("lease")) return true;
+      const ptitle = (v?.property?.name || v?.property_title || "").toLowerCase();
+      if (ptitle.includes("rent") || ptitle.includes("lease")) return true;
+      if (r.customer_notes?.includes("Payment Plan:")) return true;
+      return false;
+    },
+    [visits, rentalPropertyIds]
+  );
+
+  const hasRentals = useMemo(() => requests.some(isRentalRequest), [requests, isRentalRequest]);
+  const hasOnlyRentals = useMemo(() => requests.length > 0 && requests.every(isRentalRequest), [requests, isRentalRequest]);
 
   useEffect(() => {
     void load();
@@ -89,6 +113,30 @@ export default function CustomerPortalBookingRequests() {
     });
   }, [requests, search, statusFilter, propertyBySiteVisit]);
 
+  // Offers and counteroffers made by staff on these requests (customer property-offers API).
+  const { items: negotiations } = useRequestNegotiations(requests, isRealEstate);
+  const propertyNameByRequest = useMemo(() => {
+    const map = new Map<string, string>();
+    requests.forEach((r) => {
+      const name = propertyBySiteVisit.get(r.site_visit_id);
+      if (name) map.set(r.id, name);
+    });
+    return map;
+  }, [requests, propertyBySiteVisit]);
+
+  const propertyImageByRequest = useMemo(() => {
+    const map = new Map<string, string>();
+    requests.forEach((r) => {
+      const v = visits.find((item) => item.id === r.site_visit_id);
+      const img =
+        (v?.property as any)?.images?.[0]?.image_url ||
+        (v?.property as any)?.image_url ||
+        (v?.property as any)?.primary_image_url;
+      if (img) map.set(r.id, img);
+    });
+    return map;
+  }, [requests, visits]);
+
   if (!isRealEstate) {
     return (
       <div className="cp-tickets-page">
@@ -107,13 +155,29 @@ export default function CustomerPortalBookingRequests() {
     <div className="cp-tickets-page">
       <div className="cp-tickets-header">
         <div>
-          <h1>Booking Requests</h1>
-          <p>Track every booking request, its hold, payments and agreement.</p>
+          <h1>{hasOnlyRentals ? "Rental Requests" : hasRentals ? "Booking & Rental Requests" : "Booking Requests"}</h1>
+          <p>
+            {hasOnlyRentals
+              ? "Track every rental request, its hold, payments and agreement."
+              : "Track every booking and rental request, its hold, payments and agreement."}
+          </p>
         </div>
-        <Link to="/portal/booking-journey" className="btn-primary" style={{ textDecoration: "none" }}>
-          Start from a site visit
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link to="/portal/booking-journey" className="btn-primary" style={{ textDecoration: "none" }}>
+            Start from a site visit
+          </Link>
+          <Link to="/portal/rentals" className="btn-secondary" style={{ textDecoration: "none" }}>
+            My rentals
+          </Link>
+        </div>
       </div>
+
+      <PortalOfferAlerts
+        requests={requests}
+        items={negotiations}
+        propertyNames={propertyNameByRequest}
+        propertyImages={propertyImageByRequest}
+      />
 
       <div className="cp-tickets-toolbar">
         <div className="cp-search-box" style={{ flex: 1, minWidth: 220 }}>
@@ -175,11 +239,16 @@ export default function CustomerPortalBookingRequests() {
         ) : !error && requests.length === 0 ? (
           <div className="cp-empty-state">
             <ReceiptIcon size={40} />
-            <h3>No booking requests yet</h3>
-            <p>After a completed site visit you can request a booking from the Booking Journey page.</p>
-            <Link to="/portal/booking-journey" className="btn-primary" style={{ marginTop: 16, textDecoration: "none" }}>
-              Open Booking Journey
-            </Link>
+            <h3>No requests yet</h3>
+            <p>After a completed site visit you can request a booking or rental from the Booking &amp; Rental Journey page.</p>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <Link to="/portal/booking-journey" className="btn-primary" style={{ textDecoration: "none" }}>
+                Open Journey
+              </Link>
+              <Link to="/portal/rentals" className="btn-secondary" style={{ textDecoration: "none" }}>
+                My Rentals &amp; Leases
+              </Link>
+            </div>
           </div>
         ) : requests.length > 0 && filtered.length === 0 ? (
           <div className="cp-empty-state">
@@ -204,26 +273,51 @@ export default function CustomerPortalBookingRequests() {
                 </thead>
                 <tbody>
                   {filtered.map((r) => {
+                    const isRental = isRentalRequest(r);
                     const hold = describeHold(r.hold_expires_at, r.status);
+                    const entry = negotiations.get(r.id);
+                    const currency = entry?.negotiation.match.property.currency || "INR";
+                    const offerInfo = resolveRequestOfferDetails(r, entry?.summary, currency, isRental);
                     return (
                       <tr key={r.id}>
                         <td>
                           <Link className="cp-ticket-link" to={`/portal/booking-requests/${r.id}`}>
                             #{shortId(r.id)}
                           </Link>
+                          {isRental && (
+                            <span className="pbn-chip" style={{ marginLeft: 6 }}>
+                              Rental
+                            </span>
+                          )}
                         </td>
                         <td>{propertyBySiteVisit.get(r.site_visit_id) ?? "—"}</td>
                         <td>{formatBookingDate(r.created_at)}</td>
                         <td>
-                          {r.agreed_price ? (
+                          {offerInfo.formattedPrice ? (
                             <>
-                              <div>{formatBookingMoney(r.agreed_price)}</div>
-                              {r.booking_amount && (
-                                <div className="cp-ticket-snippet">Booking: {formatBookingMoney(r.booking_amount)}</div>
+                              <div>{offerInfo.formattedPrice}</div>
+                              {offerInfo.formattedBookingAmount && (
+                                <div className="cp-ticket-snippet">
+                                  {isRental ? "Deposit: " : "Booking: "}
+                                  {offerInfo.formattedBookingAmount}
+                                </div>
                               )}
                             </>
                           ) : (
-                            <span className="cp-ticket-snippet">Pending approval</span>
+                            <>
+                              <span className="cp-ticket-snippet">Pending approval</span>
+                              {offerInfo.formattedBookingAmount && (
+                                <div className="cp-ticket-snippet">
+                                  {isRental ? "Deposit: " : "Booking: "}
+                                  {offerInfo.formattedBookingAmount}
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {offerInfo.statusLabel && (
+                            <div>
+                              <span className="pbn-chip">{offerInfo.statusLabel}</span>
+                            </div>
                           )}
                         </td>
                         <td>

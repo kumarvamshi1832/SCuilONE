@@ -76,6 +76,11 @@ export const CustomerPortalSidebar: React.FC<CustomerPortalSidebarProps> = ({
           icon: <ClockIcon size={19} />,
         },
         {
+          name: "Rentals & Leases",
+          path: "/portal/rentals",
+          icon: <HomeIcon size={19} />,
+        },
+        {
           name: "Booking Journey",
           path: "/portal/booking-journey",
           icon: <LayersIcon size={19} />,

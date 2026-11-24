@@ -113,6 +113,7 @@ const MENU_GROUPS: MenuGroupConfig[] = [
     routes: [
       "/bookings",
       "/customer-booking-requests",
+      "/rentals",
       "/payments",
       "/documents",
     ],
@@ -408,43 +409,36 @@ export default function DashboardLayout({
   };
 
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const consecutiveNotificationErrors = useRef(0);
 
   const loadNotifications = useCallback(async () => {
-
-    if (!sessionStorage.getItem("user")) {
-
+    if (!sessionStorage.getItem("user") && !localStorage.getItem("user")) {
       setNotifications([]);
-
       setUnreadCount(0);
-
       return;
+    }
 
+    if (consecutiveNotificationErrors.current >= 3) {
+      return;
     }
 
     setIsNotificationLoading(true);
-
     setNotificationError("");
 
     try {
-
       const response = await getNotifications(20, 0);
-
       setNotifications(response.items);
-
       setUnreadCount(response.unread_count);
-
-    } catch (error) {
-
-      console.error("Failed to load notifications:", error);
-
+      consecutiveNotificationErrors.current = 0;
+    } catch (error: any) {
+      consecutiveNotificationErrors.current += 1;
+      if (consecutiveNotificationErrors.current <= 1) {
+        console.warn("Notifications temporarily unavailable:", error?.message || "Internal server error");
+      }
       setNotificationError("Unable to load notifications.");
-
     } finally {
-
       setIsNotificationLoading(false);
-
     }
-
   }, []);
 
   useEffect(() => {
@@ -976,6 +970,13 @@ export default function DashboardLayout({
           label: "Customer Booking Requests",
           path: `${basePath}/customer-booking-requests`,
           icon: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 15l2 2 4-4",
+        });
+      }
+      if (enabled.includes("rentals") && hasPermission("booking.view")) {
+        items.push({
+          label: "Rentals & Leases",
+          path: `${basePath}/rentals`,
+          icon: "M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V11z",
         });
       }
       if (enabled.includes("trash") && hasPermission("trash.view")) {

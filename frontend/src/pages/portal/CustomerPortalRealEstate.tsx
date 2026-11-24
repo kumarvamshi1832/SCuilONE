@@ -10,13 +10,18 @@ import {
   XIcon,
   ReceiptIcon,
   FileSignatureIcon,
+  CheckCircleIcon,
 } from "../../components/common/SupportPortalIcons";
 import {
   getPortalBookings,
   getPortalBooking,
   getPortalSiteVisits,
 } from "../../services/customerPortalCommercialService";
+import { getBookingHandover, acknowledgeHandover } from "../../services/customerPortalJourneyService";
+import type { PortalHandover } from "../../types/customerBookingJourney";
+import { describeHold, formatBookingDateTime } from "../../utils/bookingJourney";
 import type { PortalBooking, PortalSiteVisit } from "../../types/customerPortal";
+import PortalSiteVisitSections from "../../components/site-visits/PortalSiteVisitSections";
 import "./CustomerPortalTickets.css";
 
 const formatCurrency = (amount: number | string | undefined, currency = "USD") => {
@@ -84,6 +89,9 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
 
   const [selectedBooking, setSelectedBooking] = useState<PortalBooking | null>(null);
   const [loadingBookingDetail, setLoadingBookingDetail] = useState(false);
+  const [bookingHandover, setBookingHandover] = useState<PortalHandover | null>(null);
+  const [acknowledgingHandover, setAcknowledgingHandover] = useState(false);
+  const [handoverNotice, setHandoverNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveTab(resolveTab());
@@ -117,15 +125,34 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
 
   const handleOpenBooking = async (id: string) => {
     setLoadingBookingDetail(true);
+    setBookingHandover(null);
+    setHandoverNotice(null);
     try {
       const data = await getPortalBooking(id);
       setSelectedBooking(data);
+      if (data && (data.status === "Confirmed" || data.status === "Completed")) {
+        getBookingHandover(id).then(setBookingHandover).catch(() => setBookingHandover(null));
+      }
     } catch (err: any) {
       console.error("Failed to load booking detail:", err);
       const fallback = bookings.find((b) => b.id === id) || null;
       setSelectedBooking(fallback);
     } finally {
       setLoadingBookingDetail(false);
+    }
+  };
+
+  const handleAcknowledgeHandover = async (handoverId: string) => {
+    setAcknowledgingHandover(true);
+    setHandoverNotice(null);
+    try {
+      const updated = await acknowledgeHandover(handoverId, { confirm_possession: true });
+      setBookingHandover(updated);
+      setHandoverNotice("Property possession successfully acknowledged!");
+    } catch (err: any) {
+      setHandoverNotice(err?.response?.data?.detail || "Failed to acknowledge property possession.");
+    } finally {
+      setAcknowledgingHandover(false);
     }
   };
 
@@ -482,47 +509,7 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
             </p>
           </div>
         ) : (
-          <div className="cp-table-card">
-            <table className="cp-table">
-              <thead>
-                <tr>
-                  <th>Property</th>
-                  <th>Location</th>
-                  <th>Scheduled Window</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredVisits.map((v) => (
-                  <tr key={v.id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: "var(--cp-text-main)" }}>
-                        {v.property?.name || "Property Visit"}
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--cp-text-muted)", marginTop: 2 }}>
-                        {v.property?.property_type || "Property"}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 13, color: "var(--cp-text-muted)" }}>
-                      {[v.property?.address, v.property?.city, v.property?.state]
-                        .filter(Boolean)
-                        .join(", ") || "Location details on file"}
-                    </td>
-                    <td style={{ fontSize: 13, color: "var(--cp-text-muted)" }}>
-                      {v.scheduled_start
-                        ? new Date(v.scheduled_start).toLocaleString([], {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })
-                        : "Scheduled"}
-                      {v.scheduled_end && ` – ${new Date(v.scheduled_end).toLocaleTimeString([], { timeStyle: "short" })}`}
-                    </td>
-                    <td>{getStatusBadge(v.status)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PortalSiteVisitSections visits={filteredVisits} />
         )
       )}
 
@@ -591,6 +578,66 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
 
             {/* Modal Body */}
             <div style={{ padding: 24 }}>
+              {/* Cancellation & Refund Notice */}
+              {selectedBooking.status === "Cancelled" && (
+                <div
+                  style={{
+                    background: "rgba(239, 68, 68, 0.08)",
+                    border: "1px solid rgba(239, 68, 68, 0.25)",
+                    borderRadius: 8,
+                    padding: "14px 18px",
+                    marginBottom: 20,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#ef4444", fontWeight: 600, fontSize: 14 }}>
+                    <AlertCircleIcon size={16} />
+                    <span>Booking Cancelled</span>
+                  </div>
+                  {selectedBooking.cancellation_reason && (
+                    <div style={{ fontSize: 13, color: "var(--cp-text-main)", marginTop: 6 }}>
+                      <strong>Reason:</strong> {selectedBooking.cancellation_reason}
+                    </div>
+                  )}
+                  {(selectedBooking.refunded_amount || selectedBooking.refund_amount) && (
+                    <div style={{ fontSize: 13, color: "var(--cp-text-muted)", marginTop: 4 }}>
+                      <strong>Refund Status:</strong> Processed{" "}
+                      <span style={{ color: "#10b981", fontWeight: 600 }}>
+                        {formatCurrency(
+                          selectedBooking.refunded_amount || selectedBooking.refund_amount,
+                          selectedBooking.property?.currency || "USD"
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Temporary Hold Details */}
+              {selectedBooking.hold_expires_at && selectedBooking.status !== "Cancelled" && (
+                <div
+                  style={{
+                    background: "rgba(245, 158, 11, 0.08)",
+                    border: "1px solid rgba(245, 158, 11, 0.25)",
+                    borderRadius: 8,
+                    padding: "12px 16px",
+                    marginBottom: 20,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <ClockIcon size={16} color="#d97706" />
+                  <div style={{ fontSize: 13, color: "var(--cp-text-main)" }}>
+                    <strong>Hold Expiry:</strong> {formatBookingDateTime(selectedBooking.hold_expires_at)}
+                    {selectedBooking.status && describeHold(selectedBooking.hold_expires_at, selectedBooking.status) && (
+                      <span style={{ marginLeft: 6, color: "#d97706", fontWeight: 600 }}>
+                        ({describeHold(selectedBooking.hold_expires_at, selectedBooking.status)})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Financial Summary KPIs */}
               <div
                 style={{
@@ -737,6 +784,61 @@ export default function CustomerPortalRealEstate({ initialTab }: CustomerPortalR
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Property Handover & Possession */}
+              {bookingHandover && (
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--cp-border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--cp-text-main)", margin: 0 }}>
+                      Property Handover &amp; Key Possession
+                    </h3>
+                    <span className="badge-status status-open">{bookingHandover.status}</span>
+                  </div>
+
+                  {handoverNotice && (
+                    <div style={{ padding: "8px 12px", borderRadius: 6, background: "rgba(16, 185, 129, 0.1)", color: "#10b981", fontSize: 13, marginBottom: 12 }}>
+                      {handoverNotice}
+                    </div>
+                  )}
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+                    <div style={{ padding: 12, borderRadius: 6, background: "var(--cp-bg-muted)", border: "1px solid var(--cp-border)" }}>
+                      <div style={{ fontSize: 11, color: "var(--cp-text-muted)" }}>Scheduled Time</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--cp-text-main)", marginTop: 2 }}>
+                        {bookingHandover.scheduled_at ? formatBookingDateTime(bookingHandover.scheduled_at) : "Pending Schedule"}
+                      </div>
+                    </div>
+                    <div style={{ padding: 12, borderRadius: 6, background: "var(--cp-bg-muted)", border: "1px solid var(--cp-border)" }}>
+                      <div style={{ fontSize: 11, color: "var(--cp-text-muted)" }}>Handover Location</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--cp-text-main)", marginTop: 2 }}>
+                        {bookingHandover.location || "On-site Property Address"}
+                      </div>
+                    </div>
+                    <div style={{ padding: 12, borderRadius: 6, background: "var(--cp-bg-muted)", border: "1px solid var(--cp-border)" }}>
+                      <div style={{ fontSize: 11, color: "var(--cp-text-muted)" }}>Possession Status</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: bookingHandover.customer_acknowledged_at ? "#10b981" : "#f59e0b", marginTop: 2 }}>
+                        {bookingHandover.customer_acknowledged_at ? "✓ Acknowledged" : "Awaiting Customer Acknowledgement"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {!bookingHandover.customer_acknowledged_at &&
+                    ["Scheduled", "Rescheduled", "In Progress"].includes(bookingHandover.status) && (
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => handleAcknowledgeHandover(bookingHandover.id)}
+                          disabled={acknowledgingHandover}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, padding: "8px 16px" }}
+                        >
+                          <CheckCircleIcon size={14} />
+                          <span>{acknowledgingHandover ? "Confirming..." : "Acknowledge Property Possession"}</span>
+                        </button>
+                      </div>
+                    )}
                 </div>
               )}
             </div>

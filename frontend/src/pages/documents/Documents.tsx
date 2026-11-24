@@ -4,6 +4,7 @@ import {
   deleteDocument,
   downloadDocument,
   updateDocumentSharing,
+  isDocumentsSupported,
 } from "../../services/documentService";
 import { getLeads } from "../../services/leadService";
 import { getContacts } from "../../services/contactService";
@@ -98,14 +99,32 @@ export default function Documents() {
   const fetchDocumentsData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (!isDocumentsSupported()) {
+      setDocuments([]);
+      setError(
+        "The Documents API is currently not registered or enabled on this backend deployment. Please contact your system administrator."
+      );
+      setLoading(false);
+      return;
+    }
     try {
       const docsRes = await getDocuments();
       setDocuments(docsRes.documents || []);
+      if (!isDocumentsSupported()) {
+        setError(
+          "The Documents API is currently not registered or enabled on this backend deployment. Please contact your system administrator."
+        );
+      }
     } catch (err: any) {
-      console.error("Failed to fetch documents:", err);
-      setError(
-        err?.response?.data?.detail || "Unable to load documents. Please check connection."
-      );
+      if (err?.response?.status === 404 || !isDocumentsSupported()) {
+        setError(
+          "The Documents API is currently not registered or enabled on this backend deployment. Please contact your system administrator."
+        );
+      } else {
+        setError(
+          err?.response?.data?.detail || "Unable to load documents. Please check connection."
+        );
+      }
     } finally {
       setLoading(false);
     }

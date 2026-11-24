@@ -33,6 +33,9 @@ export interface Booking {
   installment_request_notes?: string | null;
   refund_amount: number | string;
   status: BookingStatus | string;
+  hold_created_at?: string | null;
+  hold_expires_at?: string | null;
+  expired_at?: string | null;
   booking_date: string;
   cancellation_reason?: string | null;
   created_by?: string | null;
@@ -59,6 +62,7 @@ export interface BookingCreate {
   payment_preference?: PaymentPreference | string;
   installment_request_notes?: string | null;
   agreed_price?: number | null;
+  hold_hours?: number | null;
 }
 
 export interface BookingUpdate {

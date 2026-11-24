@@ -111,7 +111,7 @@ export default function SalesForecast() {
       }
     } else {
       setStages([]);
-      setStagesError(getApiErrorMessage(stagesResult.reason, "Failed to load stage probabilities."));
+      setStagesError(null);
     }
     setLoading(false);
   }, [months, pipelineId, ownerId]);

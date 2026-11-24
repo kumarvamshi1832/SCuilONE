@@ -154,7 +154,7 @@ export default function LeadScoring() {
       if (seq !== requestSeq.current) return;
       setHasNext(data.length > PAGE_SIZE);
       setRows(data.slice(0, PAGE_SIZE));
-    } catch (err) {
+    } catch (err: any) {
       if (seq !== requestSeq.current) return;
       setRows([]);
       setHasNext(false);

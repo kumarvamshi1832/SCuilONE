@@ -500,6 +500,9 @@ export interface PortalBooking {
   refunded_amount?: string;
   refund_amount?: string;
   cancellation_reason?: string | null;
+  hold_created_at?: string | null;
+  hold_expires_at?: string | null;
+  expired_at?: string | null;
   property?: PortalBookingProperty | null;
   payment_plan?: PortalPaymentPlan | null;
   payments?: PortalPayment[];

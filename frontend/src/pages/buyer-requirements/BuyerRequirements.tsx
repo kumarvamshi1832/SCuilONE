@@ -37,6 +37,8 @@ import type { Lead } from "../../types/lead";
 import type { Contact } from "../../types/contact";
 import type { User } from "../../types/user";
 import PropertyCard from "../../components/properties/PropertyCard";
+import NegotiationPanel from "../../components/negotiation/NegotiationPanel";
+import RequirementRevisionHistory from "../../components/history/RequirementRevisionHistory";
 import ManualMatchPropertiesModal from "../../components/buyer-requirements/ManualMatchPropertiesModal";
 import type { ManualMatchSaveSummary } from "../../components/buyer-requirements/ManualMatchPropertiesModal";
 import { resolveImageUrl, handleImageError } from "../../utils/imageUrl";
@@ -81,7 +83,9 @@ export default function BuyerRequirements() {
   const [resolvedProperties, setResolvedProperties] = useState<Record<string, Property>>({});
   const [propertyImagesMap, setPropertyImagesMap] = useState<Record<string, PropertyImage[]>>({});
   const [viewingPropertyDetail, setViewingPropertyDetail] = useState<Property | null>(null);
-  const [viewTab, setViewTab] = useState<"overview" | "matches">("overview");
+  const [viewTab, setViewTab] = useState<"overview" | "matches" | "history">("overview");
+  // Negotiation (offers / counteroffers) for one matched property; holds the property_match_id.
+  const [negotiatingMatchId, setNegotiatingMatchId] = useState<string | null>(null);
 
   // Manual matching
   const [isManualMatchOpen, setIsManualMatchOpen] = useState(false);
@@ -679,6 +683,7 @@ export default function BuyerRequirements() {
     try {
       if (editingRequirement) {
         const payload: BuyerRequirementUpdate = {
+          revision_reason: String(formData.get("revision_reason") || "").trim() || null,
           requirement_type,
           property_type,
           preferred_city,
@@ -1633,6 +1638,18 @@ export default function BuyerRequirements() {
                     placeholder="Enter special requirements: vastu compliant, high floor, park view..."
                   />
                 </div>
+
+                {editingRequirement && (
+                  <div className="form-group">
+                    <label>Reason for change (saved in Revision History)</label>
+                    <input
+                      type="text"
+                      name="revision_reason"
+                      maxLength={1000}
+                      placeholder="e.g. Buyer increased the budget after the site visit"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="modal-footer">
@@ -1686,10 +1703,25 @@ export default function BuyerRequirements() {
               >
                 Property Matches ({activeMatches.length})
               </button>
+              <button
+                className={`modal-tab-btn ${viewTab === "history" ? "active" : ""}`}
+                onClick={() => setViewTab("history")}
+              >
+                Revision History
+              </button>
             </div>
 
             <div className="modal-body">
-              {viewTab === "overview" ? (
+              {viewTab === "history" ? (
+                userPermissions.canView === false ? (
+                  <p style={{ color: "#64748b" }}>You don't have permission to view the revision history.</p>
+                ) : (
+                  <RequirementRevisionHistory
+                    requirementId={viewingRequirement.id}
+                    resolveUser={(id) => (id ? userMap.get(id) ?? null : null)}
+                  />
+                )
+              ) : viewTab === "overview" ? (
                 <div>
                   <div className="details-spec-grid">
                     <div className="details-spec-item">
@@ -1939,15 +1971,25 @@ export default function BuyerRequirements() {
                                   }
                                   const cardImages = propertyImagesMap[prop.id] || [];
                                   return (
-                                    <PropertyCard
-                                      key={m.id}
-                                      property={prop}
-                                      images={cardImages}
-                                      matchType="exact"
-                                      matchLabel="Matched"
-                                      formatPrice={formatPrice}
-                                      onView={setViewingPropertyDetail}
-                                    />
+                                    <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                      <PropertyCard
+                                        property={prop}
+                                        images={cardImages}
+                                        matchType="exact"
+                                        matchLabel="Matched"
+                                        formatPrice={formatPrice}
+                                        onView={setViewingPropertyDetail}
+                                      />
+                                      {userPermissions.canView !== false && (
+                                        <button
+                                          type="button"
+                                          className="btn-secondary"
+                                          onClick={() => setNegotiatingMatchId(m.id)}
+                                        >
+                                          Negotiate offers
+                                        </button>
+                                      )}
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -2016,6 +2058,27 @@ export default function BuyerRequirements() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── Negotiation: offer -> counteroffer -> accept / reject ─── */}
+      {negotiatingMatchId && viewingRequirement && (
+        <NegotiationPanel
+          buyerName={getBuyerName(viewingRequirement)}
+          initialMatchId={negotiatingMatchId}
+          options={activeMatches.map((m) => {
+            const prop = resolvedProperties[m.property_id] || properties.find((p) => p.id === m.property_id);
+            return {
+              matchId: m.id,
+              propertyName: prop?.name || m.property_name || "Property",
+              property: prop,
+            };
+          })}
+          canView={userPermissions.canView !== false}
+          canManage={Boolean(userPermissions.canUpdate)}
+          resolveUser={(id) => (id ? userMap.get(id) ?? null : null)}
+          onClose={() => setNegotiatingMatchId(null)}
+          notify={(message, type) => showToast(message, type)}
+        />
       )}
 
       {/* ─── Manual Property Matching Modal ─── */}

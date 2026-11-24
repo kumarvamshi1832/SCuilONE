@@ -1,0 +1,314 @@
+/* ==========================================================================
+   SCuilONE Customer Portal - Floating "Talk With Us" Chat Widget
+   Modern SaaS Floating Chat Launcher (Intercom / Drift / Copilot Style)
+   ========================================================================== */
+
+.cp-chat-widget-container {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 999;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Expanded Capsule Card
+   -------------------------------------------------------------------------- */
+.cp-chat-widget-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 10px;
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.98));
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  border-radius: 9999px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.55), 0 0 18px rgba(59, 130, 246, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+  color: inherit;
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-card {
+  background: linear-gradient(135deg, #FFFFFF, #F8FAFC);
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+}
+
+.cp-chat-widget-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 14px 30px -5px rgba(0, 0, 0, 0.65), 0 0 24px rgba(59, 130, 246, 0.28);
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-card:hover {
+  border-color: #3B82F6;
+  box-shadow: 0 14px 28px -5px rgba(15, 23, 42, 0.2), 0 4px 12px -2px rgba(59, 130, 246, 0.2);
+}
+
+.cp-chat-widget-card:active {
+  transform: translateY(0);
+}
+
+.cp-chat-widget-card:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Avatar / Icon Wrapper with Online Indicator
+   -------------------------------------------------------------------------- */
+.cp-chat-widget-avatar-wrap {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.45);
+}
+
+.cp-chat-widget-avatar-wrap svg {
+  width: 20px;
+  height: 20px;
+  color: #FFFFFF;
+  transition: transform 0.2s ease;
+}
+
+.cp-chat-widget-card:hover .cp-chat-widget-avatar-wrap svg,
+.cp-chat-widget-fab:hover .cp-chat-widget-avatar-wrap svg {
+  transform: scale(1.08);
+}
+
+/* Green Online Status Dot with Pulse */
+.cp-chat-online-dot {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #10B981;
+  border: 2px solid #0F172A;
+  box-shadow: 0 0 6px #10B981;
+}
+
+.cp-layout:not(.dark) .cp-chat-online-dot {
+  border-color: #FFFFFF;
+}
+
+.cp-chat-online-dot::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #10B981;
+  animation: cpChatPulse 2.2s infinite ease-out;
+  opacity: 0.8;
+}
+
+@keyframes cpChatPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Text Info Block (Title & Subtitle)
+   -------------------------------------------------------------------------- */
+.cp-chat-widget-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+
+.cp-chat-widget-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cp-chat-widget-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #F8FAFC;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-title {
+  color: #0F172A;
+}
+
+.cp-chat-widget-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7188rem;
+  font-weight: 500;
+  color: #94A3B8;
+  line-height: 1.2;
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-subtitle {
+  color: #64748B;
+}
+
+.cp-chat-inline-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10B981;
+  box-shadow: 0 0 4px #10B981;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Unread Badge
+   -------------------------------------------------------------------------- */
+.cp-chat-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #FFFFFF;
+  background-color: #EF4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Minimize / Close Button
+   -------------------------------------------------------------------------- */
+.cp-chat-widget-minimize-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.cp-chat-widget-minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #F8FAFC;
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-minimize-btn {
+  color: #94A3B8;
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-minimize-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #0F172A;
+}
+
+/* --------------------------------------------------------------------------
+   Collapsed Floating Action Button (FAB)
+   -------------------------------------------------------------------------- */
+.cp-chat-widget-fab {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.98));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 18px rgba(59, 130, 246, 0.2);
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.cp-layout:not(.dark) .cp-chat-widget-fab {
+  background: linear-gradient(135deg, #FFFFFF, #F8FAFC);
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+}
+
+.cp-chat-widget-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 14px 30px -5px rgba(0, 0, 0, 0.7), 0 0 24px rgba(59, 130, 246, 0.3);
+}
+
+.cp-chat-widget-fab-unread {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Breakpoints
+   -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .cp-chat-widget-container {
+    bottom: 18px;
+    right: 18px;
+  }
+
+  .cp-chat-widget-card {
+    padding: 6px 12px 6px 8px;
+    gap: 10px;
+  }
+
+  .cp-chat-widget-avatar-wrap {
+    width: 36px;
+    height: 36px;
+  }
+
+  .cp-chat-widget-avatar-wrap svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .cp-chat-widget-title {
+    font-size: 0.8125rem;
+  }
+
+  .cp-chat-widget-subtitle {
+    font-size: 0.6875rem;
+  }
+}

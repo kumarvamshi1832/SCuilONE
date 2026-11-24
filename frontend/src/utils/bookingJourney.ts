@@ -36,7 +36,7 @@ export const formatBookingDate = (value: string | null | undefined): string => {
 
 /** Human-readable time left on a hold, or null when there is no active hold. */
 export const describeHold = (holdExpiresAt: string | null | undefined, status: string): string | null => {
-  if (status !== "Approved") return null;
+  if (!["Requested", "Approved"].includes(status)) return null;
   const expiry = parseBackendDate(holdExpiresAt);
   if (!expiry) return null;
   const ms = expiry.getTime() - Date.now();
@@ -48,7 +48,7 @@ export const describeHold = (holdExpiresAt: string | null | undefined, status: s
 
 export const statusTone = (status: string): string => {
   const s = status.toLowerCase();
-  if (s === "approved" || s === "verified" || s === "confirmed" || s === "completed") return "good";
+  if (s === "approved" || s === "verified" || s === "confirmed" || s === "completed" || s === "booked") return "good";
   if (s === "requested" || s === "prepared" || s === "customer acknowledged" || s === "pending") return "info";
   if (s.startsWith("expired") || s === "not prepared") return "warn";
   if (s === "rejected" || s === "cancelled") return "bad";
@@ -80,7 +80,8 @@ export interface TimelineExtras {
 export const buildBookingTimeline = (
   d: BookingRequestDetail,
   audience: "customer" | "staff",
-  extras: TimelineExtras = {}
+  extras: TimelineExtras = {},
+  isRental = false
 ): TimelineStep[] => {
   const status = d.status;
   const rejected = status === "Rejected";
@@ -92,7 +93,7 @@ export const buildBookingTimeline = (
 
   const steps: TimelineStep[] = [
     { key: "visit", label: "Site visit completed", state: "done" },
-    { key: "requested", label: "Booking requested", state: "done", detail: formatBookingDateTime(d.created_at) },
+    { key: "requested", label: isRental ? "Rental requested" : "Booking requested", state: "done", detail: formatBookingDateTime(d.created_at) },
     {
       key: "review",
       label: reviewLabel,
@@ -104,7 +105,7 @@ export const buildBookingTimeline = (
   if (rejected) {
     steps.push({
       key: "rejected",
-      label: "Booking request rejected",
+      label: isRental ? "Rental request rejected" : "Booking request rejected",
       state: "failed",
       detail: d.customer_message || undefined,
     });
@@ -113,15 +114,18 @@ export const buildBookingTimeline = (
 
   steps.push({
     key: "approved",
-    label: "Booking approved",
+    label: isRental ? "Rental approved" : "Booking approved",
     state: approved ? "done" : "pending",
-    detail: approved && d.agreed_price ? `Agreed price ${formatBookingMoney(d.agreed_price)}` : undefined,
+    detail:
+      approved && d.agreed_price
+        ? `${isRental ? "Proposed rent" : "Agreed price"} ${formatBookingMoney(d.agreed_price)}${d.booking_amount ? ` · ${isRental ? "Security deposit" : "Booking amount"} ${formatBookingMoney(d.booking_amount)}` : ""}`
+        : undefined,
   });
 
   const holdText = describeHold(d.hold_expires_at, status);
   steps.push({
     key: "hold",
-    label: expired ? "Booking hold expired" : "Hold active",
+    label: expired ? (isRental ? "Rental hold expired" : "Booking hold expired") : "Hold active",
     state: expired ? "failed" : confirmed ? "done" : status === "Approved" ? "current" : "pending",
     detail: status === "Approved" ? holdText ?? undefined : status === "Expired - Payment Review" ? "Under payment review by staff" : undefined,
   });
@@ -216,13 +220,16 @@ export const buildBookingTimeline = (
   // Handover (only once the handover endpoint has answered).
   if (extras.handover !== undefined) {
     const h = extras.handover;
+    const cancelled = h?.status === "Cancelled";
     steps.push({
       key: "handover",
       label: "Property handover",
-      state: h?.status === "Completed" ? "done" : inactive ? "skipped" : h ? "current" : "pending",
+      state: h?.status === "Completed" ? "done" : inactive ? "skipped" : h && !cancelled ? "current" : "pending",
       detail: h
         ? h.status === "Completed"
           ? `Completed ${formatBookingDateTime(h.completed_at)}`
+          : cancelled
+          ? "Cancelled - a new date will be shared"
           : `${h.status}${h.scheduled_at ? ` · ${formatBookingDateTime(h.scheduled_at)}` : ""}`
         : confirmed
         ? "Not scheduled yet"

@@ -1,0 +1,555 @@
+/* ==========================================================================
+   SCuilONE Rental Agreement Document - Professional A4 Layout & Print Styles
+   Pixel-perfect alignment, consistent typography, card balance, and A4 print output.
+   ========================================================================== */
+
+.rad-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Action Bar above document (view/print/download controls) */
+.rad-action-bar {
+  width: 100%;
+  max-width: 840px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--cp-surface-2, #F8FAFC);
+  border: 1px solid var(--cp-border, #E2E8F0);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.rad-action-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: var(--cp-text-muted, #64748B);
+}
+
+.rad-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rad-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+/* Document Sheet (Standard Professional Document Container) */
+.rad-document-sheet {
+  width: 100%;
+  max-width: 840px;
+  background: #FFFFFF;
+  color: #0F172A;
+  border: 1px solid #D7E1EF;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  padding: 28px 32px 32px;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.45;
+  transition: all 0.2s ease;
+}
+
+/* Top Dual-Tone Branding Accent Bar */
+.rad-accent-bar {
+  display: flex;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.rad-accent-primary {
+  width: 28%;
+  background: #0284C7; /* Brand Sky Blue */
+}
+
+.rad-accent-secondary {
+  width: 72%;
+  background: #0F172A; /* Deep Navy Slate */
+}
+
+/* 1. Document Header */
+.rad-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+
+.rad-header-left {
+  flex: 1 1 auto;
+}
+
+.rad-company-title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.rad-portal-subtitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0284C7;
+  margin: 4px 0 2px;
+  line-height: 1.3;
+}
+
+.rad-document-tagline {
+  font-size: 0.75rem;
+  color: #64748B;
+  margin: 0;
+}
+
+.rad-header-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.rad-doc-type {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.rad-doc-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.rad-meta-num {
+  font-size: 0.8125rem;
+  color: #334155;
+}
+
+.rad-meta-date {
+  font-size: 0.72rem;
+  color: #64748B;
+}
+
+.rad-divider {
+  border: 0;
+  height: 1px;
+  background: #E2E8F0;
+  margin: 12px 0 16px;
+  width: 100%;
+}
+
+/* 2. Property & Tenant and Tenancy Term & Status Cards */
+.rad-info-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.rad-info-card {
+  display: flex;
+  flex-direction: column;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+}
+
+.rad-card-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748B;
+  margin: 0 0 8px;
+}
+
+.rad-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.rad-card-field {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.rad-card-field.property-name,
+.rad-card-field.dates-field {
+  margin-bottom: 2px;
+}
+
+.rad-field-label {
+  font-weight: 600;
+  color: #475569;
+}
+
+.rad-field-val {
+  color: #0F172A;
+  font-weight: 500;
+}
+
+.rad-field-val.font-highlight {
+  font-size: 0.925rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.rad-field-sep {
+  color: #94A3B8;
+  font-size: 0.75rem;
+}
+
+.rad-field-sub {
+  font-size: 0.72rem;
+  color: #64748B;
+}
+
+.text-break {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 3. Financial Summary Cards (3 Equal-Width Tiles) */
+.rad-financial-cards-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+  width: 100%;
+}
+
+.rad-financial-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.rad-financial-card.rent-card {
+  background: #F0FDF4; /* green-50 */
+  border: 1px solid #BBF7D0; /* green-200 */
+}
+
+.rad-financial-card.deposit-card {
+  background: #EFF6FF; /* blue-50 */
+  border: 1px solid #BFDBFE; /* blue-200 */
+}
+
+.rad-financial-card.maintenance-card {
+  background: #F8FAFC; /* slate-50 */
+  border: 1px solid #E2E8F0; /* slate-200 */
+}
+
+.rad-fin-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.rad-financial-card.rent-card .rad-fin-label {
+  color: #15803D;
+}
+
+.rad-financial-card.deposit-card .rad-fin-label {
+  color: #1D4ED8;
+}
+
+.rad-financial-card.maintenance-card .rad-fin-label {
+  color: #475569;
+}
+
+.rad-fin-amount {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin-bottom: 3px;
+}
+
+.rad-financial-card.rent-card .rad-fin-amount {
+  color: #166534;
+}
+
+.rad-financial-card.deposit-card .rad-fin-amount {
+  color: #1E3A8A;
+}
+
+.rad-financial-card.maintenance-card .rad-fin-amount {
+  color: #0F172A;
+}
+
+.rad-fin-note {
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.rad-financial-card.rent-card .rad-fin-note {
+  color: #15803D;
+}
+
+.rad-financial-card.deposit-card .rad-fin-note {
+  color: #1D4ED8;
+}
+
+.rad-financial-card.maintenance-card .rad-fin-note {
+  color: #64748B;
+}
+
+/* 4. Agreement Terms & Conditions Table */
+.rad-terms-section {
+  width: 100%;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #E2E8F0;
+}
+
+.rad-terms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  table-layout: fixed;
+}
+
+.rad-terms-table th {
+  background: #0F172A;
+  color: #FFFFFF;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.rad-terms-table td {
+  padding: 6.5px 12px;
+  vertical-align: middle;
+  border-bottom: 1px solid #F1F5F9;
+  line-height: 1.35;
+}
+
+.rad-terms-table .col-clause {
+  width: 38%;
+  font-weight: 700;
+  color: #334155;
+  background: inherit;
+}
+
+.rad-terms-table .col-terms {
+  width: 62%;
+  color: #0F172A;
+  word-break: break-word;
+}
+
+.rad-terms-table tr.zebra-row td {
+  background: #F8FAFC;
+}
+
+.rad-terms-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* 5. Electronic Execution Box */
+.rad-execution-box {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  margin-bottom: 14px;
+}
+
+.rad-execution-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748B;
+  margin: 0 0 6px;
+}
+
+.rad-execution-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.74rem;
+  color: #475569;
+}
+
+.rad-execution-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rad-exec-sep {
+  color: #CBD5E1;
+}
+
+.rad-exec-meta {
+  font-size: 0.7rem;
+  color: #64748B;
+  margin-top: 2px;
+}
+
+/* 6. Footer Notice */
+.rad-footer {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.rad-footer .rad-divider {
+  margin: 8px 0;
+}
+
+.rad-footer-line {
+  font-size: 0.7rem;
+  color: #94A3B8;
+  margin: 0;
+  font-weight: 500;
+}
+
+.rad-footer-sub {
+  font-size: 0.68rem;
+  color: #94A3B8;
+  margin: 2px 0 0;
+}
+
+/* Responsive view on smaller screens */
+@media (max-width: 680px) {
+  .rad-document-sheet {
+    padding: 18px 16px;
+  }
+
+  .rad-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .rad-header-right {
+    text-align: left;
+  }
+
+  .rad-info-cards-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rad-financial-cards-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rad-terms-table .col-clause {
+    width: 45%;
+  }
+
+  .rad-terms-table .col-terms {
+    width: 55%;
+  }
+}
+
+/* ==========================================================================
+   A4 Print Optimization Styles
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+
+  /* Hide app navigation, headers, footers and modals except document */
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .no-print,
+  .cp-pdf-toolbar,
+  .cp-pdf-modal-header,
+  .cp-pdf-modal-footer,
+  .rad-action-bar {
+    display: none !important;
+  }
+
+  .rad-container,
+  .rad-container * {
+    visibility: visible;
+  }
+
+  .rad-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .rad-document-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .rad-terms-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .rad-info-cards-row,
+  .rad-financial-cards-row,
+  .rad-execution-box {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

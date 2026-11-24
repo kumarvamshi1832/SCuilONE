@@ -30,14 +30,16 @@ export function BookingTimeline({
   detail,
   audience,
   extras,
+  isRental = false,
 }: {
   detail: BookingRequestDetail;
   audience: "customer" | "staff";
   extras?: TimelineExtras;
+  isRental?: boolean;
 }) {
-  const steps = buildBookingTimeline(detail, audience, extras);
+  const steps = buildBookingTimeline(detail, audience, extras, isRental);
   return (
-    <ol className="bj-timeline" aria-label="Booking progress">
+    <ol className="bj-timeline" aria-label={isRental ? "Rental progress" : "Booking progress"}>
       {steps.map((step) => (
         <li key={step.key} className={`bj-step bj-step-${step.state}`}>
           <span className="bj-step-dot" aria-hidden="true">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   extractCustomFieldErrors,
   getCustomFieldValues,
+  isCustomFieldsSupported,
   setCustomFieldValues,
 } from "../../services/customFieldService";
 import { getApiErrorMessage } from "../../utils/apiError";
@@ -47,13 +48,22 @@ export default function CustomFieldsPanel({ entity, recordId, canEdit }: CustomF
     setLoading(true);
     setLoadError(null);
     try {
+      if (!isCustomFieldsSupported()) {
+        setFields([]);
+        setLoading(false);
+        return;
+      }
       const data = await getCustomFieldValues(entity, recordId);
       if (mine !== seq.current) return;
       setFields(data.fields);
-    } catch (err) {
+    } catch (err: any) {
       if (mine !== seq.current) return;
       setFields([]);
-      setLoadError(getApiErrorMessage(err, "Could not load custom fields."));
+      if (err?.response?.status === 404 || !isCustomFieldsSupported()) {
+        setLoadError(null);
+      } else {
+        setLoadError(getApiErrorMessage(err, "Could not load custom fields."));
+      }
     } finally {
       if (mine === seq.current) setLoading(false);
     }

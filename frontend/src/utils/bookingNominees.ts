@@ -97,7 +97,7 @@ export const validateNominees = (drafts: NomineeDraft[]): NomineeErrors => {
     const relationship = d.relationship.trim();
     if (name.length < NOMINEE_LIMITS.nameMin) e.nominee_name = `Enter the nominee’s name (at least ${NOMINEE_LIMITS.nameMin} characters).`;
     else if (name.length > NOMINEE_LIMITS.nameMax) e.nominee_name = `At most ${NOMINEE_LIMITS.nameMax} characters.`;
-    if (relationship.length < NOMINEE_LIMITS.relationshipMin) e.relationship = "Enter the relationship to the buyer.";
+    if (relationship.length < NOMINEE_LIMITS.relationshipMin) e.relationship = "Select the relationship to the buyer.";
     else if (relationship.length > NOMINEE_LIMITS.relationshipMax) e.relationship = `At most ${NOMINEE_LIMITS.relationshipMax} characters.`;
     if (d.phone.trim().length > NOMINEE_LIMITS.phoneMax) e.phone = `At most ${NOMINEE_LIMITS.phoneMax} characters.`;
     if (d.email.trim() && !EMAIL_RE.test(d.email.trim())) e.email = "Enter a valid email address.";

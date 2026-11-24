@@ -1,4 +1,6 @@
+/** Same values as the backend SiteVisitStatus. "Requested" is a visit the customer asked for from the portal; staff confirm it. */
 export const SITE_VISIT_STATUSES = [
+  "Requested",
   "Scheduled",
   "Completed",
   "Cancelled",

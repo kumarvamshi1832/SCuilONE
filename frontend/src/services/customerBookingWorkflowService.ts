@@ -1,14 +1,19 @@
 import { apiClient } from "./authService";
+import type { CancellationDecision, CancellationRequest, ServiceRequest, ServiceRequestUpdate } from "../types/customerLifecycle";
 import type {
   AgreementVerifyInput,
   BookingDecisionInput,
   BookingRequest,
   BookingRequestDetail,
   FinalConfirmResult,
+  HandoverScheduleInput,
+  HandoverUpdateInput,
   HoldExtensionInput,
   JourneyFile,
   JourneyPayment,
   PaymentInstructionsResult,
+  StaffHandover,
+  WalkInHandoverAcknowledgeInput,
 } from "../types/customerBookingJourney";
 
 /**
@@ -111,6 +116,62 @@ export const finalConfirmBooking = async (requestId: string): Promise<FinalConfi
   return response.data;
 };
 
+/* ─── Property handover (staff) ───
+ *   GET   /api/v1/customer-booking-workflow/handovers?booking_id=        booking.view
+ *   POST  /api/v1/customer-booking-workflow/bookings/{id}/handover       booking.update
+ *   PATCH /api/v1/customer-booking-workflow/handovers/{id}               booking.update
+ */
+const WORKFLOW = "/api/v1/customer-booking-workflow";
+
+/** Returns the saved handover for the booking, or null when none has been scheduled. */
+export const getStaffHandover = async (bookingId: string): Promise<StaffHandover | null> => {
+  const response = await apiClient.get<StaffHandover[]>(`${WORKFLOW}/handovers`, { params: { booking_id: bookingId } });
+  return Array.isArray(response.data) && response.data.length > 0 ? (response.data[0] ?? null) : null;
+};
+
+export const scheduleStaffHandover = async (
+  bookingId: string,
+  data: HandoverScheduleInput
+): Promise<StaffHandover> => {
+  const response = await apiClient.post<StaffHandover>(`${WORKFLOW}/bookings/${bookingId}/handover`, data);
+  return response.data;
+};
+
+export const updateStaffHandover = async (
+  handoverId: string,
+  data: HandoverUpdateInput
+): Promise<StaffHandover> => {
+  const response = await apiClient.patch<StaffHandover>(`${WORKFLOW}/handovers/${handoverId}`, data);
+  return response.data;
+};
+
+/** Walk-in handover only (409 for a portal handover): the staff member records the customer's possession acknowledgement. */
+export const acknowledgeWalkInHandover = async (handoverId: string, data: WalkInHandoverAcknowledgeInput): Promise<StaffHandover> =>
+  (await apiClient.post<StaffHandover>(`${WORKFLOW}/handovers/${handoverId}/walk-in-acknowledge`, data)).data;
+
+/* ─── Cancellation requests and after-sales (service) requests ───
+ *   GET  /cancellation-requests                      booking.view
+ *   POST /cancellation-requests/{id}/decision        booking.update  { decision: Approve | Reject, staff_notes }
+ *        Approve is refused (409) until every verified payment has a PROCESSED refund and no refund is pending.
+ *   GET  /service-requests?status=                   support_ticket.view
+ *   PATCH /service-requests/{id}                     support_ticket.update  { status, resolution, staff_notes, assigned_to }
+ */
+export const getStaffCancellationRequests = async (): Promise<CancellationRequest[]> => {
+  const response = await apiClient.get<CancellationRequest[]>(`${WORKFLOW}/cancellation-requests`);
+  return Array.isArray(response.data) ? response.data : [];
+};
+
+export const decideStaffCancellationRequest = async (requestId: string, data: CancellationDecision): Promise<CancellationRequest> =>
+  (await apiClient.post<CancellationRequest>(`${WORKFLOW}/cancellation-requests/${requestId}/decision`, data)).data;
+
+export const getStaffServiceRequests = async (status?: string): Promise<ServiceRequest[]> => {
+  const response = await apiClient.get<ServiceRequest[]>(`${WORKFLOW}/service-requests`, { params: status ? { status } : undefined });
+  return Array.isArray(response.data) ? response.data : [];
+};
+
+export const updateStaffServiceRequest = async (requestId: string, data: ServiceRequestUpdate): Promise<ServiceRequest> =>
+  (await apiClient.patch<ServiceRequest>(`${WORKFLOW}/service-requests/${requestId}`, data)).data;
+
 /* ─── Best-effort context lookups for the staff views ───
  * The workflow payload only carries ids (property_id, site_visit_id). These calls use existing
  * staff endpoints to show names; every one is optional and a failure simply leaves the field blank.
@@ -122,6 +183,8 @@ export interface StaffRequestContext {
   propertyCity: string | null;
   customerName: string | null;
   requirementSummary: string | null;
+  /** property_match_id of the visit: keys the staff price negotiation (/property-offers). */
+  propertyMatchId: string | null;
 }
 
 interface PropertyLite {
@@ -158,6 +221,7 @@ export const resolveStaffRequestContext = async (
     propertyCity: null,
     customerName: null,
     requirementSummary: null,
+    propertyMatchId: null,
   };
 
   const propertyPromise = apiClient
@@ -174,6 +238,7 @@ export const resolveStaffRequestContext = async (
   const customerPromise = (async () => {
     try {
       const visit = (await apiClient.get<VisitLite>(`/api/v1/site-visits/${request.site_visit_id}`)).data;
+      context.propertyMatchId = visit.property_match_id;
       const matches = (
         await apiClient.get<MatchLite[]>(`/api/v1/property-matches/properties/${request.property_id}`)
       ).data;

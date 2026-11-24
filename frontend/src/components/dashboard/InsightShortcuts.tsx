@@ -3,8 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { useVerifiedAuth } from "../layout/ProtectedRoute";
 import { getIndustryConfig } from "../../config/industryConfig";
 import { hasFeaturePermission } from "../../utils/modulePermissions";
-import { getForecastSummary } from "../../services/forecastService";
-import { getLeadLeaderboard } from "../../services/leadScoringService";
+import { getForecastSummary, isForecastSupported } from "../../services/forecastService";
+import { getLeadLeaderboard, isLeadScoringSupported } from "../../services/leadScoringService";
 import "../../pages/insights/CrmInsights.css";
 
 interface Shortcut {
@@ -47,12 +47,12 @@ export default function InsightShortcuts() {
 
   useEffect(() => {
     let active = true;
-    if (access.scoring) {
+    if (access.scoring && isLeadScoringSupported()) {
       getLeadLeaderboard({ label: "Hot", limit: 100 })
         .then((rows) => active && setHotLeads(rows.length >= 100 ? "100+" : String(rows.length)))
         .catch(() => undefined);
     }
-    if (access.forecast) {
+    if (access.forecast && isForecastSupported()) {
       getForecastSummary({ months: 6 })
         .then((s) => active && setWeighted(formatMoney(s.totals.weighted_amount)))
         .catch(() => undefined);

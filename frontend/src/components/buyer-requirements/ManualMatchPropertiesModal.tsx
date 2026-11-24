@@ -57,7 +57,8 @@ export default function ManualMatchPropertiesModal({
   onClose,
   onSaved,
 }: ManualMatchPropertiesModalProps) {
-  const expectedListing = requirement.requirement_type === "Buy" ? "Sale" : "Rent";
+  // Same mapping as the backend (expected_listing_type_for_requirement): Buy -> Sale, Rent -> Rent, Lease -> Lease.
+  const expectedListing = requirement.requirement_type === "Buy" ? "Sale" : requirement.requirement_type === "Lease" ? "Lease" : "Rent";
 
   // Filters
   const [searchInput, setSearchInput] = useState("");

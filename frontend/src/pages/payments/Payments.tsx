@@ -13,13 +13,18 @@ import {
 import { getBookings } from "../../services/bookingService";
 import { getProperties } from "../../services/propertyService";
 import {
+  listRentalAgreements,
+  listRentalPayments,
+  decideRentalPayment,
+} from "../../services/rentalService";
+import {
   getPaymentPlan,
   createPaymentPlan,
   getCollectionSummary,
   getOverdueCollections,
 } from "../../services/paymentPlanService";
 import type { Payment, PaymentCreate, PaymentDecision } from "../../types/payment";
-import { PAYMENT_METHODS, PAYMENT_STATUSES } from "../../types/payment";
+import { PAYMENT_METHODS } from "../../types/payment";
 import type {
   PaymentRefund,
   PaymentRefundCreate,
@@ -27,6 +32,7 @@ import type {
 } from "../../types/paymentRefund";
 import type { Booking } from "../../types/booking";
 import type { Property } from "../../types/property";
+import type { RentalAgreement } from "../../types/rental";
 import type {
   PaymentPlan,
   PaymentPlanCreate,
@@ -45,12 +51,21 @@ interface EnrichedPayment extends Payment {
   property_name?: string;
   unit_number?: string;
   booking_status?: string;
+  is_rental?: boolean;
+  agreement_id?: string;
+  rental_agreement_id?: string;
+  payment_type?: string;
+  category?: "Booking" | "Rental";
+  category_display?: string;
+  proof_document_url?: string | null;
+  receipt_number?: string | null;
 }
 
 export default function Payments() {
   const [payments, setPayments] = useState<EnrichedPayment[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [rentalAgreements, setRentalAgreements] = useState<RentalAgreement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +77,7 @@ export default function Payments() {
   const [statusFilter, setStatusFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   const [bookingFilter, setBookingFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
 
   // Modals
   const [isRecordOpen, setIsRecordOpen] = useState(false);
@@ -226,18 +242,20 @@ export default function Payments() {
   }, []);
 
 
-  // Fetch initial lookups: bookings and properties
+  // Fetch initial lookups: bookings, properties, and rental agreements
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [bookingsData, propertiesData] = await Promise.all([
+      const [bookingsData, propertiesData, rentalAgreementsData] = await Promise.all([
         getBookings({ limit: 100 }).catch(() => [] as Booking[]),
         getProperties({ limit: 100 }).catch(() => [] as Property[]),
+        listRentalAgreements().catch(() => [] as RentalAgreement[]),
       ]);
 
       setBookings(bookingsData);
       setProperties(propertiesData);
+      setRentalAgreements(rentalAgreementsData);
 
       const propMap = new Map<string, Property>();
       propertiesData.forEach((p) => propMap.set(p.id, p));
@@ -245,9 +263,10 @@ export default function Payments() {
       const bookingMap = new Map<string, Booking>();
       bookingsData.forEach((b) => bookingMap.set(b.id, b));
 
-      // Query payments across all bookings
       const allPayments: EnrichedPayment[] = [];
-      const paymentPromises = bookingsData.map(async (b) => {
+
+      // Query payments across all bookings
+      const bookingPaymentPromises = bookingsData.map(async (b) => {
         try {
           const pmts = await getPayments(b.id);
           const prop = propMap.get(b.property_id);
@@ -260,6 +279,10 @@ export default function Payments() {
               property_name: prop?.name,
               unit_number: prop?.unit_number || undefined,
               booking_status: b.status,
+              is_rental: false,
+              category: "Booking",
+              category_display: "Booking Payment",
+              payment_type: "Booking Payment",
             });
           });
         } catch {
@@ -267,7 +290,54 @@ export default function Payments() {
         }
       });
 
-      await Promise.all(paymentPromises);
+      // Query payments across all rental agreements (e.g. security deposits, rent)
+      const rentalPaymentPromises = rentalAgreementsData.map(async (a) => {
+        try {
+          const rPmts = await listRentalPayments(a.id);
+          const prop = propMap.get(a.property_id);
+          rPmts.forEach((rp) => {
+            const categoryDisplay =
+              rp.payment_type === "Deposit"
+                ? "Security Deposit"
+                : rp.payment_type === "Rent"
+                ? "Rent Payment"
+                : rp.payment_type || "Rental Payment";
+
+            allPayments.push({
+              id: rp.id,
+              tenant_id: a.tenant_id || "",
+              booking_id: a.id,
+              agreement_id: a.id,
+              rental_agreement_id: a.id,
+              amount: rp.amount,
+              payment_method: rp.payment_method,
+              transaction_reference: rp.transaction_reference,
+              status: rp.status,
+              payment_date: rp.payment_date,
+              verified_at: rp.verified_at,
+              notes: rp.notes,
+              created_at: rp.created_at,
+              updated_at: rp.created_at,
+              buyer_name: a.customer_name || "Customer",
+              buyer_email: a.customer_email || undefined,
+              buyer_phone: a.customer_phone || undefined,
+              property_name: prop?.name,
+              unit_number: prop?.unit_number || undefined,
+              booking_status: a.status,
+              is_rental: true,
+              payment_type: rp.payment_type,
+              category: "Rental",
+              category_display: categoryDisplay,
+              proof_document_url: rp.proof_document_url,
+              receipt_number: rp.receipt_number,
+            });
+          });
+        } catch {
+          // ignore individual rental agreement payment errors
+        }
+      });
+
+      await Promise.all([...bookingPaymentPromises, ...rentalPaymentPromises]);
 
       // Sort newest first
       allPayments.sort(
@@ -325,6 +395,10 @@ export default function Payments() {
 
   // Load refunds for a specific payment when details modal opens
   const loadRefundsForPayment = useCallback(async (payment: EnrichedPayment) => {
+    if (payment.is_rental) {
+      setPaymentRefunds([]);
+      return;
+    }
     setLoadingRefunds(true);
     try {
       const refunds = await getRefunds(payment.booking_id, payment.id);
@@ -357,7 +431,7 @@ export default function Payments() {
       if (p.status === "Verified") {
         totalVerifiedAmount += amt;
         verifiedCount += 1;
-      } else if (p.status === "Pending") {
+      } else if (p.status === "Pending" || p.status === "Under Verification") {
         pendingCount += 1;
       }
     });
@@ -383,28 +457,48 @@ export default function Payments() {
   // Filtered Payments
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
-      if (statusFilter && p.status !== statusFilter) return false;
+      if (statusFilter) {
+        if (statusFilter === "Pending") {
+          if (p.status !== "Pending" && p.status !== "Under Verification") return false;
+        } else if (p.status !== statusFilter) {
+          return false;
+        }
+      }
       if (methodFilter && p.payment_method !== methodFilter) return false;
-      if (bookingFilter && p.booking_id !== bookingFilter) return false;
+      if (bookingFilter) {
+        if (p.booking_id !== bookingFilter && p.agreement_id !== bookingFilter) return false;
+      }
+      if (typeFilter) {
+        if (typeFilter === "Booking" && p.is_rental) return false;
+        if (typeFilter === "Rental" && !p.is_rental) return false;
+        if (typeFilter === "Deposit" && p.payment_type !== "Deposit") return false;
+        if (typeFilter === "Rent" && p.payment_type !== "Rent") return false;
+      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const buyer = (p.buyer_name || "").toLowerCase();
         const ref = (p.transaction_reference || "").toLowerCase();
         const prop = (p.property_name || "").toLowerCase();
-        const bookingId = p.booking_id.toLowerCase();
+        const bookingId = (p.booking_id || "").toLowerCase();
+        const agreementId = (p.agreement_id || "").toLowerCase();
         const paymentId = p.id.toLowerCase();
+        const pType = (p.payment_type || "").toLowerCase();
+        const cat = (p.category_display || "").toLowerCase();
         return (
           buyer.includes(q) ||
           ref.includes(q) ||
           prop.includes(q) ||
           bookingId.includes(q) ||
-          paymentId.includes(q)
+          agreementId.includes(q) ||
+          paymentId.includes(q) ||
+          pType.includes(q) ||
+          cat.includes(q)
         );
       }
       return true;
     });
-  }, [payments, statusFilter, methodFilter, bookingFilter, searchQuery]);
+  }, [payments, statusFilter, methodFilter, bookingFilter, typeFilter, searchQuery]);
 
   // Selected Booking and Installment Computed Values
   const selectedBooking = useMemo(
@@ -803,42 +897,78 @@ export default function Payments() {
     if (!decidingPayment) return;
     setSubmitting(true);
     try {
-      const payload: PaymentDecision = {
-        status: decisionType,
-        notes: decisionNotes.trim() || null,
-      };
-      const updated = await decidePayment(
-        decidingPayment.booking_id,
-        decidingPayment.id,
-        payload
-      );
-
-      setPayments((prev) =>
-        prev.map((item) =>
-          item.id === updated.id
-            ? {
-                ...item,
-                status: updated.status,
-                verified_by: updated.verified_by,
-                verified_at: updated.verified_at,
-                notes: updated.notes,
-              }
-            : item
-        )
-      );
-
-      if (viewingPayment?.id === updated.id) {
-        setViewingPayment((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: updated.status,
-                verified_by: updated.verified_by,
-                verified_at: updated.verified_at,
-                notes: updated.notes,
-              }
-            : null
+      if (decidingPayment.is_rental) {
+        const updated = await decideRentalPayment(
+          decidingPayment.id,
+          decisionType,
+          decisionNotes.trim() || null
         );
+
+        setPayments((prev) =>
+          prev.map((item) =>
+            item.id === updated.id
+              ? {
+                  ...item,
+                  status: updated.status,
+                  verified_at: updated.verified_at,
+                  receipt_number: updated.receipt_number || item.receipt_number,
+                  notes: updated.notes || item.notes,
+                }
+              : item
+          )
+        );
+
+        if (viewingPayment?.id === updated.id) {
+          setViewingPayment((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: updated.status,
+                  verified_at: updated.verified_at,
+                  receipt_number: updated.receipt_number || prev.receipt_number,
+                  notes: updated.notes || prev.notes,
+                }
+              : null
+          );
+        }
+      } else {
+        const payload: PaymentDecision = {
+          status: decisionType,
+          notes: decisionNotes.trim() || null,
+        };
+        const updated = await decidePayment(
+          decidingPayment.booking_id,
+          decidingPayment.id,
+          payload
+        );
+
+        setPayments((prev) =>
+          prev.map((item) =>
+            item.id === updated.id
+              ? {
+                  ...item,
+                  status: updated.status,
+                  verified_by: updated.verified_by,
+                  verified_at: updated.verified_at,
+                  notes: updated.notes,
+                }
+              : item
+          )
+        );
+
+        if (viewingPayment?.id === updated.id) {
+          setViewingPayment((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: updated.status,
+                  verified_by: updated.verified_by,
+                  verified_at: updated.verified_at,
+                  notes: updated.notes,
+                }
+              : null
+          );
+        }
       }
 
       showToast(`Payment marked as ${decisionType}!`);
@@ -1153,15 +1283,25 @@ export default function Payments() {
         <div className="filter-dropdowns-group">
           <select
             className="filter-select"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
+            <option value="">All Payments</option>
+            <option value="Booking">Booking Payments</option>
+            <option value="Rental">Rental Payments</option>
+            <option value="Deposit">Security Deposits</option>
+            <option value="Rent">Rent Payments</option>
+          </select>
+
+          <select
+            className="filter-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="">All Statuses</option>
-            {PAYMENT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+            <option value="Pending">Pending Verification</option>
+            <option value="Verified">Verified</option>
+            <option value="Rejected">Rejected</option>
           </select>
 
           <select
@@ -1182,15 +1322,28 @@ export default function Payments() {
             value={bookingFilter}
             onChange={(e) => setBookingFilter(e.target.value)}
           >
-            <option value="">All Bookings</option>
-            {bookings.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.buyer_name} ({b.status})
-              </option>
-            ))}
+            <option value="">All Bookings & Agreements</option>
+            {bookings.length > 0 && (
+              <optgroup label="Property Bookings">
+                {bookings.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    [Booking] {b.buyer_name} ({b.status})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {rentalAgreements.length > 0 && (
+              <optgroup label="Rental Agreements">
+                {rentalAgreements.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    [Rental] {a.customer_name} ({a.status})
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
 
-          {(searchQuery || statusFilter || methodFilter || bookingFilter) && (
+          {(searchQuery || statusFilter || methodFilter || bookingFilter || typeFilter) && (
             <button
               className="btn-clear-filters"
               onClick={() => {
@@ -1198,6 +1351,7 @@ export default function Payments() {
                 setStatusFilter("");
                 setMethodFilter("");
                 setBookingFilter("");
+                setTypeFilter("");
               }}
             >
               ✕ Clear
@@ -1270,21 +1424,38 @@ export default function Payments() {
             </thead>
             <tbody>
               {filteredPayments.map((pmt) => {
+                const isPending = pmt.status === "Pending" || pmt.status === "Under Verification";
                 const statusClass =
                   pmt.status === "Verified"
                     ? "badge-status-verified"
-                    : pmt.status === "Rejected"
+                    : pmt.status === "Rejected" || pmt.status === "Failed"
                     ? "badge-status-rejected"
                     : "badge-status-pending";
+
+                const categoryBadgeClass =
+                  pmt.payment_type === "Deposit"
+                    ? "badge-category-deposit"
+                    : pmt.is_rental
+                    ? "badge-category-rental"
+                    : "badge-category-booking";
 
                 return (
                   <tr key={pmt.id}>
                     <td>
-                      <div className="table-amount-cell">{formatCurrency(pmt.amount)}</div>
+                      <div className="table-amount-cell">
+                        {formatCurrency(pmt.amount)}
+                        {pmt.category_display && (
+                          <div style={{ marginTop: "4px" }}>
+                            <span className={categoryBadgeClass}>
+                              {pmt.category_display}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={statusClass}>
-                        {pmt.status === "Verified" ? "✓ " : pmt.status === "Pending" ? "⏳ " : "✕ "}
+                        {pmt.status === "Verified" ? "✓ " : isPending ? "⏳ " : "✕ "}
                         {pmt.status}
                       </span>
                     </td>
@@ -1293,9 +1464,14 @@ export default function Payments() {
                     </td>
                     <td>
                       <div className="table-buyer-cell">
-                        <span className="table-buyer-name">{pmt.buyer_name || "Buyer"}</span>
+                        <span className="table-buyer-name">{pmt.buyer_name || (pmt.is_rental ? "Customer" : "Buyer")}</span>
                         <span className="table-property-sub">
                           {pmt.property_name || "Property"} {pmt.unit_number ? `(${pmt.unit_number})` : ""}
+                          {pmt.is_rental && (
+                            <span style={{ display: "block", fontSize: "0.72rem", color: "#64748b" }}>
+                              Agreement #{pmt.booking_id?.slice(0, 8).toUpperCase()}
+                            </span>
+                          )}
                         </span>
                       </div>
                     </td>
@@ -1313,7 +1489,7 @@ export default function Payments() {
                       <div className="action-buttons-group" style={{ justifyContent: "flex-end" }}>
                         <button
                           className="btn-action-icon"
-                          title="View Details & Refunds"
+                          title="View Details"
                           onClick={() => setViewingPayment(pmt)}
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1322,7 +1498,7 @@ export default function Payments() {
                           </svg>
                         </button>
 
-                        {pmt.status === "Pending" && userPermissions.canVerify && (
+                        {isPending && userPermissions.canVerify && (
                           <>
                             <button
                               className="btn-action-icon verify"
@@ -1354,7 +1530,7 @@ export default function Payments() {
                           </>
                         )}
 
-                        {pmt.status === "Verified" && userPermissions.canRefund && (
+                        {!pmt.is_rental && pmt.status === "Verified" && userPermissions.canRefund && (
                           <button
                             className="btn-action-icon refund"
                             title="Issue Refund"
@@ -1382,12 +1558,20 @@ export default function Payments() {
         /* ─── Grid View ─── */
         <div className="payments-grid">
           {filteredPayments.map((pmt) => {
+            const isPending = pmt.status === "Pending" || pmt.status === "Under Verification";
             const statusClass =
               pmt.status === "Verified"
                 ? "badge-status-verified"
-                : pmt.status === "Rejected"
+                : pmt.status === "Rejected" || pmt.status === "Failed"
                 ? "badge-status-rejected"
                 : "badge-status-pending";
+
+            const categoryBadgeClass =
+              pmt.payment_type === "Deposit"
+                ? "badge-category-deposit"
+                : pmt.is_rental
+                ? "badge-category-rental"
+                : "badge-category-booking";
 
             return (
               <div key={pmt.id} className="payment-card">
@@ -1397,17 +1581,22 @@ export default function Payments() {
                     <span className="card-date">
                       {new Date(pmt.payment_date || pmt.created_at).toLocaleDateString()}
                     </span>
+                    {pmt.category_display && (
+                      <span className={categoryBadgeClass} style={{ marginTop: "4px" }}>
+                        {pmt.category_display}
+                      </span>
+                    )}
                   </div>
                   <span className={statusClass}>
-                    {pmt.status === "Verified" ? "✓ " : pmt.status === "Pending" ? "⏳ " : "✕ "}
+                    {pmt.status === "Verified" ? "✓ " : isPending ? "⏳ " : "✕ "}
                     {pmt.status}
                   </span>
                 </div>
 
                 <div className="card-meta-list">
                   <div className="card-meta-row">
-                    <span className="card-meta-label">Buyer</span>
-                    <span className="card-meta-value">{pmt.buyer_name || "Buyer"}</span>
+                    <span className="card-meta-label">{pmt.is_rental ? "Customer" : "Buyer"}</span>
+                    <span className="card-meta-value">{pmt.buyer_name || (pmt.is_rental ? "Customer" : "Buyer")}</span>
                   </div>
                   <div className="card-meta-row">
                     <span className="card-meta-label">Property</span>
@@ -1415,6 +1604,14 @@ export default function Payments() {
                       {pmt.property_name || "Property"} {pmt.unit_number ? `(${pmt.unit_number})` : ""}
                     </span>
                   </div>
+                  {pmt.is_rental && (
+                    <div className="card-meta-row">
+                      <span className="card-meta-label">Agreement</span>
+                      <span className="card-meta-value" style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
+                        #{pmt.booking_id?.slice(0, 8).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
                   <div className="card-meta-row">
                     <span className="card-meta-label">Method</span>
                     <span className="badge-method">{pmt.payment_method}</span>
@@ -1437,7 +1634,7 @@ export default function Payments() {
                   </button>
 
                   <div className="action-buttons-group">
-                    {pmt.status === "Pending" && userPermissions.canVerify && (
+                    {isPending && userPermissions.canVerify && (
                       <>
                         <button
                           className="btn-action-icon verify"
@@ -1469,7 +1666,7 @@ export default function Payments() {
                       </>
                     )}
 
-                    {pmt.status === "Verified" && userPermissions.canRefund && (
+                    {!pmt.is_rental && pmt.status === "Verified" && userPermissions.canRefund && (
                       <button
                         className="btn-action-icon refund"
                         title="Issue Refund"
@@ -2076,13 +2273,19 @@ export default function Payments() {
                       className={
                         viewingPayment.status === "Verified"
                           ? "badge-status-verified"
-                          : viewingPayment.status === "Rejected"
+                          : viewingPayment.status === "Rejected" || viewingPayment.status === "Failed"
                           ? "badge-status-rejected"
                           : "badge-status-pending"
                       }
                     >
                       {viewingPayment.status}
                     </span>
+                  </div>
+                </div>
+                <div className="details-spec-item">
+                  <div className="label">Payment Type</div>
+                  <div className="value">
+                    {viewingPayment.category_display || (viewingPayment.is_rental ? "Rental Payment" : "Booking Payment")}
                   </div>
                 </div>
                 <div className="details-spec-item">
@@ -2096,7 +2299,7 @@ export default function Payments() {
                   </div>
                 </div>
                 <div className="details-spec-item">
-                  <div className="label">Buyer</div>
+                  <div className="label">{viewingPayment.is_rental ? "Customer" : "Buyer"}</div>
                   <div className="value">{viewingPayment.buyer_name || "—"}</div>
                 </div>
                 <div className="details-spec-item">
@@ -2113,11 +2316,34 @@ export default function Payments() {
                   </div>
                 </div>
                 <div className="details-spec-item">
-                  <div className="label">Booking ID</div>
+                  <div className="label">{viewingPayment.is_rental ? "Rental Agreement ID" : "Booking ID"}</div>
                   <div className="value" style={{ fontSize: "0.8rem", fontFamily: "monospace" }}>
-                    {viewingPayment.booking_id}
+                    {viewingPayment.agreement_id || viewingPayment.booking_id}
                   </div>
                 </div>
+                {viewingPayment.receipt_number && (
+                  <div className="details-spec-item">
+                    <div className="label">Receipt Number</div>
+                    <div className="value" style={{ fontFamily: "monospace", color: "#059669" }}>
+                      {viewingPayment.receipt_number}
+                    </div>
+                  </div>
+                )}
+                {viewingPayment.proof_document_url && (
+                  <div className="details-spec-item">
+                    <div className="label">Proof Document</div>
+                    <div className="value">
+                      <a
+                        href={viewingPayment.proof_document_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#0891b2", textDecoration: "underline" }}
+                      >
+                        View Attachment ↗
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {viewingPayment.notes && (
@@ -2132,7 +2358,7 @@ export default function Payments() {
               )}
 
               {/* Quick Verification Actions inside Modal */}
-              {viewingPayment.status === "Pending" && userPermissions.canVerify && (
+              {(viewingPayment.status === "Pending" || viewingPayment.status === "Under Verification") && userPermissions.canVerify && (
                 <div style={{ background: "rgba(6, 182, 212, 0.08)", border: "1px solid rgba(6, 182, 212, 0.2)", borderRadius: "8px", padding: "12px 16px", marginTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Verification Action Required:</span>
                   <div style={{ display: "flex", gap: "8px" }}>
@@ -2161,7 +2387,14 @@ export default function Payments() {
               )}
 
               {/* ─── Refunds Section ─── */}
-              <div className="refunds-section">
+              {viewingPayment.is_rental ? (
+                <div style={{ background: "rgba(241, 245, 249, 0.6)", padding: "14px 16px", borderRadius: "8px", marginTop: "16px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ fontSize: "0.85rem", color: "#475569" }}>
+                    ℹ Rental security deposit deductions, refunds, and exit settlements are recorded via the <strong>Rental Agreement Deposit Ledger</strong>.
+                  </div>
+                </div>
+              ) : (
+                <div className="refunds-section">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>
@@ -2250,6 +2483,7 @@ export default function Payments() {
                   ))
                 )}
               </div>
+              )}
             </div>
 
             <div className="modal-footer">

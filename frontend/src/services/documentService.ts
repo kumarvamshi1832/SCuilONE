@@ -28,12 +28,19 @@ function getHeaders() {
   };
 }
 
+let isDocumentsAvailable = true;
+
+export const isDocumentsSupported = (): boolean => isDocumentsAvailable;
+
 export const getDocuments = async (params?: {
   lead_id?: string;
   contact_id?: string;
   account_id?: string;
   deal_id?: string;
 }): Promise<DocumentListResponse> => {
+  if (!isDocumentsAvailable) {
+    return { documents: [], count: 0 };
+  }
   const query = new URLSearchParams();
   if (params?.lead_id) query.append("lead_id", params.lead_id);
   if (params?.contact_id) query.append("contact_id", params.contact_id);
@@ -41,17 +48,35 @@ export const getDocuments = async (params?: {
   if (params?.deal_id) query.append("deal_id", params.deal_id);
 
   const url = `${DOCUMENTS_ENDPOINTS.LIST}${query.toString() ? `?${query.toString()}` : ""}`;
-  const response = await apiClient.get<DocumentListResponse>(url, getHeaders());
-  return response.data;
+  try {
+    const response = await apiClient.get<DocumentListResponse>(url);
+    return response.data || { documents: [], count: 0 };
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      isDocumentsAvailable = false;
+      return { documents: [], count: 0 };
+    }
+    throw err;
+  }
 };
 
 
 export const getDocument = async (id: string): Promise<DocumentDetailResponse> => {
-  const response = await apiClient.get<DocumentDetailResponse>(
-    DOCUMENTS_ENDPOINTS.DETAIL(id),
-    getHeaders()
-  );
-  return response.data;
+  if (!isDocumentsAvailable) {
+    throw new Error("Documents API is currently not registered on the backend.");
+  }
+  try {
+    const response = await apiClient.get<DocumentDetailResponse>(
+      DOCUMENTS_ENDPOINTS.DETAIL(id)
+    );
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      isDocumentsAvailable = false;
+      throw new Error("Documents API is currently not registered on the backend.");
+    }
+    throw err;
+  }
 };
 
 /**

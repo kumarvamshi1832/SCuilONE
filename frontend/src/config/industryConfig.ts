@@ -132,6 +132,7 @@ const industries: IndustryConfig[] = [
       "site-visits",
       "bookings",
       "customer-booking-requests",
+      "rentals",
       "payments",
       "audit-logs",
       "documents",

@@ -112,7 +112,7 @@ export const buildBookingRecords = (
       bookingAmount: booking?.booking_amount ?? request.booking_amount,
       paidAmount: booking?.verified_paid_amount ?? null,
       remainingBalance: booking?.remaining_balance ?? null,
-      holdExpiresAt: request.hold_expires_at,
+      holdExpiresAt: request.hold_expires_at ?? booking?.hold_expires_at ?? null,
     });
   }
 
@@ -133,7 +133,7 @@ export const buildBookingRecords = (
       bookingAmount: booking.booking_amount ?? null,
       paidAmount: booking.verified_paid_amount ?? null,
       remainingBalance: booking.remaining_balance ?? null,
-      holdExpiresAt: null,
+      holdExpiresAt: booking.hold_expires_at ?? null,
     });
   }
 

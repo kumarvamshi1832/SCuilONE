@@ -27,6 +27,8 @@ import {
   PaymentInstructionsModal,
 } from "../../components/booking-journey/StaffBookingActions";
 import RequestBuyerSummary from "../../components/bookings/RequestBuyerSummary";
+import { StaffHandoverSection } from "../../components/booking-journey/HandoverWidgets";
+import StaffPriceNegotiation from "../../components/booking-journey/StaffPriceNegotiation";
 import type { BookingRequestDetail } from "../../types/customerBookingJourney";
 import "../users/Users.css";
 import "../leads/Leads.css";
@@ -52,6 +54,8 @@ export default function CustomerBookingRequestDetail() {
 
   const [detail, setDetail] = useState<BookingRequestDetail | null>(null);
   const [context, setContext] = useState<StaffRequestContext | null>(null);
+  /** Price of an accepted offer in the staff negotiation (property-offers API); suggested when approving. */
+  const [negotiatedPrice, setNegotiatedPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
@@ -241,6 +245,14 @@ export default function CustomerBookingRequestDetail() {
 
           {detail.booking_id && <RequestBuyerSummary booking={detail.booking} />}
 
+          <StaffPriceNegotiation
+            detail={detail}
+            context={context}
+            contextLoading={context === null}
+            onNegotiatedPrice={setNegotiatedPrice}
+            notify={showToast}
+          />
+
           <section className="ins-card" aria-label="Staff actions">
             <h2 className="ins-card-title">Actions</h2>
             {!anyAction ? (
@@ -347,6 +359,8 @@ export default function CustomerBookingRequestDetail() {
             )}
           </section>
 
+          <StaffHandoverSection detail={detail} canManage={perms.manage} notify={showToast} onRefresh={() => load(true)} />
+
           <section className="ins-card" aria-label="Customer documents">
             <h2 className="ins-card-title">Customer documents</h2>
             {detail.files.length === 0 ? (
@@ -382,7 +396,9 @@ export default function CustomerBookingRequestDetail() {
         </aside>
       </div>
 
-      {modal === "decision" && <DecisionModal {...modalProps} suggestedPrice={context?.propertyPrice ?? null} />}
+      {modal === "decision" && (
+        <DecisionModal {...modalProps} suggestedPrice={context?.propertyPrice ?? null} context={context} negotiatedPrice={negotiatedPrice} />
+      )}
       {modal === "extend" && <ExtendHoldModal {...modalProps} />}
       {modal === "instructions" && <PaymentInstructionsModal {...modalProps} />}
       {modal === "agreement" && <AgreementPrepareModal {...modalProps} />}

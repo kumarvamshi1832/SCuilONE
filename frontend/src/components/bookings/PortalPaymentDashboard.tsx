@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   BOOKING_FILE_UPLOAD_ENDPOINT,
@@ -7,10 +7,12 @@ import {
   uploadBookingFile,
 } from "../../services/customerPortalJourneyService";
 import { downloadPaymentReceiptPdf, getPaymentReceipt } from "../../services/customerPortalReceiptService";
+import { emitPortalNotificationsChanged } from "../../services/customerPortalNotificationService";
 import type { PaymentReceipt } from "../../services/customerPortalReceiptService";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { formatBookingDateTime } from "../../utils/bookingJourney";
 import {
+  agreementPaymentGate,
   customerConfirmationSteps,
   customerInstallmentStatus,
   customerPayability,
@@ -92,6 +94,16 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
     summary,
   });
 
+  // Payment opens only when the backend reports the signed agreement as verified (never from a button click).
+  const gate = agreementPaymentGate(detail.agreement_status);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  /** "Pay Now" reveals the existing payment form; it is only reachable once the gate is open. */
+  const [payOpen, setPayOpen] = useState(false);
+  const payFormRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (payOpen) payFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [payOpen]);
+
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [proof, setProof] = useState<File | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -147,7 +159,7 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (submittingRef.current || !payability.allowed) return;
+    if (submittingRef.current || !payability.allowed || !gate.signed) return;
     const next: Record<string, string> = {};
     const cents = parseAmountToCents(form.amount);
     if (cents === null || cents <= 0) next.amount = "Enter an amount greater than zero (up to 2 decimals).";
@@ -197,8 +209,12 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
           notify(`Payment submitted, but the proof upload failed: ${describeJourneyUploadError(uploadErr, BOOKING_FILE_UPLOAD_ENDPOINT).message} You can attach it from the history below.`, "error");
         }
       }
-      notify(result.message || "Payment details submitted. The finance team must verify the payment.");
+      notify(
+        `Your ${form.method} payment of ${formatInrCents(cents)} was submitted and is awaiting verification by our finance team. You will be notified once it is verified.`
+      );
+      emitPortalNotificationsChanged();
       setForm(EMPTY_FORM);
+      setPayOpen(false);
       setProof(null);
       if (proofInput.current) proofInput.current.value = "";
       await onChanged();
@@ -262,6 +278,9 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
 
   const history = [...detail.payments].sort((a, b) => (Date.parse(b.payment_date ?? "") || 0) - (Date.parse(a.payment_date ?? "") || 0));
   const hasSchedule = installments.length > 0;
+  const pendingInstallments = installments
+    .map((inst) => ({ inst, status: inst.payment_state && inst.payment_state !== "Cancelled" ? inst.payment_state : customerInstallmentStatus(inst) }))
+    .filter(({ status }) => status !== "Paid");
   const err = (key: string) => (errors[key] ? <small className="pw-err" role="alert">{errors[key]}</small> : null);
   const quick = dueQuickFill();
 
@@ -287,8 +306,25 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
   return (
     <>
       <section className="cp-panel pw-root pw-section" aria-label="Payment summary">
-        <h2 className="cp-panel-title">Payment summary</h2>
+        <h2 className="cp-panel-title pw-dd-heading">
+          <button
+            type="button"
+            className="pw-dd-toggle"
+            aria-expanded={summaryOpen}
+            aria-controls="pw-summary-body"
+            onClick={() => setSummaryOpen((open) => !open)}
+          >
+            <span>Payment summary</span>
+            <span className="pw-dd-headline">
+              {formatInrCents(summary.paidCents)} paid · {formatInrCents(summary.remainingCents)} remaining
+              {summary.pendingCount > 0 ? ` · ${summary.pendingCount} awaiting verification` : ""}
+            </span>
+            <span className="pw-dd-chevron" aria-hidden="true">{summaryOpen ? "▲" : "▼"}</span>
+          </button>
+        </h2>
 
+        {summaryOpen && (
+        <div id="pw-summary-body" className="pw-dd-body">
         {bookingError && (
           <div className="pw-notice warn" role="status">
             Your full payment details could not be loaded ({bookingError}). The figures below come from your booking request; your instalment schedule is
@@ -328,6 +364,75 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
             <strong>Next instalment:</strong> #{summary.next.sequence} {summary.next.name} — {formatInr(summary.next.amount)} due {formatDay(summary.next.due_date)}
             {customerInstallmentStatus(summary.next) === "Overdue" ? " (overdue)" : ""}
           </div>
+        )}
+
+        <div>
+          <h3>Payment history</h3>
+          {history.length === 0 ? (
+            <p className="pw-notice" style={{ marginTop: 8 }}>No payments have been recorded for this booking yet.</p>
+          ) : (
+            <div className="pw-table-wrap">
+              <table className="pw-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Method</th>
+                    <th className="num">Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((p) => (
+                    <tr key={p.id}>
+                      <td>{p.payment_date ? formatBookingDateTime(p.payment_date) : "—"}</td>
+                      <td>
+                        {p.method ?? "—"}
+                        {p.reference ? <div className="pw-sub">Ref {p.reference}</div> : null}
+                      </td>
+                      <td className="num">{formatInr(p.amount)}</td>
+                      <td><span className={`pw-chip ${chipClass(p.status)}`}>{p.status === "Pending" ? "Pending verification" : p.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {hasSchedule && (
+          <div>
+            <h3>Pending instalments</h3>
+            {pendingInstallments.length === 0 ? (
+              <p className="pw-notice ok" style={{ marginTop: 8 }}>All instalments are paid.</p>
+            ) : (
+              <div className="pw-table-wrap">
+                <table className="pw-table">
+                  <thead>
+                    <tr>
+                      <th>Instalment</th>
+                      <th>Due date</th>
+                      <th className="num">Amount</th>
+                      <th className="num">Remaining</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingInstallments.map(({ inst, status }) => (
+                      <tr key={inst.id}>
+                        <td><strong>#{inst.sequence} {inst.name}</strong></td>
+                        <td>{formatDay(inst.due_date)}</td>
+                        <td className="num">{formatInr(inst.amount)}</td>
+                        <td className="num">{inst.outstanding_amount !== undefined ? formatInr(inst.outstanding_amount) : formatInr(inst.amount)}</td>
+                        <td><span className={`pw-chip ${chipClass(status)}`}>{status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
         )}
       </section>
 
@@ -405,11 +510,21 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
       </section>
 
       <section className="cp-panel pw-root pw-section" aria-label="Submit a payment">
-        <h2 className="cp-panel-title">Submit a payment</h2>
-        {!payability.allowed ? (
-          <div className="pw-notice warn" role="status">{payability.reason}</div>
-        ) : (
-          <form className="pw-form" onSubmit={handleSubmit} noValidate>
+        <h2 className="cp-panel-title">
+          Submit a payment <span className={`pw-chip pw-gate-${gate.tone}`} style={{ marginLeft: 8, verticalAlign: "middle" }}>{gate.label}</span>
+        </h2>
+        <div className={`pw-notice ${gate.tone === "ok" ? "ok" : gate.tone === "error" ? "error" : "warn"}`} role="status">
+          <strong>Agreement status: {detail.agreement_status}.</strong> {gate.message}
+          {gate.signed && payability.allowed ? " Payment is now available." : ""}
+        </div>
+        {gate.signed && !payability.allowed && <div className="pw-notice warn" role="status">{payability.reason}</div>}
+        {gate.signed && payability.allowed && !payOpen && (
+          <div className="pw-actions">
+            <button type="button" className="btn-primary" onClick={() => setPayOpen(true)}>Pay Now</button>
+          </div>
+        )}
+        {gate.signed && payability.allowed && payOpen && (
+          <form ref={payFormRef} className="pw-form" onSubmit={handleSubmit} noValidate>
             <p className="pw-notice" style={{ margin: 0 }}>
               {payability.phase === "token"
                 ? <>You can pay up to <strong>{formatInrCents(payability.maxCents ?? 0)}</strong> now (the booking amount). </>
@@ -456,6 +571,7 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
               <div className={`pw-field ${errors.reference ? "has-error" : ""}`}>
                 <label htmlFor="pw-ref">Transaction reference{PAYMENT_METHODS_REQUIRING_REFERENCE.includes(form.method) ? " *" : ""}</label>
                 <input id="pw-ref" type="text" maxLength={255} value={form.reference} disabled={submitting} onChange={(e) => setField("reference", e.target.value)} />
+                {form.method === "Cash" && <small>Not needed for cash.</small>}
                 {err("reference")}
               </div>
               <div className={`pw-field ${errors.paymentDate ? "has-error" : ""}`}>
@@ -469,14 +585,19 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
                 {err("notes")}
               </div>
               <div className="pw-field full">
-                <label htmlFor="pw-proof">Payment proof (optional)</label>
+                <label htmlFor="pw-proof">{form.method === "Cash" ? "Payment proof (not required for cash)" : "Payment proof (optional)"}</label>
                 <input id="pw-proof" ref={proofInput} type="file" accept={JOURNEY_FILE_EXTENSIONS.join(",")} disabled={submitting} onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
-                <small>PDF, JPG or PNG, up to 5 MB.</small>
+                <small>
+                  {form.method === "Cash"
+                    ? "You can submit a cash payment without any document. Our finance team still verifies it before it counts as paid."
+                    : "PDF, JPG or PNG, up to 5 MB. A receipt or screenshot helps verification; your transaction reference above is still required."}
+                </small>
                 {err("proof")}
               </div>
             </div>
             <div className="pw-actions">
               <button type="submit" className="btn-primary" disabled={submitting}>{submitting ? "Submitting…" : "Submit payment details"}</button>
+              <button type="button" className="btn-secondary" disabled={submitting} onClick={() => setPayOpen(false)}>Cancel</button>
             </div>
           </form>
         )}
@@ -493,12 +614,14 @@ export default function PortalPaymentDashboard({ detail, booking, bookingError, 
               return (
                 <li key={p.id}>
                   <div className="pw-main">
-                    <span className="pw-amount">{formatInr(p.amount)} · {p.method ?? "—"}</span>
+                    <span className="pw-amount">
+                      {formatInr(p.amount)} <span className="pw-chip upcoming" style={{ marginLeft: 6 }}>{p.method ?? "Method not recorded"}</span>
+                    </span>
                     <span className="pw-meta">
                       {p.reference ? `Ref ${p.reference} · ` : ""}
                       {p.payment_date ? `Paid on ${formatBookingDateTime(p.payment_date)}` : ""}
                       {p.status === "Verified" && p.verified_at ? ` · Verified ${formatBookingDateTime(p.verified_at)}` : ""}
-                      {p.status === "Pending" ? " · Awaiting finance verification" : ""}
+                      {p.status === "Pending" ? (p.method === "Cash" ? " · Cash payment awaiting finance verification" : " · Awaiting finance verification") : ""}
                       {p.status === "Rejected" ? " · Rejected — contact our team or submit the payment again" : ""}
                     </span>
                     {proofFor === p.id && (
