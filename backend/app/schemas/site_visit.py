@@ -12,7 +12,7 @@ SiteVisitStatus = Literal[
 SiteVisitOutcome = Literal[
     "Interested", "Follow-up Required", "Not Interested", "Negotiation", "Other"
 ]
-InterestLevel = Literal["Interested", "Maybe", "Not Interested"]
+InterestLevel = Literal["Interested", "Maybe", "Not Interested", "High", "Medium", "Low"]
 
 
 class SiteVisitCreate(BaseModel):
@@ -51,7 +51,7 @@ class SiteVisitUpdate(BaseModel):
 class SiteVisitResponse(BaseModel):
     id: UUID
     tenant_id: UUID
-    property_match_id: UUID
+    property_match_id: UUID | None = None
     assigned_to: UUID | None
     created_by: UUID | None
     scheduled_start: datetime

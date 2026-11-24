@@ -103,6 +103,10 @@ def compute_engagement(lead, facts: dict | None, now: datetime) -> tuple[int, di
         points["open_deal"] = 10
     if facts.get("has_budget"):
         points["budget_known"] = 10
+    if facts.get("completed_site_visit"):
+        points["site_visit_completed"] = 15
+    if facts.get("has_property_offer"):
+        points["property_offer_submitted"] = 20
 
     status = _norm(lead.status)
     is_open = status not in DEAD_STATUSES and status not in CONVERTED_STATUSES
@@ -175,6 +179,52 @@ def load_engagement_facts(db: Session, tenant_id: uuid.UUID, lead_ids: list) -> 
             .all()
         ):
             facts[lead_id]["has_budget"] = True
+    # Real Estate high-intent buying signals: completed SiteVisit & submitted PropertyOffer
+    from app.models.property_match import PropertyMatch
+    from app.models.property_offer import PropertyOffer
+    from app.models.site_visit import SiteVisit
+
+    match_rows = (
+        db.query(PropertyMatch.id, BuyerRequirement.lead_id)
+        .join(BuyerRequirement, BuyerRequirement.id == PropertyMatch.buyer_requirement_id)
+        .filter(
+            PropertyMatch.tenant_id == tenant_id,
+            BuyerRequirement.lead_id.in_(lead_ids),
+        )
+        .all()
+    )
+    if match_rows:
+        match_to_lead = {mid: lid for mid, lid in match_rows if lid is not None}
+        match_ids = list(match_to_lead.keys())
+        if match_ids:
+            for (mid,) in (
+                db.query(SiteVisit.property_match_id)
+                .filter(
+                    SiteVisit.tenant_id == tenant_id,
+                    SiteVisit.property_match_id.in_(match_ids),
+                    SiteVisit.status == "Completed",
+                )
+                .distinct()
+                .all()
+            ):
+                lid = match_to_lead.get(mid)
+                if lid is not None:
+                    facts[lid]["completed_site_visit"] = True
+
+            for (mid,) in (
+                db.query(PropertyOffer.property_match_id)
+                .filter(
+                    PropertyOffer.tenant_id == tenant_id,
+                    PropertyOffer.property_match_id.in_(match_ids),
+                    PropertyOffer.status.notin_(("Rejected", "Withdrawn", "Expired")),
+                )
+                .distinct()
+                .all()
+            ):
+                lid = match_to_lead.get(mid)
+                if lid is not None:
+                    facts[lid]["has_property_offer"] = True
+
     return facts
 
 

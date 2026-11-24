@@ -289,6 +289,11 @@ def complete_mfa_login(db: Session, user: User):
             "id": str(tenant.id) if tenant else None,
             "name": tenant.name if tenant else None,
             "industry": tenant.industry if tenant else None,
+            "business_type": tenant.business_type if tenant else None,
+            "dashboard_type": (
+                __import__("app.services.agency_collaboration", fromlist=["resolve_dashboard_type"]).resolve_dashboard_type(tenant)
+                if tenant else "standard_crm"
+            ),
         },
         "role": role.name if role else None,
         "permissions": permissions,
@@ -527,6 +532,8 @@ async def register(
             "supported_industries": [item["name"] for item in INDUSTRY_REGISTRY.values()],
         })
     canonical_industry_name = INDUSTRY_REGISTRY[industry_key]["name"]
+    from app.services.agency_collaboration import normalize_business_type
+    canonical_business_type = normalize_business_type(industry_key, data.business_type)
     from app.services.platform_config import enforce_configured_password_policy
     enforce_configured_password_policy(db, data.password, [data.email, data.full_name])
     hashed_password = hash_password(data.password)
@@ -552,6 +559,11 @@ async def register(
         company_email=data.company_email,
         phone=data.phone,
         industry=canonical_industry_name,
+        business_type=canonical_business_type,
+        rera_registration_number=data.rera_registration_number,
+        city=data.city,
+        state=data.state,
+        office_address=data.office_address,
         full_name=data.full_name,
         email=data.email,
         password=hashed_password,
@@ -716,8 +728,10 @@ def verify_otp(
     new_tenant = Tenant(
         name=pending_registration.company_name,
         industry=pending_registration.industry,
+        business_type=pending_registration.business_type,
         billing_email=pending_registration.company_email,
         billing_phone=pending_registration.phone,
+        billing_address=pending_registration.office_address,
         status="Trial",
         is_platform=False,
     )
@@ -759,6 +773,20 @@ def verify_otp(
             )
         )
 
+        from app.services.agency_collaboration import (
+            provision_real_estate_business_entities,
+            resolve_dashboard_type,
+        )
+        _, provisioned_agency = provision_real_estate_business_entities(
+            db=db,
+            tenant=new_tenant,
+            owner_user=new_user,
+            rera_registration_number=pending_registration.rera_registration_number,
+            city=pending_registration.city,
+            state=pending_registration.state,
+            office_address=pending_registration.office_address,
+        )
+
         # PART 1: Automatically create the global 14-day free trial upon company registration
         trial_sub = provision_tenant_global_free_trial(
             db=db,
@@ -775,6 +803,9 @@ def verify_otp(
             "message": "Registration completed successfully",
             "company": new_tenant.name,
             "tenant_id": str(new_tenant.id),
+            "business_type": new_tenant.business_type,
+            "dashboard_type": resolve_dashboard_type(new_tenant),
+            "agency_id": str(provisioned_agency.id) if provisioned_agency else None,
             "user": new_user.email,
             "user_id": str(new_user.id),
             "role": tenant_owner_role.name,

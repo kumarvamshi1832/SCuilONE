@@ -27,7 +27,7 @@ from app.models.software_requirement import SoftwareRequirement
 from app.models.software_estimate import SoftwareEstimate
 from app.models.software_contract import SoftwareContract
 from app.models.user import User
-from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse
+from app.schemas.lead import LeadCreate, LeadUpdate, LeadResponse, LeadConvertRequest, LeadConvertResponse
 from app.models.lead_assignment_audit import LeadAssignmentAudit
 from app.models.user_role import UserRole
 from app.models.role_permission import RolePermission
@@ -911,3 +911,145 @@ def delete_lead(
         raise
 
     return
+
+
+@router.post(
+    "/{lead_id}/convert",
+    response_model=LeadConvertResponse,
+    status_code=status.HTTP_200_OK,
+)
+def convert_lead(
+    lead_id: UUID,
+    data: LeadConvertRequest,
+    current_user: dict = Depends(require_active_user),
+    _=Depends(require_permission("lead.update")),
+    db: Session = Depends(get_db),
+):
+    """One-click atomic Lead -> Contact + optional Account + optional Deal conversion."""
+    from sqlalchemy import func
+    from app.models.account import Account
+    from app.models.contact import Contact
+
+    tenant_id = UUID(current_user["tenant_id"])
+    user_id = UUID(current_user["user_id"])
+
+    lead = (
+        db.query(Lead)
+        .filter(Lead.id == lead_id, Lead.tenant_id == tenant_id)
+        .with_for_update()
+        .first()
+    )
+    if not lead:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+    if (lead.status or "").strip().lower() == "converted":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lead has already been converted")
+
+    account_id = lead.account_id
+    account_created = False
+    if not account_id and (data.create_account or (data.account_name and data.account_name.strip())):
+        acct_name = (data.account_name or lead.full_name).strip()
+        existing_acct = (
+            db.query(Account)
+            .filter(Account.tenant_id == tenant_id, func.lower(Account.name) == acct_name.lower())
+            .first()
+        )
+        if existing_acct:
+            account_id = existing_acct.id
+        else:
+            new_acct = Account(
+                tenant_id=tenant_id,
+                created_by=user_id,
+                name=acct_name,
+                email=lead.email,
+                phone=lead.phone,
+                source=lead.source,
+                assigned_to=lead.assigned_to or user_id,
+                status="Active",
+                notes=data.notes or lead.notes,
+            )
+            db.add(new_acct)
+            db.flush()
+            account_id = new_acct.id
+            account_created = True
+        lead.account_id = account_id
+
+    contact = None
+    if lead.email:
+        contact = (
+            db.query(Contact)
+            .filter(Contact.tenant_id == tenant_id, func.lower(Contact.email) == lead.email.strip().lower())
+            .first()
+        )
+    if not contact and lead.phone:
+        contact = (
+            db.query(Contact)
+            .filter(Contact.tenant_id == tenant_id, Contact.phone == lead.phone.strip())
+            .first()
+        )
+    contact_created = False
+    if not contact:
+        contact = Contact(
+            tenant_id=tenant_id,
+            created_by=user_id,
+            account_id=account_id,
+            full_name=lead.full_name,
+            email=lead.email,
+            phone=lead.phone,
+            source=lead.source,
+            assigned_to=lead.assigned_to or user_id,
+            notes=data.notes or lead.notes,
+        )
+        db.add(contact)
+        db.flush()
+        contact_created = True
+    elif account_id and not contact.account_id:
+        contact.account_id = account_id
+
+    deal_id = None
+    deal_created = False
+    if data.create_deal:
+        deal = Deal(
+            tenant_id=tenant_id,
+            created_by=user_id,
+            name=(data.deal_name or f"{lead.full_name} - Property Deal").strip(),
+            lead_id=lead.id,
+            contact_id=contact.id,
+            account_id=account_id,
+            assigned_to=lead.assigned_to or user_id,
+            amount=data.deal_amount,
+            stage=data.deal_stage or "New",
+            expected_close_date=data.expected_close_date,
+            description=data.notes or lead.notes,
+        )
+        db.add(deal)
+        db.flush()
+        deal_id = deal.id
+        deal_created = True
+
+    lead.status = "Converted"
+    log_audit(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action="update",
+        module="leads",
+        record_id=lead.id,
+        description=f"Converted lead {lead.full_name} into contact {contact.id}",
+        after_data={
+            "status": "Converted",
+            "contact_id": str(contact.id),
+            "account_id": str(account_id) if account_id else None,
+            "deal_id": str(deal_id) if deal_id else None,
+        },
+    )
+    db.commit()
+    return LeadConvertResponse(
+        lead_id=lead.id,
+        lead_status=lead.status,
+        contact_id=contact.id,
+        contact_created=contact_created,
+        account_id=account_id,
+        account_created=account_created,
+        deal_id=deal_id,
+        deal_created=deal_created,
+    )

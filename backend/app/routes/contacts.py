@@ -242,17 +242,20 @@ def create_contact(
     response_model=list[ContactResponse]
 )
 def get_contacts(
+    contact_origin: str | None = None,
     current_user: dict = Depends(require_active_user),
     _=Depends(require_permission("contact.view")),
     db: Session = Depends(get_db)
 ):
     tenant_id = UUID(current_user["tenant_id"])
 
-    contacts = db.query(Contact).filter(
-        Contact.tenant_id == tenant_id
-    ).all()
+    q = db.query(Contact).filter(Contact.tenant_id == tenant_id)
+    if contact_origin == "agency_sourced":
+        q = q.filter(Contact.source == "Agency Collaboration")
+    elif contact_origin == "company_direct":
+        q = q.filter((Contact.source.is_(None)) | (Contact.source != "Agency Collaboration"))
 
-    return contacts
+    return q.all()
 
 
 @router.get(

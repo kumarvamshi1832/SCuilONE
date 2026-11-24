@@ -98,6 +98,16 @@ class Deal(SoftDeleteMixin, CustomFieldsMixin, Base):
         nullable=True
     )
 
+    lost_reason: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True
+    )
+
     description: Mapped[str | None] = mapped_column(
         Text,
         nullable=True

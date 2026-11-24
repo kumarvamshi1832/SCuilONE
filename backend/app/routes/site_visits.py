@@ -112,7 +112,7 @@ def validate_assigned_user(
 def validate_no_conflicts(
     db: Session,
     tenant_id: UUID,
-    property_match_id: UUID,
+    property_match_id: UUID | None,
     assigned_to: UUID | None,
     scheduled_start: datetime,
     scheduled_end: datetime,
@@ -129,7 +129,7 @@ def validate_no_conflicts(
         query = query.filter(SiteVisit.id != exclude_visit_id)
 
     for existing in query.all():
-        if existing.property_match_id == property_match_id:
+        if property_match_id is not None and existing.property_match_id == property_match_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
@@ -442,8 +442,14 @@ def update_site_visit(
         event_type = "RESCHEDULED" if rescheduling else ("STATUS_CHANGED" if "status" in changes else "UPDATED")
         record_visit_history(db, visit, event_type, before_data, user_id, changes.get("cancellation_reason") or changes.get("buyer_feedback"))
 
-        match = db.query(PropertyMatch).filter(PropertyMatch.id == visit.property_match_id,
-            PropertyMatch.tenant_id == tenant_id).first()
+        match = (
+            db.query(PropertyMatch).filter(
+                PropertyMatch.id == visit.property_match_id,
+                PropertyMatch.tenant_id == tenant_id,
+            ).first()
+            if visit.property_match_id
+            else None
+        )
         requirement = db.query(BuyerRequirement).filter(BuyerRequirement.id == match.buyer_requirement_id,
             BuyerRequirement.tenant_id == tenant_id).first() if match else None
         portal_user = db.query(CustomerPortalUser).filter(CustomerPortalUser.tenant_id == tenant_id,

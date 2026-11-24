@@ -5,11 +5,14 @@ SQLite database with PostgreSQL UUID/JSONB type compilation adapters for fast lo
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
+
+import os
+os.environ.setdefault("SCUILONE_DISABLE_LIVE_SMTP", "1")
+
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-from typing import Callable
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -19,7 +22,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 
-# Enable PostgreSQL JSONB and UUID columns to compile cleanly on SQLite during local test runs.
 @compiles(JSONB, "sqlite")
 def _compile_jsonb_sqlite(element, compiler, **kw):
     return "JSON"
@@ -72,7 +74,7 @@ def db_engine():
 
 
 @pytest.fixture(scope="function")
-def db_session(db_engine) -> Session:
+def db_session(db_engine) -> Iterator[Session]:
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
     db = TestingSessionLocal()
     try:
@@ -83,34 +85,102 @@ def db_session(db_engine) -> Session:
 
 @pytest.fixture(scope="function")
 def seed_world(db_session: Session):
-    """Create two isolated tenants with staff users, roles, accounts, contacts, leads, and portal users."""
+    """Create two isolated Real Estate Company tenants with active IndustryPack, RBAC permissions, staff, accounts, contacts, leads, and portal users."""
     from app.models.account import Account
     from app.models.contact import Contact
     from app.models.customer_portal import CustomerPortalUser
+    from app.models.industry_pack import IndustryPack
     from app.models.lead import Lead
+    from app.models.permission import Permission
     from app.models.role import Role
+    from app.models.role_permission import RolePermission
     from app.models.tenant import Tenant
     from app.models.user import User
     from app.models.user_role import UserRole
+
+    # Seed active Real Estate IndustryPack so check_module passes naturally
+    pack = db_session.query(IndustryPack).filter(IndustryPack.pack_key == "real_estate").first()
+    if not pack:
+        pack = IndustryPack(
+            id=uuid.uuid4(),
+            pack_key="real_estate",
+            name="Real Estate",
+            description="SCuilONE Real Estate Pack",
+            version="1.0.0",
+            is_active=True,
+            default_config={
+                "enabled_modules": [
+                    "leads",
+                    "contacts",
+                    "accounts",
+                    "deals",
+                    "activities",
+                    "properties",
+                    "buildings",
+                    "real_estate_projects",
+                    "buyer_requirements",
+                    "property_matches",
+                    "site_visits",
+                    "bookings",
+                    "payments",
+                    "rentals",
+                ]
+            },
+        )
+        db_session.add(pack)
+        db_session.flush()
+
+    owner_role = db_session.query(Role).filter(Role.name == "Tenant Owner").first()
+    if not owner_role:
+        owner_role = Role(id=uuid.uuid4(), name="Tenant Owner")
+        db_session.add(owner_role)
+    agent_role = db_session.query(Role).filter(Role.name == "Sales Agent").first()
+    if not agent_role:
+        agent_role = Role(id=uuid.uuid4(), name="Sales Agent")
+        db_session.add(agent_role)
+    db_session.flush()
+
+    # Seed standard Real Estate permissions and attach to Tenant Owner so permission_checker passes naturally
+    perm_names = [
+        "booking.create", "booking.view", "booking.update", "booking.delete", "booking.cancel",
+        "booking.sale.complete", "booking.payment.create", "booking.payment.view", "booking.payment.verify",
+        "payment.create", "payment.view", "payment.update", "payment.verify", "payment.refund",
+        "property.create", "property.view", "property.update", "property.delete",
+        "buyer_requirement.create", "buyer_requirement.view", "buyer_requirement.update", "buyer_requirement.delete",
+        "property_match.create", "property_match.view", "property_match.update",
+        "site_visit.create", "site_visit.view", "site_visit.update",
+        "offer.create", "offer.view", "offer.update",
+        "rental.create", "rental.view", "rental.update", "rental.delete",
+        "rental.payment.verify", "rental.settlement.approve",
+        "lead.create", "lead.view", "lead.update", "lead.delete",
+        "deal.create", "deal.view", "deal.update", "deal.delete",
+        "project.create", "project.view", "project.update", "project.delete",
+        "building.create", "building.view", "building.update", "building.delete",
+    ]
+    for pname in perm_names:
+        perm = db_session.query(Permission).filter(Permission.name == pname).first()
+        if not perm:
+            perm = Permission(id=uuid.uuid4(), name=pname, description=pname)
+            db_session.add(perm)
+            db_session.flush()
+        rp = (
+            db_session.query(RolePermission)
+            .filter(RolePermission.role_id == owner_role.id, RolePermission.permission_id == perm.id)
+            .first()
+        )
+        if not rp:
+            db_session.add(RolePermission(role_id=owner_role.id, permission_id=perm.id))
+    db_session.flush()
 
     def _build_tenant(name: str, email_prefix: str):
         tenant = Tenant(
             id=uuid.uuid4(),
             name=name,
             industry="Real Estate",
+            business_type="real_estate_company",
             status="Active",
         )
         db_session.add(tenant)
-        db_session.flush()
-
-        owner_role = db_session.query(Role).filter(Role.name == "Tenant Owner").first()
-        if not owner_role:
-            owner_role = Role(id=uuid.uuid4(), name="Tenant Owner")
-            db_session.add(owner_role)
-        agent_role = db_session.query(Role).filter(Role.name == "Sales Agent").first()
-        if not agent_role:
-            agent_role = Role(id=uuid.uuid4(), name="Sales Agent")
-            db_session.add(agent_role)
         db_session.flush()
 
         staff = User(
@@ -241,43 +311,67 @@ def seed_world(db_session: Session):
 
 @pytest.fixture(scope="function")
 def api_client_factory(db_session: Session):
-    """Build a FastAPI TestClient wired to the test DB session with configurable staff/portal auth."""
+    """Build a FastAPI TestClient wired to the SQLite test DB session with isolated staff/portal auth."""
     from fastapi.testclient import TestClient
     from app.core import dependencies as core_deps
     from app.core import industry_modules as core_modules
     from app.main import app
-    from app.routes import customer_portal as portal_route
+    from app.routes import (
+        agency_collaboration as agency_collab_route,
+        agency_workflow as agency_wf_route,
+        bookings as bookings_route,
+        buildings as buildings_route,
+        buyer_requirements as buyer_reqs_route,
+        customer_booking_journey as journey_route,
+        customer_portal as portal_route,
+        customer_portal_lifecycle as lifecycle_route,
+        deals as deals_route,
+        finance_portals as finance_portals_route,
+        lead_scoring as lead_scoring_route,
+        leads as leads_route,
+        payment_plans as payment_plans_route,
+        payment_refunds as payment_refunds_route,
+        payments as payments_route,
+        projects as projects_route,
+        properties as properties_route,
+        property_matches as matches_route,
+        property_offers as offers_route,
+        rentals as rentals_route,
+        site_visits as site_visits_route,
+    )
 
     def _override_db():
         yield db_session
 
-    # Collect every get_db, permission_checker, and check_module dependency across all routes once.
     base_overrides: dict = {
         core_deps.get_db: _override_db,
         core_modules.get_db: _override_db,
     }
-    for route in app.routes:
-        for dep_obj in getattr(route, "dependencies", []) or []:
-            fn = getattr(dep_obj, "dependency", None)
-            name = getattr(fn, "__name__", "")
-            if name == "get_db":
-                base_overrides[fn] = _override_db
-            elif name in ("permission_checker", "check_module", "module_checker"):
-                base_overrides[fn] = lambda: True
-
-        dependant = getattr(route, "dependant", None)
-        if not dependant:
-            continue
-        stack = list(dependant.dependencies)
-        while stack:
-            dep = stack.pop()
-            fn = dep.call
-            name = getattr(fn, "__name__", "")
-            if name == "get_db":
-                base_overrides[fn] = _override_db
-            elif name in ("permission_checker", "check_module", "module_checker"):
-                base_overrides[fn] = lambda: True
-            stack.extend(dep.dependencies)
+    for mod in (
+        bookings_route,
+        buildings_route,
+        journey_route,
+        portal_route,
+        lifecycle_route,
+        payments_route,
+        payment_plans_route,
+        payment_refunds_route,
+        offers_route,
+        rentals_route,
+        projects_route,
+        properties_route,
+        site_visits_route,
+        buyer_reqs_route,
+        matches_route,
+        agency_collab_route,
+        agency_wf_route,
+        deals_route,
+        finance_portals_route,
+        lead_scoring_route,
+        leads_route,
+    ):
+        if hasattr(mod, "get_db"):
+            base_overrides[mod.get_db] = _override_db
 
     class _ScopedClient:
         """Applies this client's exact auth/DB overrides right before each request."""

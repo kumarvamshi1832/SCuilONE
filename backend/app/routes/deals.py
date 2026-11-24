@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from uuid import UUID, uuid4
 
@@ -245,6 +246,10 @@ def validate_pipeline_stage(
     return pipeline_stage
 
 
+def _is_closed_deal_stage(stage: str | None) -> bool:
+    return (stage or "").strip().lower() in ("closed won", "closed lost", "won", "lost")
+
+
 def deal_audit_data(deal: Deal):
     return {
         "name": deal.name,
@@ -259,6 +264,8 @@ def deal_audit_data(deal: Deal):
         "pipeline_stage_id": deal.pipeline_stage_id,
         "expected_close_date": deal.expected_close_date,
         "description": deal.description,
+        "lost_reason": deal.lost_reason,
+        "closed_at": deal.closed_at,
         "created_by": deal.created_by,
     }
 
@@ -352,7 +359,9 @@ def create_deal(
         pipeline_id=data.pipeline_id,
         pipeline_stage_id=data.pipeline_stage_id,
         expected_close_date=data.expected_close_date,
-        description=data.description
+        description=data.description,
+        lost_reason=data.lost_reason,
+        closed_at=(datetime.utcnow() if _is_closed_deal_stage(pipeline_stage.name if pipeline_stage else data.stage) else None),
     )
 
     try:
@@ -608,6 +617,16 @@ def update_deal(
                 "of a pipeline-linked deal"
             )
         )
+
+    if "stage" in update_data:
+        if _is_closed_deal_stage(update_data["stage"]):
+            if deal.closed_at is None:
+                update_data["closed_at"] = datetime.utcnow()
+        else:
+            if deal.closed_at is not None:
+                update_data["closed_at"] = None
+            if deal.lost_reason is not None and "lost_reason" not in update_data:
+                update_data["lost_reason"] = None
 
     changed_fields = set()
 

@@ -26,6 +26,7 @@ class RentalBookingRequest(Base):
             "property_id",
             unique=True,
             postgresql_where=text("status IN ('Requested', 'Approved', 'Agreement Created')"),
+            sqlite_where=text("status IN ('Requested', 'Approved', 'Agreement Created')"),
         ),
         CheckConstraint("booking_type IN ('Rent', 'Lease')", name="ck_rental_booking_req_type"),
         CheckConstraint("channel IN ('Portal', 'Walk-in')", name="ck_rental_booking_req_channel"),
@@ -93,6 +94,9 @@ class RentalBookingRequest(Base):
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    source_agency_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agencies.id", ondelete="SET NULL"), nullable=True)
+    agency_connection_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("company_agency_connections.id", ondelete="SET NULL"), nullable=True)
+    agency_lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agency_leads.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -102,12 +106,14 @@ class RentalAgreement(Base):
     __table_args__ = (
         Index("ix_rental_agreements_tenant_status", "tenant_id", "status"),
         Index("ix_rental_agreements_tenant_property", "tenant_id", "property_id"),
-        Index("uq_rental_agreements_one_draft_property", "tenant_id", "property_id", unique=True, postgresql_where=text("status = 'Draft'")),
+        Index("uq_rental_agreements_one_draft_property", "tenant_id", "property_id", unique=True, postgresql_where=text("status = 'Draft'"),
+            sqlite_where=text("status = 'Draft'")),
         Index("ix_rental_agreements_tenant_customer", "tenant_id", "contact_id"),
         Index(
             "uq_rental_agreements_one_active_property",
             "tenant_id", "property_id", unique=True,
             postgresql_where=text("status IN ('Active', 'Termination Requested')"),
+            sqlite_where=text("status IN ('Active', 'Termination Requested')"),
         ),
         CheckConstraint("agreement_type IN ('Rent', 'Lease')", name="ck_rental_agreement_type"),
         CheckConstraint("status IN ('Draft', 'Pending Signature', 'Active', 'Termination Requested', 'Expired', 'Terminated', 'Completed', 'Cancelled')", name="ck_rental_agreement_status"),
@@ -158,6 +164,17 @@ class RentalAgreement(Base):
     approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_agency_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agencies.id", ondelete="SET NULL"), nullable=True)
+    agency_connection_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("company_agency_connections.id", ondelete="SET NULL"), nullable=True)
+    agency_agreement_version_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agency_agreement_versions.id", ondelete="SET NULL"), nullable=True)
+    owner_mandate_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("owner_agency_mandates.id", ondelete="SET NULL"), nullable=True)
+    advance_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    escalation_frequency_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    escalation_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    maintenance_responsibility: Mapped[str] = mapped_column(String(20), nullable=False, default="tenant", server_default="tenant")
+    possession_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    commercial_use_clause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    collection_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="authorized_collection", server_default="authorized_collection")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -248,6 +265,7 @@ class RentalExitRequest(Base):
         Index(
             "uq_rental_exit_one_open_request", "tenant_id", "agreement_id", unique=True,
             postgresql_where=text("status IN ('Requested', 'Under Review', 'Approved', 'Inspection Pending', 'Settlement Pending')"),
+            sqlite_where=text("status IN ('Requested', 'Under Review', 'Approved', 'Inspection Pending', 'Settlement Pending')"),
         ),
         CheckConstraint("status IN ('Requested', 'Under Review', 'Approved', 'Rejected', 'Withdrawn', 'Inspection Pending', 'Settlement Pending', 'Closed')", name="ck_rental_exit_status"),
         CheckConstraint("early_exit_charge >= 0 AND notice_shortfall_charge >= 0", name="ck_rental_exit_charge_nonnegative"),

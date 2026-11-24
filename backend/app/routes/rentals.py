@@ -1090,6 +1090,7 @@ def decide_rental_payment(payment_id: UUID, payload: RentalPaymentDecision, db: 
     if not payment: raise HTTPException(404, "Rental payment not found.")
     if payment.status not in ("Pending", "Under Verification"): raise HTTPException(409, "This payment has already been processed.")
     payment.status = payload.decision; payment.verified_by = user_id; payment.verified_at = datetime.utcnow(); payment.notes = payload.notes or payment.notes
+    db.flush()
     if payload.decision == "Verified":
         if not payment.receipt_number:
             payment.receipt_number = f"RNT-{datetime.utcnow():%Y%m%d}-{payment.id.hex[:8].upper()}"

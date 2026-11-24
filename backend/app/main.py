@@ -55,6 +55,9 @@ from app.routes.customer_portal import router as customer_portal_router
 from app.routes.customer_chat import staff_router as customer_chat_staff_router, portal_router as customer_chat_portal_router
 from app.routes.customer_booking_journey import router as customer_booking_journey_router
 from app.routes.customer_portal_lifecycle import router as customer_portal_lifecycle_router
+from app.routes.agency_collaboration import router as agency_collaboration_router
+from app.routes.agency_workflow import router as agency_workflow_router
+from app.routes.finance_portals import router as finance_portals_router
 from app.routes.tasks import router as tasks_router
 from app.routes.trash import router as trash_router
 from app.routes.forecast import router as forecast_router
@@ -201,12 +204,15 @@ app.include_router(global_collections_router)
 # app.include_router(email_logs_router)
 # app.include_router(email_webhook_router)
 # app.include_router(custom_fields_router)
-# app.include_router(lead_scoring_router)
+app.include_router(lead_scoring_router)
 app.include_router(customer_portal_router)
 app.include_router(customer_chat_staff_router)
 app.include_router(customer_chat_portal_router)
 app.include_router(customer_booking_journey_router)
 app.include_router(customer_portal_lifecycle_router)
+app.include_router(agency_collaboration_router)
+app.include_router(agency_workflow_router)
+app.include_router(finance_portals_router)
 # app.include_router(platform_admin_router)
 # app.include_router(platform_operations_router)
 

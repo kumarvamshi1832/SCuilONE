@@ -228,6 +228,49 @@ def update_project(
             detail="Expected completion date cannot be before start date.",
         )
 
+    if changes.get("construction_status") == "Completed" or changes.get("status") == "Completed":
+        from app.models.property import Property
+
+        linked_buildings = (
+            db.query(Building)
+            .filter(Building.tenant_id == tenant_id, Building.project_id == project.id)
+            .all()
+        )
+        pending_buildings = [
+            f"{b.name} [{b.construction_status}]"
+            for b in linked_buildings
+            if (b.construction_status or "").strip() != "Completed"
+        ]
+        if pending_buildings:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot mark project Completed: {len(pending_buildings)} linked building(s) "
+                    f"still pending construction ({', '.join(pending_buildings)})."
+                ),
+            )
+
+        building_ids = [b.id for b in linked_buildings]
+        if building_ids:
+            inactive_units = (
+                db.query(Property)
+                .filter(
+                    Property.tenant_id == tenant_id,
+                    Property.building_id.in_(building_ids),
+                    Property.status == "Inactive",
+                )
+                .all()
+            )
+            if inactive_units:
+                sample = ", ".join(u.unit_number or u.name for u in inactive_units[:5])
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Cannot mark project Completed: {len(inactive_units)} unit(s) are still Inactive "
+                        f"and not released for sale ({sample})."
+                    ),
+                )
+
     before_data = project_snapshot(project)
 
     try:
@@ -324,3 +367,58 @@ def delete_project(
     except Exception:
         db.rollback()
         raise
+
+
+
+@router.get(
+    "/{project_id}/summary",
+    dependencies=[Depends(require_permission("project.view"))],
+)
+def get_project_summary(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_active_user),
+):
+    """Live project-wide inventory rollup and verified earnings across all buildings."""
+    from decimal import Decimal
+    from app.routes.buildings import _compute_building_summary
+
+    tenant_id, _ = get_tenant_and_user(current_user)
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.tenant_id == tenant_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+
+    buildings = (
+        db.query(Building)
+        .filter(Building.tenant_id == tenant_id, Building.project_id == project.id)
+        .order_by(Building.name.asc())
+        .all()
+    )
+    building_summaries = [_compute_building_summary(db, tenant_id, b) for b in buildings]
+
+    totals = {
+        "actual_buildings": len(building_summaries),
+        "actual_units": sum(b["total_units"] for b in building_summaries),
+        "available": sum(b["available"] for b in building_summaries),
+        "reserved": sum(b["reserved"] for b in building_summaries),
+        "booked": sum(b["booked"] for b in building_summaries),
+        "sold": sum(b["sold"] for b in building_summaries),
+        "rented_or_leased": sum(b["rented_or_leased"] for b in building_summaries),
+        "inactive": sum(b["inactive"] for b in building_summaries),
+        "total_agreed_value": f"{sum((Decimal(b['total_agreed_value']) for b in building_summaries), Decimal('0.00')):.2f}",
+        "verified_sale_collected": f"{sum((Decimal(b['verified_sale_collected']) for b in building_summaries), Decimal('0.00')):.2f}",
+        "verified_rental_collected": f"{sum((Decimal(b['verified_rental_collected']) for b in building_summaries), Decimal('0.00')):.2f}",
+        "total_earned": f"{sum((Decimal(b['total_earned']) for b in building_summaries), Decimal('0.00')):.2f}",
+    }
+    return {
+        "project_id": str(project.id),
+        "project_name": project.name,
+        "construction_status": project.construction_status,
+        "status": project.status,
+        **totals,
+        "buildings": building_summaries,
+    }

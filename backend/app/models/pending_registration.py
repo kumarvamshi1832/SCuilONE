@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, DateTime
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,46 +14,71 @@ class PendingRegistration(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
     )
 
     company_name: Mapped[str] = mapped_column(
         String(150),
-        nullable=False
+        nullable=False,
     )
 
     company_email: Mapped[str] = mapped_column(
         String(255),
-        nullable=False
+        nullable=False,
     )
 
     phone: Mapped[str] = mapped_column(
         String(30),
-        nullable=False
+        nullable=False,
     )
 
     industry: Mapped[str] = mapped_column(
         String(100),
-        nullable=False
+        nullable=False,
+    )
+
+    business_type: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+    )
+
+    rera_registration_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    city: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    state: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    office_address: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     full_name: Mapped[str] = mapped_column(
         String(150),
-        nullable=False
+        nullable=False,
     )
 
     email: Mapped[str] = mapped_column(
         String(255),
         unique=True,
-        nullable=False
+        nullable=False,
     )
 
     password: Mapped[str] = mapped_column(
         String(255),
-        nullable=False
+        nullable=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
     )

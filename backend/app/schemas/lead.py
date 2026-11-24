@@ -1,5 +1,5 @@
 from uuid import UUID
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, ConfigDict
 
@@ -45,3 +45,25 @@ class LeadResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LeadConvertRequest(BaseModel):
+    create_account: bool = False
+    account_name: str | None = None
+    create_deal: bool = True
+    deal_name: str | None = None
+    deal_amount: float | None = None
+    deal_stage: str = "New"
+    expected_close_date: date | None = None
+    notes: str | None = None
+
+
+class LeadConvertResponse(BaseModel):
+    lead_id: UUID
+    lead_status: str
+    contact_id: UUID
+    contact_created: bool
+    account_id: UUID | None = None
+    account_created: bool = False
+    deal_id: UUID | None = None
+    deal_created: bool = False

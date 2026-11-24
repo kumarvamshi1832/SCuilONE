@@ -411,6 +411,6 @@ def test_alembic_single_head_and_migration_chain():
     script = ScriptDirectory.from_config(cfg)
     heads = script.get_heads()
     assert len(heads) == 1
-    assert heads[0] == "e4b9c2f7a108"
+    assert heads[0] == "k6e2b8g3c549"
     rev = script.get_revision("e4b9c2f7a108")
     assert rev.down_revision == "a8c5d7e9f1b3"

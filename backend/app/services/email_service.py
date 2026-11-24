@@ -718,3 +718,203 @@ SCuilONE Automatic Technical Monitoring Engine
         clean_to,
         incident_number,
     )
+
+
+def send_agency_invitation_email(
+    *,
+    recipient_email: str,
+    contact_name: str,
+    agency_name: str,
+    company_name: str,
+    invitation_token: str | None,
+    existing_agency_detected: bool,
+    permissions: dict,
+    sharing_scope: str,
+    expires_at_iso: str,
+) -> None:
+    """Send a Real Estate Company -> Agency collaboration invitation email via SMTP."""
+    from urllib.parse import quote
+
+    if not recipient_email:
+        logger.warning("Agency invitation email skipped: recipient_email is missing.")
+        return
+
+    enabled_perms = [k.title() for k, v in (permissions or {}).items() if v]
+    perms_text = ", ".join(enabled_perms) if enabled_perms else "Real Estate Collaboration"
+    frontend_base = settings.FRONTEND_URL.rstrip("/")
+
+    email = EmailMessage()
+    email["From"] = settings.SMTP_FROM_EMAIL
+    email["To"] = recipient_email
+
+    if existing_agency_detected:
+        email["Subject"] = f"SCuilONE: New partnership request from {company_name}"
+        email.set_content(
+            f"""Hello {contact_name},
+
+{company_name} has invited your existing SCuilONE Real Estate Agency ({agency_name}) to collaborate.
+
+Proposed Permissions: {perms_text}
+Property Sharing Scope: {sharing_scope}
+Expires At (UTC): {expires_at_iso}
+
+Because your agency is already registered on SCuilONE, an independent connection request has been added to your Agency Dashboard. Please sign in to review, negotiate, and sign the agreement:
+
+{frontend_base}/agency/connections
+
+Regards,
+SCuilONE Team
+"""
+        )
+    else:
+        invite_url = f"{frontend_base}/agency-invitation?token={quote(invitation_token or '')}"
+        email["Subject"] = f"SCuilONE: {company_name} invited {agency_name} to collaborate"
+        email.set_content(
+            f"""Hello {contact_name},
+
+{company_name} has invited your Real Estate Agency ({agency_name}) to collaborate on SCuilONE.
+
+Proposed Permissions: {perms_text}
+Property Sharing Scope: {sharing_scope}
+Expires At (UTC): {expires_at_iso}
+
+Open your secure invitation link to preview the terms and choose either:
+  1. Free Collaboration Access (for working with inviting companies), OR
+  2. Full SCuilONE Agency Subscription (your own CRM + external company partnerships)
+
+Invitation Link:
+{invite_url}
+
+Invitation Token (for API / Swagger onboarding):
+{invitation_token or ''}
+
+If you were not expecting this invitation, you can safely ignore this email.
+
+Regards,
+SCuilONE Team
+"""
+        )
+
+    _deliver_smtp_message(
+        email,
+        {
+            "type": "agency_invitation",
+            "company_name": company_name,
+            "agency_name": agency_name,
+            "existing_agency_detected": existing_agency_detected,
+        },
+    )
+    logger.info("Agency invitation email sent to %s for company=%s", recipient_email, company_name)
+
+
+def send_owner_portal_welcome_email(
+    *,
+    recipient_email: str,
+    owner_name: str,
+    organization_name: str,
+) -> None:
+    """Send a welcome email to a Property Owner with their Owner Portal login link."""
+    if not recipient_email:
+        logger.warning("Owner portal welcome email skipped: recipient_email is missing.")
+        return
+
+    portal_url = f"{settings.FRONTEND_URL.rstrip('/')}/owner-portal/login"
+    email = EmailMessage()
+    email["From"] = settings.SMTP_FROM_EMAIL
+    email["To"] = recipient_email
+    email["Subject"] = f"SCuilONE: Welcome to your Property Owner Portal ({organization_name})"
+    email.set_content(
+        f"""Hello {owner_name},
+
+{organization_name} has enabled your Property Owner Portal on SCuilONE.
+
+You can sign in to review and approve property management mandates, view assigned properties, and track your monthly rent collections, management fee deductions, and payout statements:
+
+Owner Portal Login:
+{portal_url}
+
+Login Email: {recipient_email}
+(Use the password shared with you by {organization_name}.)
+
+Regards,
+SCuilONE Team
+"""
+    )
+    _deliver_smtp_message(
+        email,
+        {"type": "owner_portal_welcome", "organization_name": organization_name, "owner_name": owner_name},
+    )
+    logger.info("Owner portal welcome email sent to %s for org=%s", recipient_email, organization_name)
+
+
+def send_real_estate_payment_reminder_email(
+    *,
+    recipient_email: str,
+    customer_name: str,
+    organization_name: str,
+    payment_label: str,
+    property_name: str,
+    due_date_iso: str,
+    base_amount: str,
+    late_fee_amount: str,
+    total_payable: str,
+    days_overdue: int = 0,
+    days_until_due: int = 0,
+) -> None:
+    """Send 5-day upcoming or daily overdue (with late charges) Real Estate payment reminder email."""
+    if not recipient_email:
+        return
+
+    portal_url = f"{settings.FRONTEND_URL.rstrip('/')}/portal/login"
+    email = EmailMessage()
+    email["From"] = settings.SMTP_FROM_EMAIL
+    email["To"] = recipient_email
+
+    if days_overdue > 0:
+        email["Subject"] = f"{organization_name}: Overdue Payment Reminder ({days_overdue} day(s) overdue) - {payment_label}"
+        email.set_content(
+            f"""Hello {customer_name},
+
+Your payment for {property_name} ({payment_label}) was due on {due_date_iso} and is now {days_overdue} day(s) overdue.
+
+Payment Breakdown:
+  - Base Due Amount: INR {base_amount}
+  - Overdue / Late Charges: INR {late_fee_amount}
+  - Total Payable Now: INR {total_payable}
+
+Please log in to your Customer Portal to submit payment and avoid additional daily overdue charges:
+{portal_url}
+
+If you have already paid, please upload your payment reference in the portal so our finance team can verify it.
+
+Regards,
+{organization_name}
+"""
+        )
+    else:
+        email["Subject"] = f"{organization_name}: Upcoming Payment Reminder (Due in {days_until_due} days) - {payment_label}"
+        email.set_content(
+            f"""Hello {customer_name},
+
+This is a friendly reminder that your payment for {property_name} ({payment_label}) is due on {due_date_iso} (in {days_until_due} days).
+
+Amount Due: INR {base_amount}
+
+Please log in to your Customer Portal to review your schedule and make the payment on time:
+{portal_url}
+
+Regards,
+{organization_name}
+"""
+        )
+
+    _deliver_smtp_message(
+        email,
+        {
+            "type": "real_estate_payment_reminder",
+            "payment_label": payment_label,
+            "days_overdue": days_overdue,
+            "days_until_due": days_until_due,
+        },
+    )
+    logger.info("Real estate payment reminder sent to %s (label=%s, days_overdue=%s)", recipient_email, payment_label, days_overdue)

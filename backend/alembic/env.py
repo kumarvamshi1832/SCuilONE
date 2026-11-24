@@ -47,7 +47,7 @@ from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
 from app.models.rental import (
-    RentalAgreement, RentalPaymentSchedule, RentalPayment, RentalDepositTransaction,
+    RentalBookingRequest, RentalAgreement, RentalPaymentSchedule, RentalPayment, RentalDepositTransaction,
     RentalExitRequest, RentalInspection, RentalSettlement, RentalAgreementRevision,
 )
 from app.models.software_requirement import SoftwareRequirement
@@ -104,6 +104,37 @@ from app.models.customer_property_shortlist import CustomerPropertyShortlist
 from app.models.customer_booking_journey import CustomerBookingRequest, CustomerSiteVisitFeedback, CustomerPortalJourneyFile
 from app.models.customer_portal_lifecycle import CustomerPortalNotification, CustomerBookingCancellationRequest, PropertyHandover, CustomerPropertyServiceRequest
 
+
+from app.models.agency import (
+    RealEstateBusinessProfile,
+    Agency,
+    AgencyMember,
+    AgencySession,
+    AgencyInvitation,
+    CompanyAgencyConnection,
+    AgencyAgreementVersion,
+    AgencyPropertyAccess,
+    AgencyNotification,
+)
+from app.models.agency_workflow import (
+    AgencyLead,
+    AgencyRequirement,
+    AgencyShortlist,
+    AgencySaleBookingRequest,
+)
+from app.models.finance_portals import (
+    AgencyCommissionEntry,
+    PropertyOwner,
+    OwnerAgencyMandate,
+    OwnerPortalUser,
+    OwnerPortalSession,
+    OwnerPayoutLedger,
+)
+from app.models.notification_outbox import NotificationOutbox
+from app.worker import load_all_models
+
+# Ensure any future models under app/models/ are always registered on Base.metadata for autogenerate
+load_all_models()
 
 config = context.config
 

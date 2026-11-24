@@ -2731,6 +2731,15 @@ def create_portal_buyer_requirement(
         )
 
     _account, contact, lead = verify_portal_customer_relationships(db, portal)
+    from app.services.finance_portals import is_agency_sourced_post_booking_portal_contact
+
+    post_booking_only, source_agency = is_agency_sourced_post_booking_portal_contact(db, portal["tenant_id"], contact.id)
+    if post_booking_only:
+        agency_label = source_agency.display_name if source_agency else "your Real Estate Agency"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Your portal access is scoped to your booked property, payments, handover, and support. Please contact {agency_label} for new property requirements.",
+        )
     assigned_to = resolve_active_assignee(db, portal["tenant_id"], lead, portal=portal)
 
     customer_notes = payload.notes.strip() if payload.notes else None

@@ -941,3 +941,205 @@ def rental_lifecycle_job(db: Session, today: date) -> dict:
 
 
 JOBS["rental_lifecycle"] = rental_lifecycle_job
+
+
+def process_notification_outbox_job(db: Session, today: date | None = None) -> dict:
+    from app.services.outbox_service import process_notification_outbox
+    result = process_notification_outbox(db)
+    db.commit()
+    return result
+
+
+def expire_agency_invitations_and_connections_job(db: Session, today: date | None = None) -> dict:
+    from app.services.outbox_service import expire_stale_agency_invitations_and_connections
+    result = expire_stale_agency_invitations_and_connections(db, today=today)
+    db.commit()
+    return result
+
+
+JOBS["process_notification_outbox"] = process_notification_outbox_job
+JOBS["expire_agency_invitations_and_connections"] = expire_agency_invitations_and_connections_job
+
+
+def real_estate_payment_email_reminders_job(db: Session, today: date | None = None) -> dict:
+    """Send Real Estate payment reminder emails:
+    - 5 days before due date (once per schedule/installment)
+    - Daily once per day while overdue, including late fee / overdue charges and total payable.
+    Covers both Rental/Lease schedules and Sale payment plan installments.
+    """
+    from datetime import datetime, timezone
+    from app.models.booking import Booking
+    from app.models.notification_outbox import NotificationOutbox
+    from app.models.payment_plan import PaymentPlan, PaymentPlanInstallment
+    from app.models.property import Property
+    from app.models.rental import RentalAgreement, RentalPaymentSchedule
+    from app.models.tenant import Tenant
+    from app.services.email_service import send_real_estate_payment_reminder_email
+    from app.services.outbox_service import enqueue_outbox_event
+
+    today = today or date.today()
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    pre_due_sent = 0
+    overdue_daily_sent = 0
+    failed = 0
+
+    def _dispatch_once(
+        *,
+        idem_key: str,
+        tenant_id: uuid.UUID,
+        recipient_email: str,
+        customer_name: str,
+        org_name: str,
+        payment_label: str,
+        property_name: str,
+        due_date_iso: str,
+        base_amt: Decimal,
+        late_fee_amt: Decimal,
+        days_overdue: int,
+        days_until_due: int,
+    ) -> None:
+        nonlocal pre_due_sent, overdue_daily_sent, failed
+        if not recipient_email or "@" not in recipient_email:
+            return
+        if db.query(NotificationOutbox.id).filter(NotificationOutbox.idempotency_key == idem_key).first():
+            return
+        total_amt = (base_amt + late_fee_amt).quantize(Decimal("0.01"))
+        row = enqueue_outbox_event(
+            db,
+            channel="email",
+            event_type="real_estate_payment_overdue" if days_overdue > 0 else "real_estate_payment_due_5d",
+            tenant_id=tenant_id,
+            recipient_email=recipient_email,
+            title=f"{payment_label} ({'Overdue' if days_overdue > 0 else 'Due in 5 days'})",
+            message=f"Property: {property_name}, Base: {base_amt:.2f}, Late Fee: {late_fee_amt:.2f}, Total: {total_amt:.2f}, Due: {due_date_iso}",
+            idempotency_key=idem_key,
+        )
+        try:
+            send_real_estate_payment_reminder_email(
+                recipient_email=recipient_email,
+                customer_name=customer_name,
+                organization_name=org_name,
+                payment_label=payment_label,
+                property_name=property_name,
+                due_date_iso=due_date_iso,
+                base_amount=f"{base_amt:.2f}",
+                late_fee_amount=f"{late_fee_amt:.2f}",
+                total_payable=f"{total_amt:.2f}",
+                days_overdue=days_overdue,
+                days_until_due=days_until_due,
+            )
+            row.status = "Sent"
+            row.attempts += 1
+            row.sent_at = now_utc
+            if days_overdue > 0:
+                overdue_daily_sent += 1
+            else:
+                pre_due_sent += 1
+        except Exception as exc:
+            row.status = "Failed"
+            row.attempts += 1
+            row.last_error = str(exc)[:1000]
+            failed += 1
+        db.flush()
+
+    # 1. Rental & Lease payment schedules
+    schedules = (
+        db.query(RentalPaymentSchedule)
+        .filter(RentalPaymentSchedule.status.in_(("Pending", "Partially Paid", "Overdue")))
+        .all()
+    )
+    for sched in schedules:
+        days_until = (sched.due_date - today).days
+        if days_until != 5 and days_until >= 0:
+            continue
+        agreement = db.query(RentalAgreement).filter(RentalAgreement.id == sched.agreement_id).first()
+        if not agreement or agreement.status not in ("Active", "Termination Requested") or not agreement.customer_email:
+            continue
+        tenant = db.query(Tenant).filter(Tenant.id == sched.tenant_id).first()
+        prop = db.query(Property).filter(Property.id == agreement.property_id).first()
+        days_overdue = abs(days_until) if days_until < 0 else 0
+        idem = (
+            f"re_pay_overdue:rental:{sched.id}:{today.isoformat()}"
+            if days_overdue > 0
+            else f"re_pay_5d:rental:{sched.id}"
+        )
+        _dispatch_once(
+            idem_key=idem,
+            tenant_id=sched.tenant_id,
+            recipient_email=agreement.customer_email,
+            customer_name=agreement.customer_name or "Tenant",
+            org_name=tenant.name if tenant else "SCuilONE Real Estate",
+            payment_label=f"{agreement.agreement_type} {sched.charge_type} #{sched.sequence}",
+            property_name=prop.name if prop else "Your Property",
+            due_date_iso=sched.due_date.isoformat(),
+            base_amt=Decimal(str(sched.amount)),
+            late_fee_amt=Decimal(str(sched.late_fee_amount or "0.00")),
+            days_overdue=days_overdue,
+            days_until_due=max(days_until, 0),
+        )
+
+    # 2. Sale payment plan installments
+    plans = db.query(PaymentPlan).filter(PaymentPlan.status == "Active").all()
+    for plan in plans:
+        booking = db.query(Booking).filter(Booking.id == plan.booking_id, Booking.status == "Confirmed").first()
+        if not booking or not booking.buyer_email:
+            continue
+        tenant = db.query(Tenant).filter(Tenant.id == plan.tenant_id).first()
+        prop = db.query(Property).filter(Property.id == booking.property_id).first()
+        installments = (
+            db.query(PaymentPlanInstallment)
+            .filter(
+                PaymentPlanInstallment.payment_plan_id == plan.id,
+                PaymentPlanInstallment.status.in_(("Pending", "Partially Paid", "Overdue")),
+            )
+            .all()
+        )
+        for inst in installments:
+            days_until = (inst.due_date - today).days
+            if days_until != 5 and days_until >= 0:
+                continue
+            days_overdue = abs(days_until) if days_until < 0 else 0
+            idem = (
+                f"re_pay_overdue:sale:{inst.id}:{today.isoformat()}"
+                if days_overdue > 0
+                else f"re_pay_5d:sale:{inst.id}"
+            )
+            _dispatch_once(
+                idem_key=idem,
+                tenant_id=plan.tenant_id,
+                recipient_email=booking.buyer_email,
+                customer_name=booking.buyer_name or "Customer",
+                org_name=tenant.name if tenant else "SCuilONE Real Estate",
+                payment_label=f"Sale Installment: {inst.name}",
+                property_name=prop.name if prop else "Your Property",
+                due_date_iso=inst.due_date.isoformat(),
+                base_amt=Decimal(str(inst.amount)),
+                late_fee_amt=Decimal("0.00"),
+                days_overdue=days_overdue,
+                days_until_due=max(days_until, 0),
+            )
+
+    db.commit()
+    return {
+        "pre_due_5d_sent": pre_due_sent,
+        "overdue_daily_sent": overdue_daily_sent,
+        "failed": failed,
+    }
+
+
+JOBS["real_estate_payment_email_reminders"] = real_estate_payment_email_reminders_job
+
+
+def recalculate_lead_scores_job(db: Session, today: date | None = None) -> dict:
+    """Recalculate lead scores & stale decay across all active tenants."""
+    from app.models.tenant import Tenant
+    from app.services.lead_scoring import recalculate_tenant
+
+    tenants = db.query(Tenant.id).filter(Tenant.status.in_(("Active", "Trial"))).all()
+    total_scored = 0
+    for (tid,) in tenants:
+        total_scored += recalculate_tenant(db, tid)
+    return {"tenants_checked": len(tenants), "leads_scored": total_scored}
+
+
+JOBS["recalculate_lead_scores"] = recalculate_lead_scores_job

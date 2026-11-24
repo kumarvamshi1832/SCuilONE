@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.core.password_policy import validate_password
@@ -9,6 +8,14 @@ class RegisterRequest(BaseModel):
     company_email: EmailStr
     phone: str = Field(min_length=7, max_length=20)
     industry: str = Field(min_length=2, max_length=100)
+    business_type: str | None = Field(
+        default=None,
+        description="Required for Real Estate: 'real_estate_company' or 'real_estate_agency'.",
+    )
+    rera_registration_number: str | None = Field(default=None, max_length=100)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+    office_address: str | None = Field(default=None, max_length=1000)
     full_name: str = Field(min_length=2, max_length=150)
     email: EmailStr
     password: str = Field(min_length=15, max_length=128)
@@ -109,8 +116,6 @@ class InvitationSetupRequest(BaseModel):
 
         validate_password(self.password)
         return self
-
-
 
 
 class MFAEnrollmentStartRequest(BaseModel):

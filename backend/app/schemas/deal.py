@@ -17,6 +17,7 @@ class DealCreate(BaseModel):
     pipeline_stage_id: UUID | None = None
     expected_close_date: date | None = None
     description: str | None = None
+    lost_reason: str | None = None
 
 
 class DealUpdate(BaseModel):
@@ -32,6 +33,7 @@ class DealUpdate(BaseModel):
     pipeline_stage_id: UUID | None = None
     expected_close_date: date | None = None
     description: str | None = None
+    lost_reason: str | None = None
 
 
 class DealResponse(BaseModel):
@@ -49,6 +51,8 @@ class DealResponse(BaseModel):
     pipeline_stage_id: UUID | None
     expected_close_date: date | None
     description: str | None
+    lost_reason: str | None = None
+    closed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -349,3 +349,299 @@ def delete_building(
     except Exception:
         db.rollback()
         raise
+
+from decimal import Decimal
+from pydantic import BaseModel, Field, model_validator
+
+
+class BuildingGenerateUnitsIn(BaseModel):
+    start_floor: int = Field(default=1, ge=1, le=200)
+    end_floor: int | None = Field(default=None, ge=1, le=200)
+    units_per_floor: int = Field(default=2, ge=1, le=50)
+    prefix: str | None = Field(default=None, max_length=20)
+    property_type: str = Field(default="Apartment", max_length=50)
+    listing_type: str = Field(default="Sale", max_length=20)
+
+    @model_validator(mode="after")
+    def check_floors(self):
+        if self.end_floor is not None and self.end_floor < self.start_floor:
+            raise ValueError("end_floor cannot be less than start_floor.")
+        return self
+
+
+class BuildingReleaseForSaleIn(BaseModel):
+    mark_building_completed: bool = False
+
+
+def _compute_building_summary(db: Session, tenant_id: UUID, building: Building) -> dict:
+    from app.models.booking import Booking
+    from app.models.payment import Payment
+    from app.models.payment_refund import PaymentRefund
+    from app.models.rental import RentalAgreement, RentalPayment
+
+    props = (
+        db.query(Property)
+        .filter(Property.tenant_id == tenant_id, Property.building_id == building.id)
+        .all()
+    )
+    prop_ids = [p.id for p in props]
+
+    counts = {
+        "available": 0,
+        "reserved": 0,
+        "booked": 0,
+        "sold": 0,
+        "rented_or_leased": 0,
+        "inactive": 0,
+    }
+    for p in props:
+        st = (p.status or "").strip()
+        if st == "Available":
+            counts["available"] += 1
+        elif st == "Reserved":
+            counts["reserved"] += 1
+        elif st == "Booked":
+            counts["booked"] += 1
+        elif st == "Sold":
+            counts["sold"] += 1
+        elif st in ("Rented", "Leased"):
+            counts["rented_or_leased"] += 1
+        else:
+            counts["inactive"] += 1
+
+    agreed_total = Decimal("0.00")
+    sale_collected = Decimal("0.00")
+    rental_collected = Decimal("0.00")
+
+    if prop_ids:
+        bookings = (
+            db.query(Booking)
+            .filter(
+                Booking.tenant_id == tenant_id,
+                Booking.property_id.in_(prop_ids),
+                Booking.status.in_(("Confirmed", "Completed")),
+            )
+            .all()
+        )
+        agreed_total = sum(
+            (Decimal(str(b.agreed_price or b.booking_amount or 0)) for b in bookings),
+            Decimal("0.00"),
+        )
+        booking_ids = [b.id for b in bookings]
+        if booking_ids:
+            verified_payments = (
+                db.query(Payment)
+                .filter(
+                    Payment.tenant_id == tenant_id,
+                    Payment.booking_id.in_(booking_ids),
+                    Payment.status == "Verified",
+                )
+                .all()
+            )
+            gross_sale = sum((Decimal(str(p.amount or 0)) for p in verified_payments), Decimal("0.00"))
+            pay_ids = [p.id for p in verified_payments]
+            refunds = (
+                db.query(PaymentRefund)
+                .filter(
+                    PaymentRefund.tenant_id == tenant_id,
+                    PaymentRefund.payment_id.in_(pay_ids),
+                    PaymentRefund.status == "Processed",
+                )
+                .all()
+                if pay_ids
+                else []
+            )
+            refund_total = sum((Decimal(str(r.amount or 0)) for r in refunds), Decimal("0.00"))
+            sale_collected = max(Decimal("0.00"), gross_sale - refund_total)
+
+        agreements = (
+            db.query(RentalAgreement.id)
+            .filter(RentalAgreement.tenant_id == tenant_id, RentalAgreement.property_id.in_(prop_ids))
+            .all()
+        )
+        ag_ids = [a[0] for a in agreements]
+        if ag_ids:
+            r_payments = (
+                db.query(RentalPayment)
+                .filter(
+                    RentalPayment.tenant_id == tenant_id,
+                    RentalPayment.agreement_id.in_(ag_ids),
+                    RentalPayment.status == "Verified",
+                )
+                .all()
+            )
+            rental_collected = sum((Decimal(str(rp.amount or 0)) for rp in r_payments), Decimal("0.00"))
+
+    total_earned = sale_collected + rental_collected
+    return {
+        "building_id": str(building.id),
+        "project_id": str(building.project_id),
+        "building_name": building.name,
+        "building_code": building.building_code,
+        "construction_status": building.construction_status,
+        "total_floors": building.total_floors,
+        "total_units": len(props),
+        **counts,
+        "total_agreed_value": f"{agreed_total:.2f}",
+        "verified_sale_collected": f"{sale_collected:.2f}",
+        "verified_rental_collected": f"{rental_collected:.2f}",
+        "total_earned": f"{total_earned:.2f}",
+    }
+
+
+@router.post(
+    "/{building_id}/generate-units",
+    status_code=status.HTTP_201_CREATED,
+)
+def generate_building_units(
+    building_id: UUID,
+    payload: BuildingGenerateUnitsIn,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_active_user),
+    _: None = Depends(require_permission("building.update")),
+):
+    """Bulk-create shell Property rows (e.g. A-101, A-102, A-201...) in Inactive status
+    so staff can enter room details and pricing manually before releasing the building for sale.
+    """
+    tenant_id, user_id = get_tenant_and_user(current_user)
+    building = get_building_or_404(db, building_id, tenant_id)
+    project = get_project_or_404(db, building.project_id, tenant_id)
+
+    end_floor = payload.end_floor if payload.end_floor is not None else max(1, building.total_floors)
+    if end_floor < payload.start_floor:
+        raise HTTPException(status_code=400, detail="end_floor cannot be less than start_floor.")
+
+    raw_prefix = payload.prefix if payload.prefix is not None else (f"{building.building_code}-" if building.building_code else "")
+    prefix = raw_prefix.strip()
+
+    existing_units = {
+        row[0]
+        for row in db.query(Property.unit_number)
+        .filter(Property.tenant_id == tenant_id, Property.building_id == building.id, Property.unit_number.isnot(None))
+        .all()
+    }
+
+    created = []
+    skipped = 0
+    for floor in range(payload.start_floor, end_floor + 1):
+        for pos in range(1, payload.units_per_floor + 1):
+            unit_no = f"{prefix}{floor}{pos:02d}"
+            if unit_no in existing_units:
+                skipped += 1
+                continue
+            prop = Property(
+                tenant_id=tenant_id,
+                created_by=user_id,
+                building_id=building.id,
+                unit_number=unit_no,
+                name=f"{building.name} - {unit_no}",
+                property_type=payload.property_type,
+                listing_type=payload.listing_type,
+                address=project.address,
+                city=project.city,
+                state=project.state,
+                country=project.country or "India",
+                postal_code=project.postal_code,
+                price=Decimal("0.00"),
+                price_frequency="One-time" if payload.listing_type == "Sale" else "Monthly",
+                currency="INR",
+                area_unit="sqft",
+                furnishing="Unfurnished",
+                status="Inactive",
+                developer_name=project.developer_name,
+            )
+            db.add(prop)
+            db.flush()
+            existing_units.add(unit_no)
+            created.append({"id": str(prop.id), "unit_number": prop.unit_number, "name": prop.name, "status": prop.status})
+
+    building.total_units = len(existing_units)
+    log_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action="CREATE",
+        module="buildings",
+        record_id=str(building.id),
+        description=f"Generated {len(created)} shell units for building {building.name} (skipped {skipped} existing).",
+    )
+    db.commit()
+    return {
+        "building_id": str(building.id),
+        "building_name": building.name,
+        "created_count": len(created),
+        "skipped_existing_count": skipped,
+        "total_building_units": building.total_units,
+        "created_units": created,
+    }
+
+
+@router.post("/{building_id}/release-for-sale")
+def release_building_for_sale(
+    building_id: UUID,
+    payload: BuildingReleaseForSaleIn,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_active_user),
+    _: None = Depends(require_permission("building.update")),
+):
+    """Release priced Inactive units in this building as Available for Sale/Rent/Lease,
+    even while the parent Project is still Under Construction.
+    """
+    tenant_id, user_id = get_tenant_and_user(current_user)
+    building = get_building_or_404(db, building_id, tenant_id)
+
+    inactive_props = (
+        db.query(Property)
+        .filter(
+            Property.tenant_id == tenant_id,
+            Property.building_id == building.id,
+            Property.status == "Inactive",
+        )
+        .with_for_update()
+        .all()
+    )
+
+    released = []
+    skipped_unpriced = []
+    for p in inactive_props:
+        if Decimal(str(p.price or 0)) > Decimal("0.00"):
+            p.status = "Available"
+            released.append({"id": str(p.id), "unit_number": p.unit_number, "name": p.name, "price": str(p.price)})
+        else:
+            skipped_unpriced.append({"id": str(p.id), "unit_number": p.unit_number, "name": p.name})
+
+    if payload.mark_building_completed:
+        building.construction_status = "Completed"
+
+    log_audit(
+        db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        action="UPDATE",
+        module="buildings",
+        record_id=str(building.id),
+        description=f"Released {len(released)} units for sale in building {building.name} ({len(skipped_unpriced)} skipped unpriced).",
+    )
+    db.commit()
+    return {
+        "building_id": str(building.id),
+        "building_name": building.name,
+        "construction_status": building.construction_status,
+        "released_count": len(released),
+        "skipped_unpriced_count": len(skipped_unpriced),
+        "released_units": released,
+        "skipped_unpriced_units": skipped_unpriced,
+    }
+
+
+@router.get("/{building_id}/summary")
+def get_building_summary(
+    building_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_active_user),
+    _: None = Depends(require_permission("building.view")),
+):
+    """Live inventory counts (available, reserved, booked, sold, rented/leased, inactive) and verified earnings."""
+    tenant_id, _ = get_tenant_and_user(current_user)
+    building = get_building_or_404(db, building_id, tenant_id)
+    return _compute_building_summary(db, tenant_id, building)

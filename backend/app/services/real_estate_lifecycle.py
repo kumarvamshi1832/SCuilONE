@@ -136,6 +136,16 @@ def _release_property_if_uncommitted(
     prop.status = "Available"
     prop.offer_hold_expires_at = None
     prop.updated_at = now
+    from app.services.agency_collaboration import broadcast_property_availability_change
+    broadcast_property_availability_change(
+        db=db,
+        company_tenant_id=tenant_id,
+        property_id=property_id,
+        event_type="property_released",
+        title=f"Property '{prop.name}' is Available again",
+        message=f"Central availability for '{prop.name}' returned to Available after hold release/expiry.",
+        idempotency_prefix=f"prop_rel:{property_id}:{int(now.timestamp())}",
+    )
     return True
 
 

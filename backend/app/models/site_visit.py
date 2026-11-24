@@ -24,10 +24,10 @@ class SiteVisit(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
     )
-    property_match_id: Mapped[uuid.UUID] = mapped_column(
+    property_match_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("property_matches.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
@@ -54,6 +54,16 @@ class SiteVisit(Base):
         Text, nullable=True
     )
 
+    property_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("properties.id", ondelete="SET NULL"), nullable=True)
+    source_agency_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agencies.id", ondelete="SET NULL"), nullable=True)
+    agency_connection_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("company_agency_connections.id", ondelete="SET NULL"), nullable=True)
+    agency_lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agency_leads.id", ondelete="SET NULL"), nullable=True)
+    company_approval_status: Mapped[str] = mapped_column(String(30), nullable=False, default="Approved", server_default="Approved")
+    visit_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agency_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    company_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    customer_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
